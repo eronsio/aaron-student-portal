@@ -838,9 +838,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     initTTS();
     // Clear old cached resources so updated poster URLs load
-    if (!localStorage.getItem('resourcesCacheV5')) {
+    if (!localStorage.getItem('resourcesCacheV6')) {
         localStorage.removeItem('spanishResources');
-        localStorage.setItem('resourcesCacheV5', '1');
+        localStorage.setItem('resourcesCacheV6', '1');
     }
     await initCourses(); // load courses from Supabase
 
