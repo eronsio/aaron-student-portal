@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aaron's Student Portal</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+</head>
+<body>
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <div class="login-header">
+                <h2><i class="fas fa-graduation-cap"></i> Aaron's Student Portal</h2>
+            </div>
+
+            <!-- Toggle between sign in and create account -->
+            <div class="login-toggle" id="mainToggle">
+                <button class="toggle-btn active" id="toggleLogin"
+                    onclick="document.getElementById('loginForm').classList.remove('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('adminForm').classList.add('hidden'); document.getElementById('mainToggle').style.display=''; this.classList.add('active'); document.getElementById('toggleSignup').classList.remove('active');">
+                    Sign In
+                </button>
+                <button class="toggle-btn" id="toggleSignup"
+                    onclick="document.getElementById('signupForm').classList.remove('hidden'); document.getElementById('loginForm').classList.add('hidden'); document.getElementById('adminForm').classList.add('hidden'); document.getElementById('signupFields').classList.remove('hidden'); document.getElementById('signupSuccess').classList.add('hidden'); this.classList.add('active'); document.getElementById('toggleLogin').classList.remove('active');">
+                    Create Account
+                </button>
+            </div>
+
+            <!-- Sign In Form -->
+            <div id="loginForm">
+                <p class="form-subtitle">Welcome back! Sign in to continue.</p>
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" required placeholder="you@example.com" autocomplete="email">
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required placeholder="Your password">
+                </div>
+                <div id="loginError" class="form-error hidden"></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+                    <input type="checkbox" id="rememberMe" style="width:16px;height:16px;cursor:pointer;">
+                    <label for="rememberMe" style="font-size:13px;color:var(--text-secondary);cursor:pointer;">Remember me</label>
+                </div>
+                <button type="button" class="login-btn" onclick="handleLogin(event)">
+                    <i class="fas fa-sign-in-alt"></i> Sign In
+                </button>
+                <p style="text-align:center;margin-top:16px;font-size:12px;">
+                    <a href="#" id="adminLoginLink" style="color:var(--text-light);text-decoration:none;"
+                        onclick="event.preventDefault(); document.getElementById('loginForm').classList.add('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('adminForm').classList.remove('hidden'); document.getElementById('mainToggle').style.display='none'; document.getElementById('adminCode').focus();">
+                        Admin access
+                    </a>
+                </p>
+            </div>
+
+            <!-- Admin Code Form (hidden) -->
+            <div id="adminForm" class="hidden">
+                <p class="form-subtitle">Enter your admin code to manage courses and students.</p>
+                <div class="form-group">
+                    <label for="adminCode">Admin Code</label>
+                    <input type="password" id="adminCode" required placeholder="Enter admin code" autocomplete="off">
+                </div>
+                <div id="adminError" class="form-error hidden"></div>
+                <button type="button" class="login-btn" onclick="handleAdminLogin(event)">
+                    <i class="fas fa-cog"></i> Open Course Manager
+                </button>
+                <p style="text-align:center;margin-top:16px;font-size:12px;">
+                    <a href="#" id="backToLoginLink" style="color:var(--text-light);text-decoration:none;"
+                        onclick="event.preventDefault(); document.getElementById('loginForm').classList.remove('hidden'); document.getElementById('adminForm').classList.add('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('mainToggle').style.display=''; document.getElementById('toggleLogin').classList.add('active'); document.getElementById('toggleSignup').classList.remove('active');">
+                        ← Back to Sign In
+                    </a>
+                </p>
+            </div>
+
+            <!-- Create Account Form -->
+            <div id="signupForm" class="hidden">
+                <p class="form-subtitle">Create your free account to access resources, practice Spanish, and more.</p>
+                <div id="signupFields">
+                    <div class="form-group">
+                        <label for="signupName">Your Name</label>
+                        <input type="text" id="signupName" required placeholder="Enter your name">
+                    </div>
+                    <div class="form-group">
+                        <label for="signupEmail">Email</label>
+                        <input type="email" id="signupEmail" required placeholder="you@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPassword">Password</label>
+                        <input type="password" id="signupPassword" required placeholder="Choose a password (min. 6 characters)">
+                    </div>
+                    <div class="form-group">
+                        <label for="signupType">I'm interested in...</label>
+                        <select id="signupType" required>
+                            <option value="">Select a subject</option>
+                            <option value="spanish">Spanish Lessons</option>
+                            <option value="music">Music Lessons</option>
+                        </select>
+                    </div>
+                    <div id="signupError" class="form-error hidden"></div>
+                    <button type="button" class="login-btn" onclick="handleSignup(event)">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </div>
+                <!-- Success state -->
+                <div id="signupSuccess" class="hidden">
+                    <div class="success-card">
+                        <div class="success-icon"><i class="fas fa-envelope-open-text"></i></div>
+                        <h3>Almost there!</h3>
+                        <p>We sent a confirmation email to <strong id="successEmailDisplay"></strong></p>
+                        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius-md);padding:14px;margin:16px 0;text-align:left;">
+                            <p style="font-size:13px;font-weight:600;margin-bottom:6px;">📬 Next steps:</p>
+                            <ol style="font-size:13px;padding-left:18px;margin:0;line-height:1.8;">
+                                <li>Open the email from <strong>Aaron's Student Portal</strong></li>
+                                <li>Click the <strong>Confirm your email</strong> link</li>
+                                <li>You'll be logged in automatically</li>
+                            </ol>
+                        </div>
+                        <p style="font-size:12px;color:var(--text-secondary);">Don't see it? Check your spam folder.</p>
+                        <button type="button" class="login-btn" id="goToLoginBtn" style="margin-top:12px;">
+                            <i class="fas fa-sign-in-alt"></i> Already confirmed? Sign In
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Main App (Hidden until login) -->
+    <div id="mainApp" class="hidden">
+        <header>
+            <div class="container">
+                <div class="header-top">
+                    <h1><i class="fas fa-graduation-cap"></i> <span id="portalTitle">Tutoring Portal</span></h1>
+                    <div class="user-info">
+                        <span id="welcomeMessage">Welcome!</span>
+                        <button id="logoutBtn" class="logout-btn">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="container">
+            <!-- Tab Navigation (shared by both portals) -->
+            <div class="tab-nav" id="tabNav">
+                <button class="tab-btn" data-tab="courses" id="coursesTab" style="display:none;">
+                    <i class="fas fa-book-open"></i> Courses
+                </button>
+                <button class="tab-btn active" data-tab="resources">
+                    <i class="fas fa-play-circle"></i> Resources
+                </button>
+                <button class="tab-btn" data-tab="your-space">
+                    <i class="fas fa-folder"></i> Your Space
+                </button>
+                <button class="tab-btn" data-tab="ai-companion" id="aiCompanionTab" style="display:none!important;">
+                    <i class="fas fa-robot"></i> Speaking & Writing Practice
+                </button>
+                <button class="tab-btn" data-tab="community" id="communityTab" style="display:none;">
+                    <i class="fas fa-comments"></i> Community
+                </button>
+            </div>
+
+            <div class="tab-content">
+                <!-- Resources Tab (shared content, differs by type) -->
+                <div id="resources" class="tab-pane active">
+                    <div id="resourcesContent">
+                        <!-- Populated dynamically based on student type -->
+                    </div>
+                </div>
+
+                <!-- Your Space Tab (personal Google Drive folder) -->
+                <div id="your-space" class="tab-pane">
+                    <div class="folder-section">
+                        <h3><i class="fas fa-folder-open"></i> Your Student Folder</h3>
+                        <p class="section-description">Access your personal learning materials, notes, and documents</p>
+                        <div id="personalFolder" class="personal-folder">
+                            <!-- Populated dynamically based on logged-in student -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Speaking/Writing Companion Tab (Spanish only) -->
+                <div id="ai-companion" class="tab-pane">
+                    <div class="ai-companion-section">
+
+                        <!-- Mode selector (shown before conversation starts) -->
+                        <div id="aiModeSelector">
+                            <div class="ai-mode-header">
+                                <h3>🗣️ Práctica de Español</h3>
+                                <p>Choose how you want to practice today. The companion will respond almost entirely in Spanish and correct your mistakes naturally as you go.</p>
+                            </div>
+                            <div class="ai-mode-grid">
+                                <button class="ai-mode-card" onclick="startAiMode('free')">
+                                    <span class="ai-mode-icon">💬</span>
+                                    <h4>Free Conversation</h4>
+                                    <p>Talk about anything — your day, your interests, anything you like</p>
+                                </button>
+                                <button class="ai-mode-card" onclick="showScenarioPicker()">
+                                    <span class="ai-mode-icon">🎭</span>
+                                    <h4>Roleplay Scenario</h4>
+                                    <p>Practice in a real-world situation — café, airport, meeting someone new</p>
+                                </button>
+                                <button class="ai-mode-card" onclick="startAiMode('picture')">
+                                    <span class="ai-mode-icon">🖼️</span>
+                                    <h4>Picture Description</h4>
+                                    <p>Aaron gives you a scene — describe what you see in Spanish</p>
+                                </button>
+                                <button class="ai-mode-card" onclick="showGrammarPicker()">
+                                    <span class="ai-mode-icon">📚</span>
+                                    <h4>Grammar Focus</h4>
+                                    <p>Drill a specific topic — ser/estar, verb conjugation, articles and more</p>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Scenario picker -->
+                        <div id="aiScenarioPicker" class="hidden">
+                            <button class="back-btn" onclick="document.getElementById('aiScenarioPicker').classList.add('hidden');document.getElementById('aiModeSelector').classList.remove('hidden');">
+                                <i class="fas fa-arrow-left"></i> Back
+                            </button>
+                            <h4 style="margin-bottom:16px;font-weight:600;">Choose a scenario:</h4>
+                            <div class="ai-mode-grid">
+                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'café')">☕ At a Café</button>
+                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'airport')">✈️ At the Airport</button>
+                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'meeting')">👋 Meeting Someone New</button>
+                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'shopping')">🛒 At the Supermarket</button>
+                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'doctor')">🏥 At the Doctor</button>
+                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'hotel')">🏨 Checking into a Hotel</button>
+                            </div>
+                        </div>
+
+                        <!-- Grammar picker -->
+                        <div id="aiGrammarPicker" class="hidden">
+                            <button class="back-btn" onclick="document.getElementById('aiGrammarPicker').classList.add('hidden');document.getElementById('aiModeSelector').classList.remove('hidden');">
+                                <i class="fas fa-arrow-left"></i> Back
+                            </button>
+                            <h4 style="margin-bottom:16px;font-weight:600;">What do you want to drill?</h4>
+                            <div class="ai-mode-grid">
+                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'ser vs estar')">⚖️ Ser vs Estar</button>
+                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'verb conjugation present tense')">🔤 Present Tense Verbs</button>
+                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'articles el la un una')">📌 Articles (el/la/un/una)</button>
+                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'numbers and time')">🔢 Numbers & Time</button>
+                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'preterite past tense')">⏮️ Past Tense (Preterite)</button>
+                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'gustar and similar verbs')">❤️ Gustar & Similar Verbs</button>
+                            </div>
+                        </div>
+
+                        <!-- Chat view (hidden until mode selected) -->
+                        <div id="aiChatView" class="hidden">
+                            <div class="ai-chat-topbar">
+                                <div id="aiModeLabel" class="ai-mode-label"></div>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <button id="ttsToggleBtn" onclick="toggleTTS()" class="admin-btn small" style="font-size:12px;">
+                                        <i class="fas fa-volume-up"></i> Voice on
+                                    </button>
+                                    <button class="back-btn" onclick="endAiSession()" style="margin:0;">
+                                        <i class="fas fa-times"></i> End session
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="ai-chat-container">
+                                <div class="ai-chat-messages" id="aiChatMessages"></div>
+                                <div class="ai-chat-input-container">
+                                    <button id="aiRecordBtn" class="record-btn" title="Hold to record voice message">
+                                        <i class="fas fa-microphone"></i>
+                                    </button>
+                                    <input type="text" id="aiMessageInput" placeholder="Escribe en español..." />
+                                    <button id="aiSendMessage">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Courses Tab -->
+                <div id="courses" class="tab-pane">
+                    <!-- Course List View -->
+                    <div id="courseListView">
+                        <div class="courses-header">
+                            <h3><i class="fas fa-book-open"></i> My Courses</h3>
+                            <p class="section-description">Pick up where you left off, or start something new</p>
+                        </div>
+                        <div id="courseGrid" class="course-grid"></div>
+                        <div id="noCoursesMsg" class="no-courses-msg hidden">
+                            <i class="fas fa-book-open"></i>
+                            <p>No courses yet — Aaron will add them here soon!</p>
+                        </div>
+                    </div>
+
+                    <!-- Course Player View (two-column) -->
+                    <div id="coursePlayerView" class="hidden">
+                        <button class="back-btn" id="backToCourses">
+                            <i class="fas fa-arrow-left"></i> All Courses
+                        </button>
+                        <div class="course-player">
+                            <!-- Sidebar -->
+                            <div class="course-sidebar" id="courseSidebar">
+                                <div class="course-sidebar-header">
+                                    <h4 id="sidebarCourseTitle"></h4>
+                                    <div class="sidebar-progress-wrap">
+                                        <div class="course-progress-bar">
+                                            <div class="course-progress-fill" id="sidebarProgressFill" style="width:0%"></div>
+                                        </div>
+                                        <span class="course-progress-label" id="sidebarProgressLabel">0% complete</span>
+                                    </div>
+                                </div>
+                                <div id="sidebarLessonList"></div>
+                            </div>
+                            <!-- Content -->
+                            <div class="course-content-area" id="courseContentArea">
+                                <div id="lessonContent"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Community Tab -->
+                <div id="community" class="tab-pane">
+                    <div class="community-section">
+                        <h3><i class="fas fa-comments"></i> Student Community</h3>
+                        <p class="section-description" id="communityDescription">Connect with fellow students</p>
+                        
+                        <div class="chat-container">
+                            <div class="chat-messages" id="chatMessages">
+                                <div class="message">
+                                    <div class="message-header">
+                                        <strong>Welcome!</strong>
+                                        <span class="message-time">Just now</span>
+                                    </div>
+                                    <div class="message-content">
+                                        Use this space to ask questions, share tips, and connect with fellow students.
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="chat-input-container">
+                                <input type="text" id="messageInput" placeholder="Type your message here..." />
+                                <button id="sendMessage">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Floating Book Lesson Button -->
+    <button id="bookLessonBtn" class="floating-book-btn" onclick="window.open('https://calendly.com/aaronsiebertsio/lesson', '_blank')">
+        <i class="fas fa-calendar-plus"></i>
+        <span>Book Your Next Lesson</span>
+    </button>
+
+    <!-- ============================================================ -->
+    <!-- ADMIN PANEL (shown instead of mainApp when admin logs in)   -->
+    <!-- ============================================================ -->
+
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <!-- Floating Back to Admin button (shown during student preview) -->
+    <!-- Floating Admin Toolbar -->
+    <div id="adminFloatingBar" class="hidden" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+        <div id="adminMenuDropdown" class="admin-floating-dropdown hidden">
+            <button id="editModeBtn" onclick="toggleEditMode()"><i class="fas fa-edit"></i> Edit Mode</button>
+            <button onclick="closeAdminMenu();openExportModal()"><i class="fas fa-download"></i> Export courses</button>
+            <hr style="border:none;border-top:1px solid var(--border-light);margin:4px 0;">
+            <button onclick="closeAdminMenu();loadAdminStudentsOverlay()"><i class="fas fa-users"></i> Students &amp; Insights</button>
+            <button onclick="closeAdminMenu();openSettingsOverlay()"><i class="fas fa-cog"></i> Settings</button>
+            <hr style="border:none;border-top:1px solid var(--border-light);margin:4px 0;">
+            <button onclick="closeAdminMenu();openImportModal()"><i class="fas fa-file-import"></i> Import JSON</button>
+            <button onclick="closeAdminMenu();openExportModal()"><i class="fas fa-download"></i> Export JSON</button>
+            <button onclick="closeAdminMenu();openResourcesEditor()"><i class="fas fa-edit"></i> Edit Resources</button>
+            <button onclick="closeAdminMenu();openCourseEditor(null)"><i class="fas fa-plus"></i> New Course</button>
+        </div>
+        <button onclick="toggleAdminMenu()" style="width:52px;height:52px;border-radius:50%;background:#1e293b;color:white;border:none;cursor:pointer;font-size:18px;box-shadow:0 4px 16px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+            <i class="fas fa-tools"></i>
+        </button>
+    </div>
+
+    <!-- Students Overlay -->
+    <div id="adminStudentsOverlay" class="hidden" style="position:fixed;inset:0;background:var(--bg-secondary);z-index:10001;overflow-y:auto;padding:24px;">
+        <div style="max-width:800px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+                <h2 style="font-size:20px;font-weight:700;">Students &amp; Insights</h2>
+                <button onclick="document.getElementById('adminStudentsOverlay').classList.add('hidden')" class="logout-btn" style="padding:8px 16px;">Close</button>
+            </div>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+                <button id="refreshAllInsightsBtn" onclick="generateAllInsights()" class="admin-btn primary"><i class="fas fa-sync"></i> Generate All Insights</button>
+            </div>
+            <div id="adminStudentList"><p style="color:var(--text-secondary);">Loading...</p></div>
+        </div>
+    </div>
+
+    <!-- Settings Overlay -->
+    <div id="adminSettingsOverlay" class="hidden" style="position:fixed;inset:0;background:var(--bg-secondary);z-index:10001;overflow-y:auto;padding:24px;">
+        <div style="max-width:540px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+                <h2 style="font-size:20px;font-weight:700;">Settings</h2>
+                <button onclick="document.getElementById('adminSettingsOverlay').classList.add('hidden')" class="logout-btn" style="padding:8px 16px;">Close</button>
+            </div>
+            <div class="admin-course-card" style="padding:24px;margin-top:16px;">
+                <h4 style="margin-bottom:6px;">🔄 Reset Course Content</h4>
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Clears the saved course data so the site reloads from the built-in defaults. Use this if your content looks broken. <strong>Your videos will need to be re-added after.</strong></p>
+                <button onclick="resetCoursesToDefaults()" class="admin-btn danger"><i class="fas fa-redo"></i> Reset to Defaults</button>
+            </div>
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Get a key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent-color);">console.anthropic.com</a>.</p>
+                <div class="form-group"><label>API Key</label><input type="password" id="anthropicKeyInput" placeholder="sk-ant-..."></div>
+                <div id="apiKeyStatus" style="font-size:13px;margin-bottom:12px;"></div>
+                <button onclick="saveApiKey()" class="login-btn" style="width:auto;padding:10px 24px;"><i class="fas fa-save"></i> Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resources Editor Modal -->
+    <div id="resourcesEditorModal" class="modal hidden">
+        <div class="modal-content admin-modal-content" style="max-width:760px;max-height:92vh;overflow-y:auto;padding:0;">
+
+            <!-- Header -->
+            <div style="padding:20px 24px 16px;border-bottom:1px solid var(--border-color);position:sticky;top:0;background:#fff;z-index:10;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="font-size:17px;font-weight:700;"><i class="fas fa-edit" style="margin-right:8px;color:var(--accent-color);"></i>Edit Resources Tab</h3>
+                <div style="display:flex;gap:8px;">
+                    <button id="saveResourcesBtn" class="admin-btn small primary"><i class="fas fa-save"></i> Save</button>
+                    <button id="closeResourcesBtn" class="admin-btn small">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Tab switcher -->
+            <div style="display:flex;border-bottom:1px solid var(--border-color);background:#f9fafb;">
+                <button id="resTabSections" onclick="switchResTab('sections')" style="flex:1;padding:11px;font-size:13px;font-weight:600;border:none;background:none;border-bottom:2px solid var(--accent-color);color:var(--accent-color);cursor:pointer;">
+                    <i class="fas fa-link" style="margin-right:6px;"></i>Sections & Links
+                </button>
+                <button id="resTabMovies" onclick="switchResTab('movies')" style="flex:1;padding:11px;font-size:13px;font-weight:600;border:none;background:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;">
+                    <i class="fas fa-film" style="margin-right:6px;"></i>Movies & TV
+                </button>
+            </div>
+
+            <!-- Sections editor -->
+            <div id="resPanelSections" style="padding:20px 24px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <p style="font-size:12px;color:var(--text-secondary);">Add sections of links — YouTube videos auto-show thumbnails.</p>
+                    <button class="admin-btn small primary" onclick="addResSection()"><i class="fas fa-plus"></i> Add Section</button>
+                </div>
+                <div id="resSectionList"></div>
+            </div>
+
+            <!-- Movies editor -->
+            <div id="resPanelMovies" style="padding:20px 24px;display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <p style="font-size:12px;color:var(--text-secondary);">Films and shows shown in the Resources tab.</p>
+                    <button id="addMovieBtn" class="admin-btn small primary"><i class="fas fa-plus"></i> Add Film/Show</button>
+                </div>
+                <div id="movieEditorList"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Student Insight Modal -->
+    <div id="studentInsightModal" class="modal hidden">
+        <div class="modal-content admin-modal-content" style="max-width:640px;max-height:88vh;overflow-y:auto;">
+            <h3 id="insightModalTitle" style="margin-bottom:16px;font-size:18px;"></h3>
+            <div id="insightModalContent"></div>
+            <div style="margin-top:20px;display:flex;gap:12px;">
+                <button id="regenerateInsightBtn" class="login-btn" style="flex:1;"><i class="fas fa-sync"></i> Regenerate</button>
+                <button onclick="document.getElementById('studentInsightModal').classList.add('hidden')" class="logout-btn" style="flex:1;padding:12px;justify-content:center;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import JSON Modal -->
+    <div id="importModal" class="modal hidden">
+        <div class="modal-content admin-modal-content" style="max-width:640px;">
+            <h3 style="margin-bottom:8px;font-size:18px;">Import JSON</h3>
+            <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;">Paste a course or lesson JSON below. Existing courses with the same ID will be updated; new ones will be added.</p>
+            <textarea id="importJsonInput" rows="14" style="width:100%;font-family:monospace;font-size:12px;padding:12px;border:1px solid var(--border-color);border-radius:var(--radius-md);resize:vertical;" placeholder='Paste JSON here...'></textarea>
+            <div id="importError" class="form-error hidden" style="margin-top:12px;"></div>
+            <div style="display:flex;gap:12px;margin-top:16px;">
+                <button id="doImportBtn" class="login-btn" style="flex:1;"><i class="fas fa-file-import"></i> Import</button>
+                <button id="closeImportBtn" class="logout-btn" style="flex:1;padding:12px;justify-content:center;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
