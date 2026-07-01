@@ -738,7 +738,8 @@ const sharedResources = {
                 title: 'Music & Listening',
                 icon: 'fab fa-spotify',
                 links: [
-                    { label: 'Spanish Spotify Playlist', icon: 'fab fa-spotify', url: 'https://open.spotify.com/playlist/4xw8p0Abgm0geBg2PXwJAP?si=a57dd3a6263e4915' }
+                    { label: 'Spanish Spotify Playlist', icon: 'fab fa-spotify', url: 'https://open.spotify.com/playlist/4xw8p0Abgm0geBg2PXwJAP?si=a57dd3a6263e4915' },
+                    { label: 'Spanish YouTube Playlist', icon: 'fab fa-youtube', url: 'https://www.youtube.com/playlist?list=PLVj57CZsVNos' }
                 ]
             }
         ],
