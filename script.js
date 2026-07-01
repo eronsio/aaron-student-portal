@@ -752,10 +752,10 @@ const sharedResources = {
                     name: 'Deep / Dark but Amazing',
                     items: [
                         { title: 'Biutiful', director: 'A.G. Iñárritu', year: 2010, type: 'movie',
-                          poster: '',
+                          poster: '', wikiTitle: 'Biutiful',
                           url: 'https://www.imdb.com/title/tt1164999/' },
                         { title: 'Amores Perros', director: 'A.G. Iñárritu', year: 2000, type: 'movie',
-                          poster: '',
+                          poster: '', wikiTitle: 'Amores perros',
                           url: 'https://www.imdb.com/title/tt0245712/' }
                     ]
                 },
@@ -763,13 +763,13 @@ const sharedResources = {
                     name: 'Deep / Less Dark',
                     items: [
                         { title: 'Roma', director: 'Alfonso Cuarón', year: 2018, type: 'movie',
-                          poster: '',
+                          poster: '', wikiTitle: 'Roma (2018 film)',
                           url: 'https://www.imdb.com/title/tt6155172/' },
                         { title: 'Babel', director: 'A.G. Iñárritu', year: 2006, type: 'movie',
-                          poster: '',
+                          poster: '', wikiTitle: 'Babel (film)',
                           url: 'https://www.imdb.com/title/tt0449467/' },
                         { title: "Pan's Labyrinth", director: 'G. del Toro', year: 2006, type: 'movie',
-                          poster: '',
+                          poster: '', wikiTitle: "Pan's Labyrinth",
                           url: 'https://www.imdb.com/title/tt0457430/' }
                     ]
                 },
@@ -777,7 +777,7 @@ const sharedResources = {
                     name: 'TV Shows',
                     items: [
                         { title: 'La Casa de Papel', director: 'Álex Pina', year: 2017, type: 'tv',
-                          poster: '',
+                          poster: '', wikiTitle: 'Money Heist',
                           url: 'https://www.imdb.com/title/tt6468322/' }
                     ]
                 }
@@ -838,9 +838,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     initTTS();
     // Clear old cached resources so updated poster URLs load
-    if (!localStorage.getItem('resourcesCacheV6')) {
+    if (!localStorage.getItem('resourcesCacheV7')) {
         localStorage.removeItem('spanishResources');
-        localStorage.setItem('resourcesCacheV6', '1');
+        localStorage.setItem('resourcesCacheV7', '1');
     }
     await initCourses(); // load courses from Supabase
 
@@ -1249,13 +1249,20 @@ function populateResources() {
                         <div class="media-category-label"><i class="fas fa-circle" style="font-size:7px;margin-right:6px;opacity:0.5;"></i> ${cat.name}</div>
                         <div class="media-grid-sm">
                             ${cat.items.map(item => `
-                                <a href="${item.url}" target="_blank" class="media-card-text">
-                                    <div class="media-card-text-top">
-                                        <span class="media-type-badge-text">${item.type === 'tv' ? 'TV' : 'FILM'}</span>
-                                        <i class="fas fa-arrow-up-right-from-square media-card-ext"></i>
+                                <a href="${item.url}" target="_blank" class="media-card-sm">
+                                    <div class="media-poster-sm">
+                                        ${item.poster
+                                            ? `<img src="${item.poster}" alt="${item.title}" onerror="this.parentElement.innerHTML='<div class=\\'poster-placeholder\\'><i class=\\'fas fa-film\\'></i></div>'">`
+                                            : item.wikiTitle
+                                                ? `<img src="" data-wiki="${item.wikiTitle}" alt="${item.title}" style="display:none" onerror="this.style.display=\\'none\\';this.nextElementSibling.style.display=\\'flex\\';"><div class="poster-placeholder" style="display:flex"><i class="fas fa-film"></i></div>`
+                                                : `<div class="poster-placeholder"><i class="fas fa-film"></i></div>`
+                                        }
+                                        <span class="media-type-badge-sm">${item.type === 'tv' ? 'TV' : 'FILM'}</span>
                                     </div>
-                                    <h5 class="media-card-text-title">${item.title}</h5>
-                                    <span class="media-card-text-year">${item.year}</span>
+                                    <div class="media-info-sm">
+                                        <h5>${item.title}</h5>
+                                        <span>${item.year}</span>
+                                    </div>
                                 </a>
                             `).join('')}
                         </div>
@@ -1265,6 +1272,24 @@ function populateResources() {
     }
 
     container.innerHTML = html;
+    loadMoviePosters();
+}
+
+async function loadMoviePosters() {
+    const imgs = document.querySelectorAll('img[data-wiki]');
+    for (const img of imgs) {
+        try {
+            const title = encodeURIComponent(img.dataset.wiki);
+            const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${title}&prop=pageimages&format=json&pithumbsize=200&origin=*`);
+            const data = await res.json();
+            const page = Object.values(data.query.pages)[0];
+            if (page.thumbnail?.source) {
+                img.src = page.thumbnail.source;
+                img.style.display = '';
+                if (img.nextElementSibling) img.nextElementSibling.style.display = 'none';
+            }
+        } catch(e) {}
+    }
 }
 
 // YOUR SPACE TAB (personal Drive folder)
