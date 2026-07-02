@@ -3189,6 +3189,71 @@ function loadAdminStudentsOverlay() {
     loadAdminStudents();
 }
 
+function openLessonPrep() {
+    document.getElementById('lessonPrepOverlay').classList.remove('hidden');
+    loadLessonPrep();
+}
+
+async function loadLessonPrep() {
+    const container = document.getElementById('lessonPrepContent');
+    container.innerHTML = '<p style="color:var(--text-secondary);">Loading summaries...</p>';
+    try {
+        const res = await fetch(
+            `${SUPABASE_URL}/rest/v1/lesson_summaries?select=*&order=lesson_date.desc&limit=30`,
+            { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
+        );
+        const rows = await res.json();
+        if (!rows || rows.length === 0) {
+            container.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-secondary);">
+                <i class="fas fa-brain" style="font-size:32px;margin-bottom:16px;display:block;opacity:0.3;"></i>
+                <p>No lesson summaries yet.</p>
+                <p style="font-size:13px;margin-top:8px;">The nightly agent will generate one after your next lesson.</p>
+            </div>`;
+            return;
+        }
+        const byStudent = {};
+        rows.forEach(r => {
+            if (!byStudent[r.student_name]) byStudent[r.student_name] = [];
+            byStudent[r.student_name].push(r);
+        });
+        container.innerHTML = Object.entries(byStudent).map(([name, entries]) => {
+            const latest = entries[0];
+            const dateStr = new Date(latest.lesson_date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+            const older = entries.slice(1, 3);
+            return `
+            <div style="background:#fff;border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+                    <div>
+                        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">${name}</h3>
+                        <span style="font-size:12px;color:var(--text-secondary);">Last lesson: ${dateStr}</span>
+                    </div>
+                    <span style="background:#eff6ff;color:#2563eb;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;">Latest</span>
+                </div>
+                <div style="margin-bottom:16px;">
+                    <h4 style="font-size:13px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Summary</h4>
+                    <p style="font-size:14px;line-height:1.7;white-space:pre-wrap;">${latest.summary}</p>
+                </div>
+                ${latest.activities ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-md);padding:16px;">
+                    <h4 style="font-size:13px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;"><i class="fas fa-lightbulb" style="margin-right:6px;"></i>Next Class & Homework</h4>
+                    <p style="font-size:14px;line-height:1.7;white-space:pre-wrap;">${latest.activities}</p>
+                </div>` : ''}
+                ${older.length > 0 ? `<details style="margin-top:16px;">
+                    <summary style="font-size:13px;color:var(--text-secondary);cursor:pointer;">Show previous summaries</summary>
+                    ${older.map(o => {
+                        const d = new Date(o.lesson_date + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+                        return `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border-light);">
+                            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">${d}</p>
+                            <p style="font-size:13px;line-height:1.6;white-space:pre-wrap;">${o.summary}</p>
+                        </div>`;
+                    }).join('')}
+                </details>` : ''}
+            </div>`;
+        }).join('');
+    } catch(e) {
+        container.innerHTML = `<p style="color:#dc2626;">Error loading summaries. Make sure the lesson_summaries table exists in Supabase.</p>`;
+    }
+}
+
 function openSettingsOverlay() {
     const savedKey = localStorage.getItem('anthropicApiKey');
     if (savedKey) {
