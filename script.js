@@ -3230,12 +3230,12 @@ async function loadLessonPrep() {
                     <span style="background:#eff6ff;color:#2563eb;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;">Latest</span>
                 </div>
                 <div style="margin-bottom:16px;">
-                    <h4 style="font-size:13px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Summary</h4>
-                    <p style="font-size:14px;line-height:1.7;white-space:pre-wrap;">${latest.summary}</p>
+                    <h4 style="font-size:13px;font-weight:700;color:var(--accent-color);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;"><i class="fas fa-chalkboard-teacher" style="margin-right:6px;"></i>Lesson Plan</h4>
+                    <p style="font-size:14px;line-height:1.8;white-space:pre-wrap;font-family:inherit;">${latest.summary}</p>
                 </div>
-                ${latest.activities ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-md);padding:16px;">
-                    <h4 style="font-size:13px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;"><i class="fas fa-lightbulb" style="margin-right:6px;"></i>Next Class & Homework</h4>
-                    <p style="font-size:14px;line-height:1.7;white-space:pre-wrap;">${latest.activities}</p>
+                ${latest.activities ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-md);padding:20px;margin-top:4px;">
+                    <h4 style="font-size:13px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;"><i class="fas fa-home" style="margin-right:6px;"></i>Homework</h4>
+                    <p style="font-size:14px;line-height:1.8;white-space:pre-wrap;font-family:inherit;">${latest.activities}</p>
                 </div>` : ''}
                 ${older.length > 0 ? `<details style="margin-top:16px;">
                     <summary style="font-size:13px;color:var(--text-secondary);cursor:pointer;">Show previous summaries</summary>
