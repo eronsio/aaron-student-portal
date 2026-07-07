@@ -766,7 +766,7 @@ const sharedResources = {
                           poster: '', wikiTitle: 'Roma (2018 film)',
                           url: 'https://www.imdb.com/title/tt6155172/' },
                         { title: 'Babel', director: 'A.G. Iñárritu', year: 2006, type: 'movie',
-                          poster: '', wikiTitle: 'Babel (film)',
+                          poster: '', wikiTitle: 'Babel (2006 film)',
                           url: 'https://www.imdb.com/title/tt0449467/' },
                         { title: "Pan's Labyrinth", director: 'G. del Toro', year: 2006, type: 'movie',
                           poster: '', wikiTitle: "Pan's Labyrinth",
@@ -838,9 +838,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     initTTS();
     // Clear old cached resources so updated poster URLs load
-    if (!localStorage.getItem('resourcesCacheV7')) {
+    if (!localStorage.getItem('resourcesCacheV8')) {
         localStorage.removeItem('spanishResources');
-        localStorage.setItem('resourcesCacheV7', '1');
+        localStorage.setItem('resourcesCacheV8', '1');
     }
     await initCourses(); // load courses from Supabase
 
@@ -1252,9 +1252,9 @@ function populateResources() {
                                 <a href="${item.url}" target="_blank" class="media-card-sm">
                                     <div class="media-poster-sm">
                                         ${item.poster
-                                            ? `<img src="${item.poster}" alt="${item.title}" onerror="this.parentElement.innerHTML='<div class=\\'poster-placeholder\\'><i class=\\'fas fa-film\\'></i></div>'">`
+                                            ? `<img src="${item.poster}" alt="${item.title}" onerror="posterLoadFailed(this)">`
                                             : item.wikiTitle
-                                                ? `<img src="" data-wiki="${item.wikiTitle}" alt="${item.title}" style="display:none" onerror="this.style.display=\\'none\\';this.nextElementSibling.style.display=\\'flex\\';"><div class="poster-placeholder" style="display:flex"><i class="fas fa-film"></i></div>`
+                                                ? `<img data-wiki="${item.wikiTitle}" alt="${item.title}" style="display:none"><div class="poster-placeholder" style="display:flex"><i class="fas fa-film"></i></div>`
                                                 : `<div class="poster-placeholder"><i class="fas fa-film"></i></div>`
                                         }
                                         <span class="media-type-badge-sm">${item.type === 'tv' ? 'TV' : 'FILM'}</span>
@@ -1275,15 +1275,20 @@ function populateResources() {
     loadMoviePosters();
 }
 
+function posterLoadFailed(img) {
+    if (img.parentElement) img.parentElement.innerHTML = '<div class="poster-placeholder"><i class="fas fa-film"></i></div>';
+}
+
 async function loadMoviePosters() {
     const imgs = document.querySelectorAll('img[data-wiki]');
     for (const img of imgs) {
         try {
             const title = encodeURIComponent(img.dataset.wiki);
-            const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${title}&prop=pageimages&format=json&pithumbsize=200&origin=*`);
+            const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${title}&prop=pageimages&format=json&pithumbsize=200&pilicense=any&redirects=1&origin=*`);
             const data = await res.json();
             const page = Object.values(data.query.pages)[0];
             if (page.thumbnail?.source) {
+                img.onerror = () => posterLoadFailed(img);
                 img.src = page.thumbnail.source;
                 img.style.display = '';
                 if (img.nextElementSibling) img.nextElementSibling.style.display = 'none';
