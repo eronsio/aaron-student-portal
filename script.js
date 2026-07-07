@@ -777,7 +777,7 @@ const sharedResources = {
                     name: 'TV Shows',
                     items: [
                         { title: 'La Casa de Papel', director: 'Álex Pina', year: 2017, type: 'tv',
-                          poster: '', wikiTitle: 'Money Heist',
+                          poster: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/Salvador_Dal%C3%AD_mask.svg/250px-Salvador_Dal%C3%AD_mask.svg.png', wikiTitle: 'Money Heist',
                           url: 'https://www.imdb.com/title/tt6468322/' }
                     ]
                 }
@@ -838,9 +838,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     initTTS();
     // Clear old cached resources so updated poster URLs load
-    if (!localStorage.getItem('resourcesCacheV8')) {
+    if (!localStorage.getItem('resourcesCacheV9')) {
         localStorage.removeItem('spanishResources');
-        localStorage.setItem('resourcesCacheV8', '1');
+        localStorage.setItem('resourcesCacheV9', '1');
     }
     await initCourses(); // load courses from Supabase
 
