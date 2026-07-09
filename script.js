@@ -1247,14 +1247,12 @@ function populateResources() {
         return;
     }
 
-    const subtabs = [];
-    let panesHtml = '';
+    const items = [];
 
     (resources.sections || []).forEach((section, i) => {
-        const tabId = `resTabSec${i}`;
-        subtabs.push({ id: tabId, icon: section.icon, label: section.title });
-        panesHtml += `
-            <div class="res-subtab-pane" id="${tabId}">
+        items.push({
+            id: `resAccSec${i}`, icon: section.icon, label: section.title,
+            body: `
                 <div class="link-grid">
                     ${section.links.map(link => `
                         <a href="${link.url}" target="_blank" class="link-card">
@@ -1262,15 +1260,15 @@ function populateResources() {
                             <span>${link.label}</span>
                         </a>
                     `).join('')}
-                </div>
-            </div>`;
+                </div>`
+        });
     });
 
     if (resources.mediaContent) {
         const media = resources.mediaContent;
-        subtabs.push({ id: 'resTabMedia', icon: media.icon, label: media.title });
-        panesHtml += `
-            <div class="res-subtab-pane" id="resTabMedia">
+        items.push({
+            id: 'resAccMedia', icon: media.icon, label: media.title,
+            body: `
                 <p class="media-subtitle">${media.subtitle}</p>
                 ${media.categories.map(cat => `
                     <div class="media-category-group">
@@ -1295,15 +1293,15 @@ function populateResources() {
                             `).join('')}
                         </div>
                     </div>
-                `).join('')}
-            </div>`;
+                `).join('')}`
+        });
     }
 
     if (resources.instagramContent) {
         const insta = resources.instagramContent;
-        subtabs.push({ id: 'resTabInsta', icon: insta.icon, label: insta.title });
-        panesHtml += `
-            <div class="res-subtab-pane" id="resTabInsta">
+        items.push({
+            id: 'resAccInsta', icon: insta.icon, label: insta.title,
+            body: `
                 <p class="media-subtitle">${insta.subtitle}</p>
                 ${insta.categories.map(cat => `
                     <div class="media-category-group">
@@ -1316,28 +1314,39 @@ function populateResources() {
                             `).join('')}
                         </div>
                     </div>
-                `).join('')}
-            </div>`;
+                `).join('')}`
+        });
     }
 
-    const navHtml = `
-        <div class="res-subtabs">
-            ${subtabs.map((t, i) => `
-                <button type="button" class="res-subtab-btn${i === 0 ? ' active' : ''}" onclick="switchResourceSubtab('${t.id}')" data-restab="${t.id}">
-                    <i class="${t.icon}"></i>${t.label}
-                </button>
+    container.innerHTML = `
+        <div class="res-accordion">
+            ${items.map((it, i) => `
+                <div class="res-accordion-item">
+                    <button type="button" class="res-accordion-header${i === 0 ? ' active' : ''}" onclick="toggleResourceAccordion('${it.id}')" data-accitem="${it.id}">
+                        <i class="${it.icon} res-acc-icon"></i>${it.label}
+                        <i class="fas fa-chevron-down res-accordion-chevron"></i>
+                    </button>
+                    <div class="res-accordion-content" id="${it.id}">
+                        <div class="res-accordion-content-inner">${it.body}</div>
+                    </div>
+                </div>
             `).join('')}
         </div>`;
-
-    container.innerHTML = navHtml + panesHtml;
-    const firstPane = container.querySelector('.res-subtab-pane');
-    if (firstPane) firstPane.classList.add('active');
     loadMoviePosters();
+    const firstContent = container.querySelector('.res-accordion-content');
+    if (firstContent) firstContent.style.maxHeight = firstContent.scrollHeight + 'px';
 }
 
-function switchResourceSubtab(tabId) {
-    document.querySelectorAll('.res-subtab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
-    document.querySelectorAll('.res-subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.restab === tabId));
+function toggleResourceAccordion(itemId) {
+    const header = document.querySelector(`[data-accitem="${itemId}"]`);
+    const wasActive = header.classList.contains('active');
+    document.querySelectorAll('.res-accordion-header').forEach(h => h.classList.remove('active'));
+    document.querySelectorAll('.res-accordion-content').forEach(c => { c.style.maxHeight = '0px'; });
+    if (!wasActive) {
+        header.classList.add('active');
+        const content = document.getElementById(itemId);
+        content.style.maxHeight = content.scrollHeight + 'px';
+    }
 }
 
 function posterLoadFailed(img) {

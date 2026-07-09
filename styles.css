@@ -2342,56 +2342,81 @@ footer p {
     display: block;
 }
 
-/* Resource sub-tabs — switches between Music / Movies / Instagram etc. without stacking everything vertically */
-.res-subtabs {
+/* Resource accordion — big, unmissable category bars that expand/collapse (Music / Movies / Instagram etc.) */
+.res-accordion {
+    max-width: 720px;
+    margin: 0 auto;
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 8px;
-    margin-bottom: 14px;
 }
 
-.res-subtab-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 16px;
+.res-accordion-item {
     border: 1px solid var(--border-color);
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
     background: var(--bg-primary);
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
 }
 
-.res-subtab-btn i {
-    font-size: 13px;
-    color: var(--accent-color);
-}
-
-.res-subtab-btn:hover {
-    border-color: var(--accent-color);
+.res-accordion-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: relative;
+    padding: 13px 44px;
+    border: none;
+    background: var(--bg-secondary);
     color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
-.res-subtab-btn.active {
+.res-accordion-header i.res-acc-icon {
+    color: var(--accent-color);
+    font-size: 16px;
+    transition: color 0.15s ease;
+}
+
+.res-accordion-header:hover {
+    background: var(--border-light);
+}
+
+.res-accordion-header.active {
     background: var(--accent-color);
-    border-color: var(--accent-color);
     color: #fff;
 }
 
-.res-subtab-btn.active i {
+.res-accordion-header.active i.res-acc-icon {
     color: #fff;
 }
 
-.res-subtab-pane {
-    display: none;
-    animation: fadeIn 0.2s ease;
+.res-accordion-chevron {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    transition: transform 0.2s ease;
 }
 
-.res-subtab-pane.active {
-    display: block;
+.res-accordion-header.active .res-accordion-chevron {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+.res-accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.res-accordion-content-inner {
+    padding: 16px 24px;
 }
 
 /* Compact Instagram profile chips — a full link-card per handle wasted too much vertical space */
