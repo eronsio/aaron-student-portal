@@ -1247,36 +1247,30 @@ function populateResources() {
         return;
     }
 
-    let html = '';
+    const subtabs = [];
+    let panesHtml = '';
 
-    if (resources.sections) {
-        resources.sections.forEach(section => {
-            html += `
-                <div class="resource-category-block">
-                    <div class="resource-category-header">
-                        <i class="${section.icon}"></i>
-                        <span>${section.title}</span>
-                    </div>
-                    <div class="link-grid">
-                        ${section.links.map(link => `
-                            <a href="${link.url}" target="_blank" class="link-card">
-                                <i class="${link.icon}"></i>
-                                <span>${link.label}</span>
-                            </a>
-                        `).join('')}
-                    </div>
-                </div>`;
-        });
-    }
+    (resources.sections || []).forEach((section, i) => {
+        const tabId = `resTabSec${i}`;
+        subtabs.push({ id: tabId, icon: section.icon, label: section.title });
+        panesHtml += `
+            <div class="res-subtab-pane" id="${tabId}">
+                <div class="link-grid">
+                    ${section.links.map(link => `
+                        <a href="${link.url}" target="_blank" class="link-card">
+                            <i class="${link.icon}"></i>
+                            <span>${link.label}</span>
+                        </a>
+                    `).join('')}
+                </div>
+            </div>`;
+    });
 
     if (resources.mediaContent) {
         const media = resources.mediaContent;
-        html += `
-            <div class="resource-category-block">
-                <div class="resource-category-header">
-                    <i class="${media.icon}"></i>
-                    <span>${media.title}</span>
-                </div>
+        subtabs.push({ id: 'resTabMedia', icon: media.icon, label: media.title });
+        panesHtml += `
+            <div class="res-subtab-pane" id="resTabMedia">
                 <p class="media-subtitle">${media.subtitle}</p>
                 ${media.categories.map(cat => `
                     <div class="media-category-group">
@@ -1307,21 +1301,17 @@ function populateResources() {
 
     if (resources.instagramContent) {
         const insta = resources.instagramContent;
-        html += `
-            <div class="resource-category-block">
-                <div class="resource-category-header">
-                    <i class="${insta.icon}"></i>
-                    <span>${insta.title}</span>
-                </div>
+        subtabs.push({ id: 'resTabInsta', icon: insta.icon, label: insta.title });
+        panesHtml += `
+            <div class="res-subtab-pane" id="resTabInsta">
                 <p class="media-subtitle">${insta.subtitle}</p>
                 ${insta.categories.map(cat => `
                     <div class="media-category-group">
                         <div class="media-category-label"><i class="fas fa-circle" style="font-size:7px;margin-right:6px;opacity:0.5;"></i> ${cat.name}</div>
-                        <div class="link-grid">
+                        <div class="insta-chip-row">
                             ${cat.items.map(item => `
-                                <a href="${item.url}" target="_blank" class="link-card">
-                                    <i class="fab fa-instagram"></i>
-                                    <span>${item.handle}</span>
+                                <a href="${item.url}" target="_blank" class="insta-chip">
+                                    <i class="fab fa-instagram"></i>${item.handle}
                                 </a>
                             `).join('')}
                         </div>
@@ -1330,8 +1320,24 @@ function populateResources() {
             </div>`;
     }
 
-    container.innerHTML = html;
+    const navHtml = `
+        <div class="res-subtabs">
+            ${subtabs.map((t, i) => `
+                <button type="button" class="res-subtab-btn${i === 0 ? ' active' : ''}" onclick="switchResourceSubtab('${t.id}')" data-restab="${t.id}">
+                    <i class="${t.icon}"></i>${t.label}
+                </button>
+            `).join('')}
+        </div>`;
+
+    container.innerHTML = navHtml + panesHtml;
+    const firstPane = container.querySelector('.res-subtab-pane');
+    if (firstPane) firstPane.classList.add('active');
     loadMoviePosters();
+}
+
+function switchResourceSubtab(tabId) {
+    document.querySelectorAll('.res-subtab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
+    document.querySelectorAll('.res-subtab-btn').forEach(b => b.classList.toggle('active', b.dataset.restab === tabId));
 }
 
 function posterLoadFailed(img) {

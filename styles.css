@@ -2171,12 +2171,12 @@ footer p {
 .media-subtitle {
     font-size: 12px;
     color: var(--text-secondary);
-    margin: -8px 0 16px;
+    margin: 0 0 10px;
     font-style: italic;
 }
 
 .media-category-group {
-    margin-bottom: 20px;
+    margin-bottom: 10px;
 }
 
 .media-category-group:last-child {
@@ -2189,7 +2189,7 @@ footer p {
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-secondary);
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -2321,7 +2321,7 @@ footer p {
 }
 
 .media-info-sm {
-    padding: 6px 7px 8px;
+    padding: 5px 7px 6px;
 }
 
 .media-info-sm h5 {
@@ -2338,6 +2338,93 @@ footer p {
 .media-info-sm span {
     font-size: 10px;
     color: var(--text-secondary);
+    line-height: 1.2;
+    display: block;
+}
+
+/* Resource sub-tabs — switches between Music / Movies / Instagram etc. without stacking everything vertically */
+.res-subtabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.res-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.res-subtab-btn i {
+    font-size: 13px;
+    color: var(--accent-color);
+}
+
+.res-subtab-btn:hover {
+    border-color: var(--accent-color);
+    color: var(--text-primary);
+}
+
+.res-subtab-btn.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.res-subtab-btn.active i {
+    color: #fff;
+}
+
+.res-subtab-pane {
+    display: none;
+    animation: fadeIn 0.2s ease;
+}
+
+.res-subtab-pane.active {
+    display: block;
+}
+
+/* Compact Instagram profile chips — a full link-card per handle wasted too much vertical space */
+.insta-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.insta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.insta-chip i {
+    font-size: 13px;
+    color: var(--accent-color);
+}
+
+.insta-chip:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+    transform: translateY(-1px);
 }
 
 /* Admin panel tab switcher */
