@@ -782,6 +782,40 @@ const sharedResources = {
                     ]
                 }
             ]
+        },
+        instagramContent: {
+            title: 'Instagram Profiles',
+            subtitle: 'Follow for daily Spanish immersion at native speed',
+            icon: 'fab fa-instagram',
+            categories: [
+                {
+                    name: 'Street interviews',
+                    items: [
+                        { handle: '@soniasuamor', url: 'https://www.instagram.com/soniasuamor/' }
+                    ]
+                },
+                {
+                    name: 'Skits, young, unfiltered',
+                    items: [
+                        { handle: '@adriamarcor', url: 'https://www.instagram.com/adriamarcor/' },
+                        { handle: '@adriianromero__', url: 'https://www.instagram.com/adriianromero__/' },
+                        { handle: '@pablogshow', url: 'https://www.instagram.com/pablogshow/' }
+                    ]
+                },
+                {
+                    name: 'Aggressive, great for vocab',
+                    items: [
+                        { handle: '@guillefernandez', url: 'https://www.instagram.com/guillefernandez/' }
+                    ]
+                },
+                {
+                    name: 'More subtle and witty',
+                    items: [
+                        { handle: '@daniel__ath', url: 'https://www.instagram.com/daniel__ath/' },
+                        { handle: '@pablomeixe', url: 'https://www.instagram.com/pablomeixe/' }
+                    ]
+                }
+            ]
         }
     },
     music: {
@@ -838,9 +872,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     initTTS();
     // Clear old cached resources so updated poster URLs load
-    if (!localStorage.getItem('resourcesCacheV9')) {
+    if (!localStorage.getItem('resourcesCacheV10')) {
         localStorage.removeItem('spanishResources');
-        localStorage.setItem('resourcesCacheV9', '1');
+        localStorage.setItem('resourcesCacheV10', '1');
     }
     await initCourses(); // load courses from Supabase
 
@@ -1263,6 +1297,31 @@ function populateResources() {
                                         <h5>${item.title}</h5>
                                         <span>${item.year}</span>
                                     </div>
+                                </a>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+    }
+
+    if (resources.instagramContent) {
+        const insta = resources.instagramContent;
+        html += `
+            <div class="resource-category-block">
+                <div class="resource-category-header">
+                    <i class="${insta.icon}"></i>
+                    <span>${insta.title}</span>
+                </div>
+                <p class="media-subtitle">${insta.subtitle}</p>
+                ${insta.categories.map(cat => `
+                    <div class="media-category-group">
+                        <div class="media-category-label"><i class="fas fa-circle" style="font-size:7px;margin-right:6px;opacity:0.5;"></i> ${cat.name}</div>
+                        <div class="link-grid">
+                            ${cat.items.map(item => `
+                                <a href="${item.url}" target="_blank" class="link-card">
+                                    <i class="fab fa-instagram"></i>
+                                    <span>${item.handle}</span>
                                 </a>
                             `).join('')}
                         </div>
