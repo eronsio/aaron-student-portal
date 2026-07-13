@@ -1182,7 +1182,6 @@ function showLoginModal() {
     loginModal.classList.remove('hidden');
     mainApp.classList.add('hidden');
     document.getElementById('adminFloatingBar')?.classList.add('hidden');
-    document.body.classList.remove('is-admin');
     document.body.style.overflow = 'hidden';
     showLoginFormView();
 }
@@ -1213,7 +1212,6 @@ function showMainApp() {
     // Show admin toolbar if admin
     const adminBar = document.getElementById('adminFloatingBar');
     if (adminBar) adminBar.classList.toggle('hidden', !currentUser.isAdmin);
-    document.body.classList.toggle('is-admin', !!currentUser.isAdmin);
 
     // Populate all tabs
     populateResources();

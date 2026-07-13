@@ -1202,13 +1202,6 @@ footer p {
     font-size: 18px;
 }
 
-/* Admin's wrench toolbar sits at bottom-right; move the booking button to the
-   opposite corner so the two floating controls don't overlap in admin view. */
-body.is-admin .floating-book-btn {
-    right: auto;
-    left: 24px;
-}
-
 /* Responsive Design */
 @media (max-width: 768px) {
     .container {
@@ -1285,10 +1278,6 @@ body.is-admin .floating-book-btn {
         width: 56px;
         height: 56px;
         min-width: auto;
-    }
-
-    body.is-admin .floating-book-btn {
-        left: 16px;
     }
 }
 
