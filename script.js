@@ -713,7 +713,9 @@ async function saveCourses(courses) {
 }
 
 async function getProgress() {
-    if (!currentUser) return {};
+    // The admin pseudo-user has id 'admin' (not a real UUID), so skip the
+    // progress lookup — it would 400 against the UUID user_id column.
+    if (!currentUser || currentUser.id === 'admin') return {};
     const data = await sbGetProgress(currentUser.id);
     if (!Array.isArray(data)) return {};
     const progress = {};
@@ -1179,7 +1181,8 @@ async function handleLogout() {
 function showLoginModal() {
     loginModal.classList.remove('hidden');
     mainApp.classList.add('hidden');
-    document.getElementById('adminPanel').classList.add('hidden');
+    document.getElementById('adminFloatingBar')?.classList.add('hidden');
+    document.body.classList.remove('is-admin');
     document.body.style.overflow = 'hidden';
     showLoginFormView();
 }
@@ -1210,6 +1213,7 @@ function showMainApp() {
     // Show admin toolbar if admin
     const adminBar = document.getElementById('adminFloatingBar');
     if (adminBar) adminBar.classList.toggle('hidden', !currentUser.isAdmin);
+    document.body.classList.toggle('is-admin', !!currentUser.isAdmin);
 
     // Populate all tabs
     populateResources();
@@ -2364,38 +2368,6 @@ let editingCourseId = null;
 let editingLessonId = null;
 let editingLessonCourseId = null;
 let pendingQuizQuestions = [];
-
-function showAdminPanel() {
-    document.getElementById('adminPanel').classList.remove('hidden');
-    document.getElementById('mainApp').classList.add('hidden');
-    renderAdminCourseList();
-
-    document.getElementById('adminLogoutBtn').onclick = () => {
-        document.getElementById('adminPanel').classList.add('hidden');
-        showLoginModal();
-    };
-
-    document.getElementById('addCourseBtn').onclick = () => openCourseEditor(null);
-    document.getElementById('importJsonBtn').onclick = openImportModal;
-    document.getElementById('exportCoursesBtn').onclick = openExportModal;
-    document.getElementById('editResourcesBtn').onclick = openResourcesEditor;
-    document.getElementById('previewStudentBtn').onclick = previewAsStudent;
-    document.getElementById('refreshAllInsightsBtn').onclick = generateAllInsights;
-    document.getElementById('saveCourseBtn').onclick = saveCourseEdit;
-    document.getElementById('cancelCourseBtn').onclick = () => closeCourseEditor();
-    document.getElementById('saveLessonBtn').onclick = saveLessonEdit;
-    document.getElementById('cancelLessonBtn').onclick = () => closeLessonEditor();
-    document.getElementById('addQuestionBtn').onclick = addQuizQuestion;
-    document.getElementById('copyJsonBtn').onclick = copyExportJson;
-    document.getElementById('closeExportBtn').onclick = () => document.getElementById('exportModal').classList.add('hidden');
-
-    // Show saved API key status
-    const savedKey = localStorage.getItem('anthropicApiKey');
-    if (savedKey) {
-        document.getElementById('anthropicKeyInput').value = savedKey;
-        document.getElementById('apiKeyStatus').innerHTML = '<span style="color:#22c55e;"><i class="fas fa-check-circle"></i> API key saved</span>';
-    }
-}
 
 function switchAdminTab(tab) {
     ['courses','students','settings'].forEach(t => {
