@@ -3314,15 +3314,6 @@ function openSettingsOverlay() {
     document.getElementById('adminSettingsOverlay').classList.remove('hidden');
 }
 
-function previewAsStudent() {
-    isEditMode = false;
-    document.body.classList.remove('admin-edit-mode');
-    currentUser = { id: 'admin', name: 'Aaron (Preview)', type: 'spanish', isAdmin: false, driveFolder: '', thisWeek: '' };
-    document.getElementById('adminFloatingBar').classList.add('hidden');
-    document.getElementById('backToAdminBar').classList.remove('hidden');
-    renderCourseList();
-}
-
 function previewAsSpecificStudent(studentId) {
     const s = _studentCache[studentId];
     if (!s) { alert('Student data not found. Reload the Students panel and try again.'); return; }
@@ -3336,13 +3327,6 @@ function previewAsSpecificStudent(studentId) {
         isPreview: true
     }));
     window.open(window.location.href.split('?')[0] + '?preview=1', '_blank');
-}
-
-function returnToAdmin() {
-    currentUser = { id: 'admin', name: 'Aaron', type: 'spanish', isAdmin: true, driveFolder: '' };
-    document.getElementById('backToAdminBar').classList.add('hidden');
-    document.getElementById('adminFloatingBar').classList.remove('hidden');
-    renderCourseList();
 }
 
 // ============================================================
