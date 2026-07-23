@@ -1793,6 +1793,19 @@ footer p {
     overflow: hidden;
 }
 
+.admin-course-subject-header {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    padding: 4px 4px 10px;
+}
+
+.admin-course-subject-header i {
+    margin-right: 6px;
+    color: var(--accent-color);
+}
+
 .admin-course-header {
     display: flex;
     justify-content: space-between;

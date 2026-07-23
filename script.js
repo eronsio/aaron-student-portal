@@ -144,6 +144,7 @@ const ADMIN_CODE = 'ADMIN-AARON';
 const defaultCourses = [
     {
         id: 'spanish-101',
+        subject: 'spanish',
         title: 'Spanish 101',
         description: 'Go from zero to holding real conversations in Spanish. 7 modules covering greetings, numbers, grammar, verbs, travel phrases, weather, and free speaking.',
         level: 'Beginner',
@@ -682,21 +683,54 @@ const defaultCourses = [
 
 let _coursesCache = null;
 
-async function initCourses() {
-    // Try loading from Supabase first (persists across devices and builds)
+// Courses are stored as SEPARATE Supabase rows per subject (id='catalog' for
+// spanish, id='catalog_music' for music) so a student's browser only ever
+// fetches their own subject's catalog — never the other subject's data.
+function _catalogRowId(subject) {
+    return subject === 'music' ? 'catalog_music' : 'catalog';
+}
+
+async function _fetchCatalogRow(subject) {
     try {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/courses_catalog?id=eq.catalog&select=data`, {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/courses_catalog?id=eq.${_catalogRowId(subject)}&select=data`, {
             headers: _headers()
         });
         const rows = await r.json();
-        if (Array.isArray(rows) && rows[0]?.data) {
-            _coursesCache = rows[0].data;
-            return;
+        if (Array.isArray(rows)) {
+            // A row that doesn't exist yet is a legitimate "no courses" result, not a failure —
+            // must return [] (not null) here so it's never confused with a genuine fetch failure below.
+            const data = rows[0]?.data || [];
+            // Force-tag with this row's subject (covers legacy rows saved before the subject field existed)
+            return data.map(c => ({ ...c, subject }));
         }
     } catch(e) {}
-    // Fall back to localStorage, then defaultCourses
-    const stored = localStorage.getItem('coursesCatalog');
-    _coursesCache = stored ? JSON.parse(stored) : defaultCourses;
+    return null; // genuine fetch failure only (network error, CORS, etc.)
+}
+
+async function initCourses() {
+    // Admin manages both subjects; students only ever fetch their own.
+    if (currentUser?.isAdmin) {
+        const [spanish, music] = await Promise.all([_fetchCatalogRow('spanish'), _fetchCatalogRow('music')]);
+        if (spanish !== null || music !== null) {
+            _coursesCache = [...(spanish || []), ...(music || [])];
+            return;
+        }
+        // Total fetch failure — fall back to this browser's last-known admin (merged) cache
+        const stored = localStorage.getItem('coursesCatalog');
+        _coursesCache = stored ? JSON.parse(stored) : defaultCourses;
+        return;
+    }
+
+    const subject = currentUser?.type === 'music' ? 'music' : 'spanish';
+    const fetched = await _fetchCatalogRow(subject);
+    if (fetched !== null) {
+        _coursesCache = fetched; // correctly includes the "row not created yet" empty-array case
+        return;
+    }
+    // Genuine fetch failure — fall back to THIS subject's own last-known-good cache only,
+    // never a shared/merged key, so a stale cache can never leak the other subject's courses.
+    const stored = localStorage.getItem(`coursesCatalog_${subject}`);
+    _coursesCache = stored ? JSON.parse(stored) : (subject === 'spanish' ? defaultCourses : []);
 }
 
 function getCourses() {
@@ -705,10 +739,18 @@ function getCourses() {
 
 async function saveCourses(courses) {
     _coursesCache = courses;
-    localStorage.setItem('coursesCatalog', JSON.stringify(courses)); // local backup
-    // Save to Supabase so it persists across devices and builds
+    const spanishCourses = courses.filter(c => (c.subject || 'spanish') === 'spanish');
+    const musicCourses = courses.filter(c => c.subject === 'music');
+    localStorage.setItem('coursesCatalog', JSON.stringify(courses)); // admin's own merged-view backup
+    localStorage.setItem('coursesCatalog_spanish', JSON.stringify(spanishCourses)); // per-subject backups
+    localStorage.setItem('coursesCatalog_music', JSON.stringify(musicCourses));    // used only on fetch failure
+    // Save to Supabase so it persists across devices and builds — split by
+    // subject so each subject's data lives in its own row.
     if (currentUser?.isAdmin) {
-        await sbRpc('save_courses_admin', { admin_secret: ADMIN_SECRET, p_data: courses });
+        await Promise.all([
+            sbRpc('save_courses_admin', { admin_secret: ADMIN_SECRET, p_data: spanishCourses }),
+            sbRpc('save_music_courses_admin', { admin_secret: ADMIN_SECRET, p_data: musicCourses })
+        ]);
     }
 }
 
@@ -1200,14 +1242,10 @@ function showMainApp() {
         ? 'Music with Aaron'
         : 'Spanish with Aaron';
 
-    // Show/hide AI companion and courses tabs based on student type
-    if (currentUser.type === 'spanish') {
-        aiCompanionTab.style.display = 'none'; // hidden until ready to launch
-        document.getElementById('coursesTab').style.display = '';
-    } else {
-        aiCompanionTab.style.display = 'none';
-        document.getElementById('coursesTab').style.display = 'none';
-    }
+    // AI companion is hidden until ready to launch, for both subjects.
+    // Courses tab is shown for both — each subject only ever renders/fetches its own courses.
+    aiCompanionTab.style.display = 'none';
+    document.getElementById('coursesTab').style.display = '';
 
     // Show admin toolbar if admin
     const adminBar = document.getElementById('adminFloatingBar');
@@ -1950,6 +1988,7 @@ async function renderCourseList() {
                 <div class="course-card-body">
                     <div class="course-card-top">
                         <span class="course-level-badge ${levelClass}">${course.level}</span>
+                        ${currentUser.isAdmin ? `<span class="course-level-badge" style="background:var(--bg-secondary);color:var(--text-secondary);">${(course.subject || 'spanish') === 'music' ? '🎵 Music' : '🗣️ Spanish'}</span>` : ''}
                         <span class="course-lesson-count"><i class="fas fa-list"></i> ${total} lesson${total !== 1 ? 's' : ''}</span>
                     </div>
                     <h4 class="course-title">${course.title}</h4>
@@ -2384,19 +2423,8 @@ function saveApiKey() {
     document.getElementById('apiKeyStatus').innerHTML = '<span style="color:#22c55e;"><i class="fas fa-check-circle"></i> Saved!</span>';
 }
 
-function renderAdminCourseList() {
-    const courses = getCourses();
-    const container = document.getElementById('adminCourseList');
-
-    if (courses.length === 0) {
-        container.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-secondary);">
-            <i class="fas fa-book-open" style="font-size:32px;margin-bottom:16px;display:block;"></i>
-            <p>No courses yet. Click <strong>New Course</strong> to get started.</p>
-        </div>`;
-        return;
-    }
-
-    container.innerHTML = courses.map(course => `
+function _adminCourseCardHtml(course) {
+    return `
         <div class="admin-course-card">
             <div class="admin-course-header">
                 <div>
@@ -2442,7 +2470,37 @@ function renderAdminCourseList() {
                 </button>
             </div>
         </div>
-    `).join('');
+    `;
+}
+
+function renderAdminCourseList() {
+    const courses = getCourses();
+    const container = document.getElementById('adminCourseList');
+    if (!container) return;
+
+    if (courses.length === 0) {
+        container.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-secondary);">
+            <i class="fas fa-book-open" style="font-size:32px;margin-bottom:16px;display:block;"></i>
+            <p>No courses yet. Click <strong>New Course</strong> to get started.</p>
+        </div>`;
+        return;
+    }
+
+    // Group by subject so Spanish and Music courses are always visually separate
+    const spanishCourses = courses.filter(c => (c.subject || 'spanish') === 'spanish');
+    const musicCourses = courses.filter(c => c.subject === 'music');
+
+    let html = '';
+    html += `<div class="admin-course-subject-header"><i class="fas fa-language"></i> SPANISH</div>`;
+    html += spanishCourses.length
+        ? spanishCourses.map(_adminCourseCardHtml).join('')
+        : `<p style="color:var(--text-secondary);font-size:13px;padding:0 4px 20px;">No Spanish courses yet.</p>`;
+    html += `<div class="admin-course-subject-header"><i class="fas fa-music"></i> MUSIC</div>`;
+    html += musicCourses.length
+        ? musicCourses.map(_adminCourseCardHtml).join('')
+        : `<p style="color:var(--text-secondary);font-size:13px;padding:0 4px;">No Music courses yet.</p>`;
+
+    container.innerHTML = html;
 }
 
 function handleCoverImageUpload(input) {
@@ -2464,6 +2522,7 @@ function openCourseEditor(courseId) {
     document.getElementById('courseEditorTitle').textContent = course ? 'Edit Course' : 'New Course';
     document.getElementById('editCourseTitle').value = course ? course.title : '';
     document.getElementById('editCourseDesc').value = course ? course.description : '';
+    document.getElementById('editCourseSubject').value = course ? (course.subject || 'spanish') : 'spanish';
     document.getElementById('editCourseLevel').value = course ? course.level : 'Beginner';
     document.getElementById('editCourseCover').value = course ? (course.coverImage || '') : '';
     const prev = document.getElementById('coverPreview');
@@ -2479,6 +2538,7 @@ function closeCourseEditor() {
 function saveCourseEdit() {
     const title = document.getElementById('editCourseTitle').value.trim();
     const desc = document.getElementById('editCourseDesc').value.trim();
+    const subject = document.getElementById('editCourseSubject').value;
     const level = document.getElementById('editCourseLevel').value;
     const coverImage = document.getElementById('editCourseCover').value.trim();
     if (!title) { alert('Please enter a course title.'); return; }
@@ -2486,9 +2546,9 @@ function saveCourseEdit() {
     const courses = getCourses();
     if (editingCourseId) {
         const course = courses.find(c => c.id === editingCourseId);
-        if (course) { course.title = title; course.description = desc; course.level = level; course.coverImage = coverImage; }
+        if (course) { course.title = title; course.description = desc; course.subject = subject; course.level = level; course.coverImage = coverImage; }
     } else {
-        courses.push({ id: 'course-' + Date.now(), title, description: desc, level, coverImage, lessons: [] });
+        courses.push({ id: 'course-' + Date.now(), subject, title, description: desc, level, coverImage, lessons: [] });
     }
     saveCourses(courses);
     closeCourseEditor();
@@ -3234,6 +3294,11 @@ function openLessonPrep() {
     loadLessonPrep();
 }
 
+function openAdminCoursesOverlay() {
+    document.getElementById('adminCoursesOverlay').classList.remove('hidden');
+    renderAdminCourseList();
+}
+
 async function loadLessonPrep() {
     const container = document.getElementById('lessonPrepContent');
     container.innerHTML = '<p style="color:var(--text-secondary);">Loading summaries...</p>';
@@ -3773,6 +3838,7 @@ function doImport() {
 function mergeCourse(courses, incomingCourse) {
     // Ensure required fields
     if (!incomingCourse.id) incomingCourse.id = 'course-' + Date.now();
+    if (!incomingCourse.subject) incomingCourse.subject = 'spanish';
     if (!incomingCourse.lessons) incomingCourse.lessons = [];
     incomingCourse.lessons.forEach(l => { if (!l.id) l.id = 'lesson-' + Date.now() + Math.random(); });
 
