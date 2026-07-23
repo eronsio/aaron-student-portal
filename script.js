@@ -2947,20 +2947,20 @@ async function saveStudentProfile(userId) {
     const originalText = btn ? btn.innerHTML : '';
     if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...'; btn.disabled = true; }
 
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
-        method: 'PATCH',
-        headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=minimal'
-        },
-        body: JSON.stringify({ drive_folder: driveFolder, type, this_week: thisWeek, email, phone })
+    const result = await sbRpc('admin_update_profile', {
+        admin_secret: ADMIN_SECRET,
+        p_id: userId,
+        p_drive_folder: driveFolder,
+        p_type: type,
+        p_this_week: thisWeek,
+        p_email: email,
+        p_phone: phone
     });
+    const failed = result && typeof result === 'object' && !Array.isArray(result) && result.message;
 
     if (btn) {
         btn.disabled = false;
-        if (r.ok || r.status === 204) {
+        if (!failed) {
             // Update cache so Preview reflects the latest saved data
             if (_studentCache[userId]) {
                 _studentCache[userId].drive_folder = driveFolder;
@@ -2974,9 +2974,8 @@ async function saveStudentProfile(userId) {
             btn.style.color = 'white';
             setTimeout(() => { btn.innerHTML = originalText; btn.style.background = ''; btn.style.color = ''; }, 2500);
         } else {
-            const err = await r.text();
             btn.innerHTML = '<i class="fas fa-times"></i> Failed';
-            alert('Save failed: ' + err);
+            alert('Save failed: ' + result.message);
             setTimeout(() => { btn.innerHTML = originalText; }, 2500);
         }
     }
@@ -2987,14 +2986,9 @@ async function loadAdminStudents() {
     container.innerHTML = '<p style="color:var(--text-secondary);">Loading...</p>';
 
     try {
-        // Query profiles directly
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=id,name,type,drive_folder,this_week,email,phone,created_at&order=created_at.desc`, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY
-            }
-        });
-        const profiles = await r.json();
+        // Query profiles via the admin-gated RPC (direct table access is
+        // locked down by RLS to "own row only" now)
+        const profiles = await sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET });
 
         // Supabase returns an error object if something's wrong
         if (!Array.isArray(profiles)) {
@@ -3010,10 +3004,7 @@ async function loadAdminStudents() {
         // Query insights (non-critical, ignore if fails)
         let insights = [];
         try {
-            const r2 = await fetch(`${SUPABASE_URL}/rest/v1/student_insights?select=*`, {
-                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-            });
-            const insightsData = await r2.json();
+            const insightsData = await sbRpc('get_all_insights_admin', { admin_secret: ADMIN_SECRET });
             if (Array.isArray(insightsData)) insights = insightsData;
         } catch(e) {}
 
@@ -3247,11 +3238,8 @@ async function loadLessonPrep() {
     const container = document.getElementById('lessonPrepContent');
     container.innerHTML = '<p style="color:var(--text-secondary);">Loading summaries...</p>';
     try {
-        const res = await fetch(
-            `${SUPABASE_URL}/rest/v1/lesson_summaries?select=*&order=lesson_date.desc&limit=30`,
-            { headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY } }
-        );
-        const rows = await res.json();
+        const allRows = await sbRpc('admin_list_lesson_summaries', { admin_secret: ADMIN_SECRET });
+        const rows = Array.isArray(allRows) ? allRows.slice(0, 30) : allRows;
         if (!rows || rows.length === 0) {
             container.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-secondary);">
                 <i class="fas fa-brain" style="font-size:32px;margin-bottom:16px;display:block;opacity:0.3;"></i>
