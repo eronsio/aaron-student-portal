@@ -920,7 +920,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.removeItem('spanishResources');
         localStorage.setItem('resourcesCacheV10', '1');
     }
-    await initCourses(); // load courses from Supabase
+    // initCourses() now runs inside showMainApp(), once currentUser (and its subject) is known —
+    // calling it here was too early: currentUser is still null for every visitor at this point.
 
     // Admin preview mode — opened from Students panel
     if (new URLSearchParams(window.location.search).get('preview') === '1') {
@@ -1231,7 +1232,7 @@ function showLoginModal() {
 // ============================================================
 // MAIN APP
 // ============================================================
-function showMainApp() {
+async function showMainApp() {
     loginModal.classList.add('hidden');
     mainApp.classList.remove('hidden');
     document.body.style.overflow = 'auto';
@@ -1257,6 +1258,9 @@ function showMainApp() {
     updateCommunityDescription();
 
     showTab('courses');
+    // Must run after currentUser is set (it decides which subject's catalog to fetch) —
+    // NOT at DOMContentLoaded time, when currentUser is still null for every user.
+    await initCourses();
     renderCourseList();
 }
 
