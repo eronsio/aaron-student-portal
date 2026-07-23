@@ -3384,6 +3384,20 @@ function previewAsSpecificStudent(studentId) {
     window.open(window.location.href.split('?')[0] + '?preview=1', '_blank');
 }
 
+// Generic subject preview — doesn't need a real registered student, just
+// opens the portal as a synthetic student of the given type in a new tab.
+function previewAsSubject(subject) {
+    sessionStorage.setItem('adminPreviewStudent', JSON.stringify({
+        id: 'preview-' + subject,
+        name: subject === 'music' ? 'Preview (Music)' : 'Preview (Spanish)',
+        type: subject,
+        driveFolder: '',
+        thisWeek: '',
+        isPreview: true
+    }));
+    window.open(window.location.href.split('?')[0] + '?preview=1', '_blank');
+}
+
 // ============================================================
 // RESOURCES EDITOR
 // ============================================================
