@@ -1239,9 +1239,10 @@ async function showMainApp() {
 
     // Header
     welcomeMessage.textContent = `Welcome, ${currentUser.name}!`;
-    portalTitle.textContent = currentUser.type === 'music'
-        ? 'Music with Aaron'
-        : 'Spanish with Aaron';
+    const isMusic = currentUser.type === 'music';
+    portalTitle.textContent = isMusic ? 'Aaron Siebert Music' : 'Spanish with Aaron';
+    document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
+    document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
 
     // AI companion is hidden until ready to launch, for both subjects.
     // Courses tab is shown for both — each subject only ever renders/fetches its own courses.
