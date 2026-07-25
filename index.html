@@ -546,6 +546,26 @@
         </div>
     </div>
 
+    <!-- Visual Lesson Editor — opens from "Open Editor"/"Add Lesson" inside the Manage
+         Courses overlay (z-index 10001), so this needs to sit above that. Sidebar and
+         content panes are populated entirely by renderVisualEditorSidebar()/
+         renderVisualEditorLesson() in script.js. -->
+    <div id="visualLessonEditor" class="hidden" style="position:fixed;inset:0;background:var(--bg-secondary);z-index:10002;overflow-y:auto;padding:24px;">
+        <div style="max-width:1000px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <h2 id="visualEditorCourseTitle" style="font-size:20px;font-weight:700;"></h2>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="saveVisualLesson()" class="admin-btn primary"><i class="fas fa-save"></i> Save Lesson</button>
+                    <button onclick="closeVisualEditor()" class="logout-btn" style="padding:8px 16px;">Close</button>
+                </div>
+            </div>
+            <div class="course-player" style="min-height:70vh;">
+                <div class="course-sidebar" id="visualEditorSidebar"></div>
+                <div class="course-content-area" id="visualEditorContent"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Import JSON Modal -->
     <div id="importModal" class="modal hidden">
         <div class="modal-content admin-modal-content" style="max-width:640px;">

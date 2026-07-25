@@ -2992,14 +2992,17 @@ function deleteLesson(courseId, lessonId) {
 async function sbRpc(funcName, params) {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${funcName}`, {
         method: 'POST',
-        headers: { 
+        headers: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_KEY,
             'Authorization': 'Bearer ' + (SUPABASE_KEY)
         },
         body: JSON.stringify(params)
     });
-    return r.json();
+    // Void/upsert-style RPCs (e.g. save_courses_admin) succeed with a 204 and no
+    // body — r.json() throws on an empty body, so only parse when there's content.
+    const text = await r.text();
+    return text ? JSON.parse(text) : (r.ok ? null : { code: r.status, message: r.statusText });
 }
 
 async function saveStudentProfile(userId) {
