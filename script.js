@@ -877,6 +877,87 @@ const sharedResources = {
 };
 
 // ============================================================
+// VERB CONJUGATOR TOOL DATA — most frequent Spanish verbs,
+// hand-verified present / preterite / future paradigms
+// ============================================================
+const verbConjugations = [
+    { inf: "ser", en: "to be", presente: ["soy", "eres", "es", "somos", "sois", "son"], preterito: ["fui", "fuiste", "fue", "fuimos", "fuisteis", "fueron"], futuro: ["seré", "serás", "será", "seremos", "seréis", "serán"], note: null },
+    { inf: "estar", en: "to be", presente: ["estoy", "estás", "está", "estamos", "estáis", "están"], preterito: ["estuve", "estuviste", "estuvo", "estuvimos", "estuvisteis", "estuvieron"], futuro: ["estaré", "estarás", "estará", "estaremos", "estaréis", "estarán"], note: null },
+    { inf: "ir", en: "to go", presente: ["voy", "vas", "va", "vamos", "vais", "van"], preterito: ["fui", "fuiste", "fue", "fuimos", "fuisteis", "fueron"], futuro: ["iré", "irás", "irá", "iremos", "iréis", "irán"], note: null },
+    { inf: "haber", en: "to have (aux.)", presente: ["he", "has", "ha", "hemos", "habéis", "han"], preterito: ["hube", "hubiste", "hubo", "hubimos", "hubisteis", "hubieron"], futuro: ["habré", "habrás", "habrá", "habremos", "habréis", "habrán"], note: "Auxiliary verb — used with a past participle (he comido) or impersonally (hay)." },
+    { inf: "tener", en: "to have", presente: ["tengo", "tienes", "tiene", "tenemos", "tenéis", "tienen"], preterito: ["tuve", "tuviste", "tuvo", "tuvimos", "tuvisteis", "tuvieron"], futuro: ["tendré", "tendrás", "tendrá", "tendremos", "tendréis", "tendrán"], note: null },
+    { inf: "hacer", en: "to do / make", presente: ["hago", "haces", "hace", "hacemos", "hacéis", "hacen"], preterito: ["hice", "hiciste", "hizo", "hicimos", "hicisteis", "hicieron"], futuro: ["haré", "harás", "hará", "haremos", "haréis", "harán"], note: null },
+    { inf: "poder", en: "to be able to (can)", presente: ["puedo", "puedes", "puede", "podemos", "podéis", "pueden"], preterito: ["pude", "pudiste", "pudo", "pudimos", "pudisteis", "pudieron"], futuro: ["podré", "podrás", "podrá", "podremos", "podréis", "podrán"], note: null },
+    { inf: "decir", en: "to say / tell", presente: ["digo", "dices", "dice", "decimos", "decís", "dicen"], preterito: ["dije", "dijiste", "dijo", "dijimos", "dijisteis", "dijeron"], futuro: ["diré", "dirás", "dirá", "diremos", "diréis", "dirán"], note: null },
+    { inf: "ver", en: "to see", presente: ["veo", "ves", "ve", "vemos", "veis", "ven"], preterito: ["vi", "viste", "vio", "vimos", "visteis", "vieron"], futuro: ["veré", "verás", "verá", "veremos", "veréis", "verán"], note: null },
+    { inf: "dar", en: "to give", presente: ["doy", "das", "da", "damos", "dais", "dan"], preterito: ["di", "diste", "dio", "dimos", "disteis", "dieron"], futuro: ["daré", "darás", "dará", "daremos", "daréis", "darán"], note: null },
+    { inf: "saber", en: "to know (facts)", presente: ["sé", "sabes", "sabe", "sabemos", "sabéis", "saben"], preterito: ["supe", "supiste", "supo", "supimos", "supisteis", "supieron"], futuro: ["sabré", "sabrás", "sabrá", "sabremos", "sabréis", "sabrán"], note: null },
+    { inf: "querer", en: "to want / love", presente: ["quiero", "quieres", "quiere", "queremos", "queréis", "quieren"], preterito: ["quise", "quisiste", "quiso", "quisimos", "quisisteis", "quisieron"], futuro: ["querré", "querrás", "querrá", "querremos", "querréis", "querrán"], note: null },
+    { inf: "poner", en: "to put", presente: ["pongo", "pones", "pone", "ponemos", "ponéis", "ponen"], preterito: ["puse", "pusiste", "puso", "pusimos", "pusisteis", "pusieron"], futuro: ["pondré", "pondrás", "pondrá", "pondremos", "pondréis", "pondrán"], note: null },
+    { inf: "salir", en: "to leave / go out", presente: ["salgo", "sales", "sale", "salimos", "salís", "salen"], preterito: ["salí", "saliste", "salió", "salimos", "salisteis", "salieron"], futuro: ["saldré", "saldrás", "saldrá", "saldremos", "saldréis", "saldrán"], note: null },
+    { inf: "venir", en: "to come", presente: ["vengo", "vienes", "viene", "venimos", "venís", "vienen"], preterito: ["vine", "viniste", "vino", "vinimos", "vinisteis", "vinieron"], futuro: ["vendré", "vendrás", "vendrá", "vendremos", "vendréis", "vendrán"], note: null },
+    { inf: "traer", en: "to bring", presente: ["traigo", "traes", "trae", "traemos", "traéis", "traen"], preterito: ["traje", "trajiste", "trajo", "trajimos", "trajisteis", "trajeron"], futuro: ["traeré", "traerás", "traerá", "traeremos", "traeréis", "traerán"], note: null },
+    { inf: "caer", en: "to fall", presente: ["caigo", "caes", "cae", "caemos", "caéis", "caen"], preterito: ["caí", "caíste", "cayó", "caímos", "caísteis", "cayeron"], futuro: ["caeré", "caerás", "caerá", "caeremos", "caeréis", "caerán"], note: null },
+    { inf: "conocer", en: "to know (people/places)", presente: ["conozco", "conoces", "conoce", "conocemos", "conocéis", "conocen"], preterito: ["conocí", "conociste", "conoció", "conocimos", "conocisteis", "conocieron"], futuro: ["conoceré", "conocerás", "conocerá", "conoceremos", "conoceréis", "conocerán"], note: null },
+    { inf: "parecer", en: "to seem", presente: ["parezco", "pareces", "parece", "parecemos", "parecéis", "parecen"], preterito: ["parecí", "pareciste", "pareció", "parecimos", "parecisteis", "parecieron"], futuro: ["pareceré", "parecerás", "parecerá", "pareceremos", "pareceréis", "parecerán"], note: null },
+    { inf: "conducir", en: "to drive", presente: ["conduzco", "conduces", "conduce", "conducimos", "conducís", "conducen"], preterito: ["conduje", "condujiste", "condujo", "condujimos", "condujisteis", "condujeron"], futuro: ["conduciré", "conducirás", "conducirá", "conduciremos", "conduciréis", "conducirán"], note: null },
+    { inf: "producir", en: "to produce", presente: ["produzco", "produces", "produce", "producimos", "producís", "producen"], preterito: ["produje", "produjiste", "produjo", "produjimos", "produjisteis", "produjeron"], futuro: ["produciré", "producirás", "producirá", "produciremos", "produciréis", "producirán"], note: null },
+    { inf: "traducir", en: "to translate", presente: ["traduzco", "traduces", "traduce", "traducimos", "traducís", "traducen"], preterito: ["traduje", "tradujiste", "tradujo", "tradujimos", "tradujisteis", "tradujeron"], futuro: ["traduciré", "traducirás", "traducirá", "traduciremos", "traduciréis", "traducirán"], note: null },
+    { inf: "oír", en: "to hear", presente: ["oigo", "oyes", "oye", "oímos", "oís", "oyen"], preterito: ["oí", "oíste", "oyó", "oímos", "oísteis", "oyeron"], futuro: ["oiré", "oirás", "oirá", "oiremos", "oiréis", "oirán"], note: null },
+    { inf: "pensar", en: "to think", presente: ["pienso", "piensas", "piensa", "pensamos", "pensáis", "piensan"], preterito: ["pensé", "pensaste", "pensó", "pensamos", "pensasteis", "pensaron"], futuro: ["pensaré", "pensarás", "pensará", "pensaremos", "pensaréis", "pensarán"], note: null },
+    { inf: "cerrar", en: "to close", presente: ["cierro", "cierras", "cierra", "cerramos", "cerráis", "cierran"], preterito: ["cerré", "cerraste", "cerró", "cerramos", "cerrasteis", "cerraron"], futuro: ["cerraré", "cerrarás", "cerrará", "cerraremos", "cerraréis", "cerrarán"], note: null },
+    { inf: "empezar", en: "to start", presente: ["empiezo", "empiezas", "empieza", "empezamos", "empezáis", "empiezan"], preterito: ["empecé", "empezaste", "empezó", "empezamos", "empezasteis", "empezaron"], futuro: ["empezaré", "empezarás", "empezará", "empezaremos", "empezaréis", "empezarán"], note: null },
+    { inf: "comenzar", en: "to begin", presente: ["comienzo", "comienzas", "comienza", "comenzamos", "comenzáis", "comienzan"], preterito: ["comencé", "comenzaste", "comenzó", "comenzamos", "comenzasteis", "comenzaron"], futuro: ["comenzaré", "comenzarás", "comenzará", "comenzaremos", "comenzaréis", "comenzarán"], note: null },
+    { inf: "entender", en: "to understand", presente: ["entiendo", "entiendes", "entiende", "entendemos", "entendéis", "entienden"], preterito: ["entendí", "entendiste", "entendió", "entendimos", "entendisteis", "entendieron"], futuro: ["entenderé", "entenderás", "entenderá", "entenderemos", "entenderéis", "entenderán"], note: null },
+    { inf: "perder", en: "to lose", presente: ["pierdo", "pierdes", "pierde", "perdemos", "perdéis", "pierden"], preterito: ["perdí", "perdiste", "perdió", "perdimos", "perdisteis", "perdieron"], futuro: ["perderé", "perderás", "perderá", "perderemos", "perderéis", "perderán"], note: null },
+    { inf: "volver", en: "to return", presente: ["vuelvo", "vuelves", "vuelve", "volvemos", "volvéis", "vuelven"], preterito: ["volví", "volviste", "volvió", "volvimos", "volvisteis", "volvieron"], futuro: ["volveré", "volverás", "volverá", "volveremos", "volveréis", "volverán"], note: null },
+    { inf: "encontrar", en: "to find", presente: ["encuentro", "encuentras", "encuentra", "encontramos", "encontráis", "encuentran"], preterito: ["encontré", "encontraste", "encontró", "encontramos", "encontrasteis", "encontraron"], futuro: ["encontraré", "encontrarás", "encontrará", "encontraremos", "encontraréis", "encontrarán"], note: null },
+    { inf: "recordar", en: "to remember", presente: ["recuerdo", "recuerdas", "recuerda", "recordamos", "recordáis", "recuerdan"], preterito: ["recordé", "recordaste", "recordó", "recordamos", "recordasteis", "recordaron"], futuro: ["recordaré", "recordarás", "recordará", "recordaremos", "recordaréis", "recordarán"], note: null },
+    { inf: "contar", en: "to count / tell", presente: ["cuento", "cuentas", "cuenta", "contamos", "contáis", "cuentan"], preterito: ["conté", "contaste", "contó", "contamos", "contasteis", "contaron"], futuro: ["contaré", "contarás", "contará", "contaremos", "contaréis", "contarán"], note: null },
+    { inf: "mostrar", en: "to show", presente: ["muestro", "muestras", "muestra", "mostramos", "mostráis", "muestran"], preterito: ["mostré", "mostraste", "mostró", "mostramos", "mostrasteis", "mostraron"], futuro: ["mostraré", "mostrarás", "mostrará", "mostraremos", "mostraréis", "mostrarán"], note: null },
+    { inf: "jugar", en: "to play", presente: ["juego", "juegas", "juega", "jugamos", "jugáis", "juegan"], preterito: ["jugué", "jugaste", "jugó", "jugamos", "jugasteis", "jugaron"], futuro: ["jugaré", "jugarás", "jugará", "jugaremos", "jugaréis", "jugarán"], note: null },
+    { inf: "dormir", en: "to sleep", presente: ["duermo", "duermes", "duerme", "dormimos", "dormís", "duermen"], preterito: ["dormí", "dormiste", "durmió", "dormimos", "dormisteis", "durmieron"], futuro: ["dormiré", "dormirás", "dormirá", "dormiremos", "dormiréis", "dormirán"], note: null },
+    { inf: "morir", en: "to die", presente: ["muero", "mueres", "muere", "morimos", "morís", "mueren"], preterito: ["morí", "moriste", "murió", "morimos", "moristeis", "murieron"], futuro: ["moriré", "morirás", "morirá", "moriremos", "moriréis", "morirán"], note: null },
+    { inf: "sentir", en: "to feel", presente: ["siento", "sientes", "siente", "sentimos", "sentís", "sienten"], preterito: ["sentí", "sentiste", "sintió", "sentimos", "sentisteis", "sintieron"], futuro: ["sentiré", "sentirás", "sentirá", "sentiremos", "sentiréis", "sentirán"], note: null },
+    { inf: "preferir", en: "to prefer", presente: ["prefiero", "prefieres", "prefiere", "preferimos", "preferís", "prefieren"], preterito: ["preferí", "preferiste", "prefirió", "preferimos", "preferisteis", "prefirieron"], futuro: ["preferiré", "preferirás", "preferirá", "preferiremos", "preferiréis", "preferirán"], note: null },
+    { inf: "pedir", en: "to ask for", presente: ["pido", "pides", "pide", "pedimos", "pedís", "piden"], preterito: ["pedí", "pediste", "pidió", "pedimos", "pedisteis", "pidieron"], futuro: ["pediré", "pedirás", "pedirá", "pediremos", "pediréis", "pedirán"], note: null },
+    { inf: "seguir", en: "to follow / continue", presente: ["sigo", "sigues", "sigue", "seguimos", "seguís", "siguen"], preterito: ["seguí", "seguiste", "siguió", "seguimos", "seguisteis", "siguieron"], futuro: ["seguiré", "seguirás", "seguirá", "seguiremos", "seguiréis", "seguirán"], note: null },
+    { inf: "servir", en: "to serve", presente: ["sirvo", "sirves", "sirve", "servimos", "servís", "sirven"], preterito: ["serví", "serviste", "sirvió", "servimos", "servisteis", "sirvieron"], futuro: ["serviré", "servirás", "servirá", "serviremos", "serviréis", "servirán"], note: null },
+    { inf: "repetir", en: "to repeat", presente: ["repito", "repites", "repite", "repetimos", "repetís", "repiten"], preterito: ["repetí", "repetiste", "repitió", "repetimos", "repetisteis", "repitieron"], futuro: ["repetiré", "repetirás", "repetirá", "repetiremos", "repetiréis", "repetirán"], note: null },
+    { inf: "vestir", en: "to dress", presente: ["visto", "vistes", "viste", "vestimos", "vestís", "visten"], preterito: ["vestí", "vestiste", "vistió", "vestimos", "vestisteis", "vistieron"], futuro: ["vestiré", "vestirás", "vestirá", "vestiremos", "vestiréis", "vestirán"], note: null },
+    { inf: "buscar", en: "to look for", presente: ["busco", "buscas", "busca", "buscamos", "buscáis", "buscan"], preterito: ["busqué", "buscaste", "buscó", "buscamos", "buscasteis", "buscaron"], futuro: ["buscaré", "buscarás", "buscará", "buscaremos", "buscaréis", "buscarán"], note: null },
+    { inf: "llegar", en: "to arrive", presente: ["llego", "llegas", "llega", "llegamos", "llegáis", "llegan"], preterito: ["llegué", "llegaste", "llegó", "llegamos", "llegasteis", "llegaron"], futuro: ["llegaré", "llegarás", "llegará", "llegaremos", "llegaréis", "llegarán"], note: null },
+    { inf: "pagar", en: "to pay", presente: ["pago", "pagas", "paga", "pagamos", "pagáis", "pagan"], preterito: ["pagué", "pagaste", "pagó", "pagamos", "pagasteis", "pagaron"], futuro: ["pagaré", "pagarás", "pagará", "pagaremos", "pagaréis", "pagarán"], note: null },
+    { inf: "tocar", en: "to touch / play (an instrument)", presente: ["toco", "tocas", "toca", "tocamos", "tocáis", "tocan"], preterito: ["toqué", "tocaste", "tocó", "tocamos", "tocasteis", "tocaron"], futuro: ["tocaré", "tocarás", "tocará", "tocaremos", "tocaréis", "tocarán"], note: null },
+    { inf: "sacar", en: "to take out", presente: ["saco", "sacas", "saca", "sacamos", "sacáis", "sacan"], preterito: ["saqué", "sacaste", "sacó", "sacamos", "sacasteis", "sacaron"], futuro: ["sacaré", "sacarás", "sacará", "sacaremos", "sacaréis", "sacarán"], note: null },
+    { inf: "explicar", en: "to explain", presente: ["explico", "explicas", "explica", "explicamos", "explicáis", "explican"], preterito: ["expliqué", "explicaste", "explicó", "explicamos", "explicasteis", "explicaron"], futuro: ["explicaré", "explicarás", "explicará", "explicaremos", "explicaréis", "explicarán"], note: null },
+    { inf: "practicar", en: "to practice", presente: ["practico", "practicas", "practica", "practicamos", "practicáis", "practican"], preterito: ["practiqué", "practicaste", "practicó", "practicamos", "practicasteis", "practicaron"], futuro: ["practicaré", "practicarás", "practicará", "practicaremos", "practicaréis", "practicarán"], note: null },
+    { inf: "leer", en: "to read", presente: ["leo", "lees", "lee", "leemos", "leéis", "leen"], preterito: ["leí", "leíste", "leyó", "leímos", "leísteis", "leyeron"], futuro: ["leeré", "leerás", "leerá", "leeremos", "leeréis", "leerán"], note: null },
+    { inf: "creer", en: "to believe", presente: ["creo", "crees", "cree", "creemos", "creéis", "creen"], preterito: ["creí", "creíste", "creyó", "creímos", "creísteis", "creyeron"], futuro: ["creeré", "creerás", "creerá", "creeremos", "creeréis", "creerán"], note: null },
+    { inf: "construir", en: "to build", presente: ["construyo", "construyes", "construye", "construimos", "construís", "construyen"], preterito: ["construí", "construiste", "construyó", "construimos", "construisteis", "construyeron"], futuro: ["construiré", "construirás", "construirá", "construiremos", "construiréis", "construirán"], note: null },
+    { inf: "hablar", en: "to speak", presente: ["hablo", "hablas", "habla", "hablamos", "habláis", "hablan"], preterito: ["hablé", "hablaste", "habló", "hablamos", "hablasteis", "hablaron"], futuro: ["hablaré", "hablarás", "hablará", "hablaremos", "hablaréis", "hablarán"], note: null },
+    { inf: "comer", en: "to eat", presente: ["como", "comes", "come", "comemos", "coméis", "comen"], preterito: ["comí", "comiste", "comió", "comimos", "comisteis", "comieron"], futuro: ["comeré", "comerás", "comerá", "comeremos", "comeréis", "comerán"], note: null },
+    { inf: "vivir", en: "to live", presente: ["vivo", "vives", "vive", "vivimos", "vivís", "viven"], preterito: ["viví", "viviste", "vivió", "vivimos", "vivisteis", "vivieron"], futuro: ["viviré", "vivirás", "vivirá", "viviremos", "viviréis", "vivirán"], note: null },
+    { inf: "trabajar", en: "to work", presente: ["trabajo", "trabajas", "trabaja", "trabajamos", "trabajáis", "trabajan"], preterito: ["trabajé", "trabajaste", "trabajó", "trabajamos", "trabajasteis", "trabajaron"], futuro: ["trabajaré", "trabajarás", "trabajará", "trabajaremos", "trabajaréis", "trabajarán"], note: null },
+    { inf: "estudiar", en: "to study", presente: ["estudio", "estudias", "estudia", "estudiamos", "estudiáis", "estudian"], preterito: ["estudié", "estudiaste", "estudió", "estudiamos", "estudiasteis", "estudiaron"], futuro: ["estudiaré", "estudiarás", "estudiará", "estudiaremos", "estudiaréis", "estudiarán"], note: null },
+    { inf: "escribir", en: "to write", presente: ["escribo", "escribes", "escribe", "escribimos", "escribís", "escriben"], preterito: ["escribí", "escribiste", "escribió", "escribimos", "escribisteis", "escribieron"], futuro: ["escribiré", "escribirás", "escribirá", "escribiremos", "escribiréis", "escribirán"], note: null },
+    { inf: "llevar", en: "to carry / wear", presente: ["llevo", "llevas", "lleva", "llevamos", "lleváis", "llevan"], preterito: ["llevé", "llevaste", "llevó", "llevamos", "llevasteis", "llevaron"], futuro: ["llevaré", "llevarás", "llevará", "llevaremos", "llevaréis", "llevarán"], note: null },
+    { inf: "llamar", en: "to call", presente: ["llamo", "llamas", "llama", "llamamos", "llamáis", "llaman"], preterito: ["llamé", "llamaste", "llamó", "llamamos", "llamasteis", "llamaron"], futuro: ["llamaré", "llamarás", "llamará", "llamaremos", "llamaréis", "llamarán"], note: null },
+    { inf: "tomar", en: "to take / drink", presente: ["tomo", "tomas", "toma", "tomamos", "tomáis", "toman"], preterito: ["tomé", "tomaste", "tomó", "tomamos", "tomasteis", "tomaron"], futuro: ["tomaré", "tomarás", "tomará", "tomaremos", "tomaréis", "tomarán"], note: null },
+    { inf: "necesitar", en: "to need", presente: ["necesito", "necesitas", "necesita", "necesitamos", "necesitáis", "necesitan"], preterito: ["necesité", "necesitaste", "necesitó", "necesitamos", "necesitasteis", "necesitaron"], futuro: ["necesitaré", "necesitarás", "necesitará", "necesitaremos", "necesitaréis", "necesitarán"], note: null },
+    { inf: "usar", en: "to use", presente: ["uso", "usas", "usa", "usamos", "usáis", "usan"], preterito: ["usé", "usaste", "usó", "usamos", "usasteis", "usaron"], futuro: ["usaré", "usarás", "usará", "usaremos", "usaréis", "usarán"], note: null },
+    { inf: "escuchar", en: "to listen", presente: ["escucho", "escuchas", "escucha", "escuchamos", "escucháis", "escuchan"], preterito: ["escuché", "escuchaste", "escuchó", "escuchamos", "escuchasteis", "escucharon"], futuro: ["escucharé", "escucharás", "escuchará", "escucharemos", "escucharéis", "escucharán"], note: null },
+    { inf: "mirar", en: "to watch / look at", presente: ["miro", "miras", "mira", "miramos", "miráis", "miran"], preterito: ["miré", "miraste", "miró", "miramos", "mirasteis", "miraron"], futuro: ["miraré", "mirarás", "mirará", "miraremos", "miraréis", "mirarán"], note: null },
+    { inf: "ayudar", en: "to help", presente: ["ayudo", "ayudas", "ayuda", "ayudamos", "ayudáis", "ayudan"], preterito: ["ayudé", "ayudaste", "ayudó", "ayudamos", "ayudasteis", "ayudaron"], futuro: ["ayudaré", "ayudarás", "ayudará", "ayudaremos", "ayudaréis", "ayudarán"], note: null },
+    { inf: "comprar", en: "to buy", presente: ["compro", "compras", "compra", "compramos", "compráis", "compran"], preterito: ["compré", "compraste", "compró", "compramos", "comprasteis", "compraron"], futuro: ["compraré", "comprarás", "comprará", "compraremos", "compraréis", "comprarán"], note: null },
+    { inf: "caminar", en: "to walk", presente: ["camino", "caminas", "camina", "caminamos", "camináis", "caminan"], preterito: ["caminé", "caminaste", "caminó", "caminamos", "caminasteis", "caminaron"], futuro: ["caminaré", "caminarás", "caminará", "caminaremos", "caminaréis", "caminarán"], note: null },
+    { inf: "abrir", en: "to open", presente: ["abro", "abres", "abre", "abrimos", "abrís", "abren"], preterito: ["abrí", "abriste", "abrió", "abrimos", "abristeis", "abrieron"], futuro: ["abriré", "abrirás", "abrirá", "abriremos", "abriréis", "abrirán"], note: null },
+    { inf: "aprender", en: "to learn", presente: ["aprendo", "aprendes", "aprende", "aprendemos", "aprendéis", "aprenden"], preterito: ["aprendí", "aprendiste", "aprendió", "aprendimos", "aprendisteis", "aprendieron"], futuro: ["aprenderé", "aprenderás", "aprenderá", "aprenderemos", "aprenderéis", "aprenderán"], note: null },
+    { inf: "beber", en: "to drink", presente: ["bebo", "bebes", "bebe", "bebemos", "bebéis", "beben"], preterito: ["bebí", "bebiste", "bebió", "bebimos", "bebisteis", "bebieron"], futuro: ["beberé", "beberás", "beberá", "beberemos", "beberéis", "beberán"], note: null },
+    { inf: "deber", en: "should / must (to owe)", presente: ["debo", "debes", "debe", "debemos", "debéis", "deben"], preterito: ["debí", "debiste", "debió", "debimos", "debisteis", "debieron"], futuro: ["deberé", "deberás", "deberá", "deberemos", "deberéis", "deberán"], note: null }
+];
+
+// ============================================================
 // DOM ELEMENTS — grabbed inside DOMContentLoaded to ensure they exist
 // ============================================================
 let loginModal, mainApp, loginForm, adminForm, welcomeMessage, logoutBtn,
@@ -1294,6 +1375,11 @@ function populateResources() {
 
     const items = [];
 
+    items.push({
+        id: 'resAccVerbs', icon: 'fas fa-table', label: 'Verb Conjugator',
+        body: renderVerbConjugatorTool()
+    });
+
     (resources.sections || []).forEach((section, i) => {
         items.push({
             id: `resAccSec${i}`, icon: section.icon, label: section.title,
@@ -1392,6 +1478,112 @@ function toggleResourceAccordion(itemId) {
         const content = document.getElementById(itemId);
         content.style.maxHeight = content.scrollHeight + 'px';
     }
+}
+
+// ============================================================
+// VERB CONJUGATOR TOOL — type-ahead lookup over verbConjugations
+// ============================================================
+const VERB_PERSONS = ['yo', 'tú', 'él/ella/Ud.', 'nosotros/as', 'vosotros/as', 'ellos/ellas/Uds.'];
+
+function normalizeVerbQuery(s) {
+    return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+
+function renderVerbConjugatorTool() {
+    return `
+        <div class="verb-tool">
+            <div class="verb-search-wrap">
+                <i class="fas fa-magnifying-glass verb-search-icon"></i>
+                <input type="text" class="verb-search-input" id="verbSearchInput"
+                    placeholder="Search a verb… (e.g. tener, or &quot;to have&quot;)"
+                    oninput="onVerbSearchInput(this.value)" autocomplete="off">
+            </div>
+            <div id="verbResultsChips" class="verb-results-chips"></div>
+            <div id="verbTableContainer" class="verb-table-container">
+                <p class="verb-hint">Type a verb in Spanish or English to see its present, preterite, and future conjugations.</p>
+            </div>
+        </div>`;
+}
+
+function verbChipHTML(inf, active) {
+    return `<button type="button" class="verb-chip${active ? ' active' : ''}" onclick="selectVerbChip('${inf}')">${inf}</button>`;
+}
+
+function renderVerbTable(verb) {
+    const tenseCol = (label, forms) => `
+        <div class="verb-tense-col">
+            <div class="verb-tense-title">${label}</div>
+            ${forms.map((form, i) => `
+                <div class="verb-person-row">
+                    <span class="verb-person">${VERB_PERSONS[i]}</span>
+                    <span class="verb-form">${form}</span>
+                </div>`).join('')}
+        </div>`;
+
+    return `
+        <div class="verb-table-card">
+            <div class="verb-table-header">
+                <span class="verb-inf">${verb.inf}</span>
+                <span class="verb-en">${verb.en}</span>
+            </div>
+            ${verb.note ? `<p class="verb-note"><i class="fas fa-circle-info"></i> ${verb.note}</p>` : ''}
+            <div class="verb-conj-grid">
+                ${tenseCol('Presente', verb.presente)}
+                ${tenseCol('Pretérito', verb.preterito)}
+                ${tenseCol('Futuro', verb.futuro)}
+            </div>
+        </div>`;
+}
+
+function onVerbSearchInput(rawQuery) {
+    const chipsEl = document.getElementById('verbResultsChips');
+    const tableEl = document.getElementById('verbTableContainer');
+    const q = normalizeVerbQuery(rawQuery);
+
+    if (!q) {
+        chipsEl.innerHTML = '';
+        tableEl.innerHTML = '<p class="verb-hint">Type a verb in Spanish or English to see its present, preterite, and future conjugations.</p>';
+        resizeOpenResAccordion();
+        return;
+    }
+
+    const matches = verbConjugations
+        .filter(v => normalizeVerbQuery(v.inf).includes(q) || normalizeVerbQuery(v.en).includes(q))
+        .slice(0, 8);
+
+    if (matches.length === 0) {
+        chipsEl.innerHTML = '';
+        tableEl.innerHTML = '<p class="verb-hint">No matches. Try the infinitive (e.g. "volver") or an English meaning (e.g. "to return").</p>';
+        resizeOpenResAccordion();
+        return;
+    }
+
+    const exact = matches.find(v => normalizeVerbQuery(v.inf) === q);
+
+    if (matches.length === 1 || exact) {
+        const chosen = exact || matches[0];
+        chipsEl.innerHTML = matches.length > 1 ? matches.map(v => verbChipHTML(v.inf, v.inf === chosen.inf)).join('') : '';
+        tableEl.innerHTML = renderVerbTable(chosen);
+    } else {
+        chipsEl.innerHTML = matches.map(v => verbChipHTML(v.inf, false)).join('');
+        tableEl.innerHTML = '<p class="verb-hint">Select a verb above.</p>';
+    }
+    resizeOpenResAccordion();
+}
+
+function selectVerbChip(inf) {
+    const verb = verbConjugations.find(v => v.inf === inf);
+    if (!verb) return;
+    document.querySelectorAll('.verb-chip').forEach(c => c.classList.toggle('active', c.textContent === inf));
+    document.getElementById('verbTableContainer').innerHTML = renderVerbTable(verb);
+    resizeOpenResAccordion();
+}
+
+function resizeOpenResAccordion() {
+    const activeHeader = document.querySelector('.res-accordion-header.active');
+    if (!activeHeader) return;
+    const content = document.getElementById(activeHeader.dataset.accitem);
+    if (content) content.style.maxHeight = content.scrollHeight + 'px';
 }
 
 function posterLoadFailed(img) {

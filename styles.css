@@ -2432,6 +2432,172 @@ footer p {
     padding: 16px 24px;
 }
 
+/* ============================================================
+   VERB CONJUGATOR — type-ahead lookup (Resources tab)
+   ============================================================ */
+.verb-tool {
+    max-width: 640px;
+    margin: 0 auto;
+}
+
+.verb-search-wrap {
+    position: relative;
+    margin-bottom: 14px;
+}
+
+.verb-search-icon {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-light);
+    font-size: 14px;
+}
+
+.verb-search-input {
+    width: 100%;
+    padding: 12px 16px 12px 42px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.verb-search-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.verb-results-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.verb-chip {
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.verb-chip:hover {
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.verb-chip.active {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #fff;
+}
+
+.verb-hint {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+    padding: 12px 4px;
+}
+
+.verb-table-card {
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    padding: 16px;
+}
+
+.verb-table-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.verb-inf {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-transform: capitalize;
+}
+
+.verb-en {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.verb-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    margin-bottom: 12px;
+}
+
+.verb-note i {
+    color: var(--accent-color);
+    margin-right: 4px;
+}
+
+.verb-conj-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+@media (max-width: 560px) {
+    .verb-conj-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.verb-tense-col {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+
+.verb-tense-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--accent-color);
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.verb-person-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 13px;
+}
+
+.verb-person {
+    color: var(--text-secondary);
+}
+
+.verb-form {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: right;
+}
+
 /* Compact Instagram profile chips — a full link-card per handle wasted too much vertical space */
 .insta-chip-row {
     display: flex;

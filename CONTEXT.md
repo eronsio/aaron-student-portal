@@ -33,6 +33,7 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - Supabase client is hand-rolled (`_headers`, `sbSignIn`, `sbGetProfile`, etc.)
 - Courses stored in Supabase (`courses_catalog`) with localStorage as fallback, then `defaultCourses` hardcoded in JS
 - Resources (links, movies/TV) stored in localStorage under `spanishResources`; defaults in `sharedResources` object in JS
+- Verb Conjugator (Resources tab, Spanish only): static lookup tool, not admin-editable. Verb data lives in `verbConjugations` (~75 verbs, hand-verified present/preterite/future); UI logic in `renderVerbConjugatorTool`/`onVerbSearchInput`/`selectVerbChip` in script.js
 - Admin panel is the same `mainApp` div with a floating toolbar (`adminFloatingBar`) — no separate page
 
 ## Student types
