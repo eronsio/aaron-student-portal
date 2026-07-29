@@ -415,14 +415,29 @@ main {
 
 .tab-btn:hover {
     color: var(--text-primary);
-    background: var(--bg-secondary);
+    filter: brightness(0.97);
 }
 
 .tab-btn.active {
     color: var(--text-primary);
-    background: var(--bg-primary);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+
+/* Each tab gets its own light tint so students notice there are several
+   distinct sections to switch between, not just one panel with a gray bar
+   next to it. Active state deepens the same color rather than going white,
+   so the tint stays visible as a hint even for the open tab. */
+.tab-btn[data-tab="courses"]      { background: rgba(37, 99, 235, 0.07); color: #1d4ed8; }
+.tab-btn[data-tab="resources"]    { background: rgba(124, 58, 237, 0.07); color: #6d28d9; }
+.tab-btn[data-tab="your-space"]   { background: rgba(13, 148, 136, 0.08); color: #0f766e; }
+.tab-btn[data-tab="ai-companion"] { background: rgba(217, 119, 6, 0.08); color: #b45309; }
+.tab-btn[data-tab="community"]    { background: rgba(219, 39, 119, 0.07); color: #be185d; }
+
+.tab-btn[data-tab="courses"].active      { background: rgba(37, 99, 235, 0.14); }
+.tab-btn[data-tab="resources"].active    { background: rgba(124, 58, 237, 0.14); }
+.tab-btn[data-tab="your-space"].active   { background: rgba(13, 148, 136, 0.16); }
+.tab-btn[data-tab="ai-companion"].active { background: rgba(217, 119, 6, 0.16); }
+.tab-btn[data-tab="community"].active    { background: rgba(219, 39, 119, 0.14); }
 
 .tab-content {
     background: var(--bg-primary);
