@@ -124,10 +124,13 @@ async function sbDeleteProgress(userId, courseId, lessonId) {
 }
 
 
-// Voice recording state
-let mediaRecorder = null;
-let audioChunks = [];
-let isRecording = false;
+// Voice input state — live speech-to-text via the Web Speech API, streamed
+// straight into the chat text box (not a separate record-then-send pipeline).
+const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+const speechSupported = !!SpeechRecognitionCtor;
+let recognition = null;
+let isListening = false;
+let committedTranscript = '';
 
 // ============================================================
 // ADMIN CODE — Change this to whatever you want
@@ -1192,12 +1195,19 @@ function setupEventListeners() {
         if (e.key === 'Enter') sendAiMessage();
     });
 
-    // Voice recording (press & hold)
-    aiRecordBtn.addEventListener('mousedown', startRecording);
-    aiRecordBtn.addEventListener('mouseup', stopRecording);
-    aiRecordBtn.addEventListener('mouseleave', stopRecording);
-    aiRecordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
-    aiRecordBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
+    // Voice input (press & hold) — live transcription into the text box
+    if (speechSupported) {
+        aiRecordBtn.addEventListener('mousedown', startListening);
+        aiRecordBtn.addEventListener('mouseup', stopListening);
+        aiRecordBtn.addEventListener('mouseleave', stopListening);
+        aiRecordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startListening(); });
+        aiRecordBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopListening(); });
+    } else {
+        aiRecordBtn.disabled = true;
+        aiRecordBtn.title = 'La entrada de voz no está disponible en este navegador. Prueba Chrome, Edge o Safari — o simplemente escribe.';
+        aiRecordBtn.style.opacity = '0.4';
+        aiRecordBtn.style.cursor = 'not-allowed';
+    }
 
     // Go to sign in after signup success
     goToLoginBtn.addEventListener('click', () => {
@@ -1981,30 +1991,21 @@ Estudiante: "Ayer yo fue al supermercado"
 Tú: "¡Bien! [✓ 'fui' para yo — 'fue' es para él/ella] ¿Y qué compraste allí?"`;
 }
 
+const AI_COMPANION_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-companion`;
+
 async function callAnthropicAPI(messages, systemPrompt) {
-    const apiKey = localStorage.getItem('anthropicApiKey');
-    if (!apiKey) {
-        return '⚠️ Sin clave API — Aaron necesita añadir una clave de Anthropic en Admin → Settings.';
+    if (!_accessToken) {
+        return '⚠️ Necesitas iniciar sesión como estudiante para usar el compañero de práctica.';
     }
     try {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
+        const r = await fetch(AI_COMPANION_FUNCTION_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'anthropic-dangerous-direct-browser-access': 'true'
-            },
-            body: JSON.stringify({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 250,
-                system: systemPrompt,
-                messages: messages.slice(-20)
-            })
+            headers: _headers(_accessToken),
+            body: JSON.stringify({ messages: messages.slice(-20), systemPrompt })
         });
         const data = await r.json();
-        if (data.error) return `⚠️ Error: ${data.error.message}`;
-        return data.content?.[0]?.text || '...';
+        if (!r.ok || data.error) return `⚠️ Error: ${data.error || 'No se pudo conectar con el compañero de práctica.'}`;
+        return data.text || '...';
     } catch(e) {
         return '⚠️ No se pudo conectar. Comprueba tu conexión.';
     }
@@ -2071,6 +2072,7 @@ async function startAiMode(mode, context) {
 }
 
 function endAiSession() {
+    if (isListening) stopListening();
     document.getElementById('aiChatView').classList.add('hidden');
     document.getElementById('aiModeSelector').classList.remove('hidden');
     aiConversationHistory = [];
@@ -2131,80 +2133,56 @@ function initAiCompanion() {
 
 
 // ============================================================
-// VOICE RECORDING
+// VOICE INPUT — live speech-to-text (Web Speech API)
 // ============================================================
-async function startRecording() {
-    if (isRecording) return;
+// Press-and-hold the mic button: recognized speech streams straight into
+// aiMessageInput as the student talks, so they can see and fix a mis-heard
+// word before sending — then it goes through the exact same send flow
+// (sendAiMessage) as if they'd typed it. No separate "voice message" pipeline.
+function initSpeechRecognition() {
+    const rec = new SpeechRecognitionCtor();
+    rec.lang = 'es-ES';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const chunk = event.results[i][0].transcript;
+            if (event.results[i].isFinal) committedTranscript = (committedTranscript + ' ' + chunk).trim();
+            else interim += chunk;
+        }
+        aiMessageInput.value = (committedTranscript + ' ' + interim).trim();
+    };
+    rec.onerror = (event) => {
+        stopListeningUI();
+        if (event.error === 'not-allowed') alert('Por favor permite el acceso al micrófono.');
+    };
+    rec.onend = () => stopListeningUI();
+    return rec;
+}
 
+function startListening() {
+    if (!speechSupported || isListening || !currentAiMode) return;
+    if (!recognition) recognition = initSpeechRecognition();
+    committedTranscript = aiMessageInput.value.trim();
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-
-        mediaRecorder.ondataavailable = (e) => {
-            if (e.data.size > 0) audioChunks.push(e.data);
-        };
-
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-
-            // Stop all tracks
-            stream.getTracks().forEach(track => track.stop());
-
-            // Add voice message to chat
-            addVoiceMessage(audioUrl);
-        };
-
-        mediaRecorder.start();
-        isRecording = true;
+        recognition.start();
+        isListening = true;
         aiRecordBtn.classList.add('recording');
         aiRecordBtn.innerHTML = '<i class="fas fa-stop"></i>';
-
     } catch (err) {
-        console.error('Mic access denied:', err);
-        alert('Please allow microphone access to record voice messages.');
+        console.error('SpeechRecognition start failed:', err);
     }
 }
 
-function stopRecording() {
-    if (!isRecording || !mediaRecorder) return;
-
-    mediaRecorder.stop();
-    isRecording = false;
-    aiRecordBtn.classList.remove('recording');
-    aiRecordBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+function stopListening() {
+    if (isListening) recognition.stop(); // onend -> stopListeningUI()
 }
 
-async function addVoiceMessage(audioUrl) {
-    if (!currentAiMode) return;
-
-    const userMsg = document.createElement('div');
-    userMsg.className = 'ai-message ai-user';
-    userMsg.innerHTML = `
-        <div class="ai-bubble voice-bubble">
-            <div class="voice-msg-label"><i class="fas fa-microphone"></i> Mensaje de voz</div>
-            <audio controls src="${audioUrl}" preload="auto"></audio>
-        </div>
-        <div class="ai-avatar user-avatar"><i class="fas fa-user"></i></div>`;
-    document.getElementById('aiChatMessages').appendChild(userMsg);
-    document.getElementById('aiChatMessages').scrollTop = 99999;
-
-    const voiceNote = '[El estudiante ha enviado un mensaje de voz en español]';
-    aiConversationHistory.push({ role: 'user', content: voiceNote });
-    saveConversationTurn('user', '[voice message]');
-
-    const typing = appendAiMessage('bot', '<span class="typing-indicator"><span></span><span></span><span></span></span>');
-
-    const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache);
-    const response = await callAnthropicAPI(aiConversationHistory, systemPrompt);
-
-    aiConversationHistory.push({ role: 'assistant', content: response });
-    saveConversationTurn('assistant', response);
-
-    typing.remove();
-    appendAiMessage('bot', response);
-    speakText(response);
+function stopListeningUI() {
+    isListening = false;
+    aiRecordBtn.classList.remove('recording');
+    aiRecordBtn.innerHTML = '<i class="fas fa-microphone"></i>';
 }
 
 // ============================================================
@@ -3513,11 +3491,11 @@ async function generateAllInsights() {
     const apiKey = localStorage.getItem('anthropicApiKey');
     if (!apiKey) { alert('Add your Anthropic API key in Settings first.'); return; }
 
-    const profiles = await sbRpc('get_all_profiles_admin', { admin_secret: ADMIN_SECRET });
+    const profiles = await sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET });
     if (!Array.isArray(profiles) || profiles.length === 0) { alert('No students yet.'); return; }
 
     for (const student of profiles) {
-        await generateInsightForStudent(student.user_id, student.student_name);
+        await generateInsightForStudent(student.id, student.name);
     }
 }
 

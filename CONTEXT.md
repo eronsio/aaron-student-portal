@@ -50,9 +50,17 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 
 ## AI Companion (Spanish students)
 - Modes: Free Conversation, Roleplay Scenario, Picture Description, Grammar Focus
-- Calls Anthropic API via a Supabase RPC function `call_claude` (key stored server-side)
-- Voice input via MediaRecorder API → Whisper transcription (via Supabase RPC)
-- TTS via browser Web Speech API
+- Calls Anthropic API via a Supabase Edge Function `ai-companion` (key stored server-side as the
+  `ANTHROPIC_API_KEY` secret, never sent to the browser). The function verifies the caller's Supabase
+  JWT via `/auth/v1/user` before proxying to Anthropic — see `supabase/functions/ai-companion/index.ts`.
+- Voice input via the browser's `SpeechRecognition` (Web Speech API) — free, client-side, no separate
+  transcription service. Streams live into the chat text box while the mic button is held; the student
+  can edit before sending. Browsers without support (Firefox, some older WebViews) get the mic button
+  disabled with a tooltip — typing always works.
+- TTS via browser Web Speech API (`speechSynthesis`) — bot replies are read aloud in Spanish
+- Admin-only insight generation (`generateInsightForStudent`/`generateAllInsights`, Students & Insights
+  panel) still calls Anthropic directly from the browser using the key saved in Admin → Settings — that's
+  fine since only Aaron ever triggers it, in his own browser
 
 ## Deployment
 - **Current:** drag-and-drop zip into Cloudflare Pages dashboard
