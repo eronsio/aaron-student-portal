@@ -1,6 +1,8 @@
 // Global variables
 let currentUser = null;
 let _accessToken = null;
+let _recoveryAccessToken = null;
+let _recoveryRefreshToken = null;
 
 // ============================================================
 // SUPABASE CONFIG — raw fetch client, no external library
@@ -42,6 +44,25 @@ async function sbSignOut() {
     }
     _accessToken = null;
     localStorage.removeItem(SESSION_STORE);
+}
+
+async function sbRecoverPassword(email) {
+    // Supabase returns 200 with an empty body on success — no JSON to parse.
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+        method: 'POST', headers: _headers(),
+        body: JSON.stringify({ email })
+    });
+    if (r.ok) return { ok: true };
+    try { return { ok: false, ...(await r.json()) }; }
+    catch { return { ok: false }; }
+}
+
+async function sbSetNewPassword(recoveryToken, newPassword) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+        method: 'PUT', headers: _headers(recoveryToken),
+        body: JSON.stringify({ password: newPassword })
+    });
+    return r.json();
 }
 
 function sbSaveSession(data, rememberMe = true) {
@@ -1054,14 +1075,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // Auto-login if redirected from email confirmation link
-    // Supabase puts tokens in the URL hash: #access_token=...&type=signup
+    // Handle redirect from a Supabase auth email link.
+    // Supabase puts tokens in the URL hash: #access_token=...&type=signup|recovery
     const hash = window.location.hash.substring(1);
     if (hash.includes('access_token')) {
         const params = new URLSearchParams(hash);
         const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
         const type = params.get('type');
         history.replaceState(null, '', window.location.pathname); // clean the URL
+
+        if (accessToken && type === 'recovery') {
+            // Password reset link — don't auto-login, make them set a new
+            // password first (the old flow silently logged recovery links in
+            // without ever prompting for a new password, which didn't
+            // actually solve "I forgot my password").
+            _recoveryAccessToken = accessToken;
+            _recoveryRefreshToken = refreshToken;
+            showLoginModal();
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('mainToggle').style.display = 'none';
+            document.getElementById('setNewPasswordForm').classList.remove('hidden');
+            return;
+        }
+
         if (accessToken) {
             // Get user info from the token
             try {
@@ -1232,7 +1269,7 @@ function showError(elementId, message) {
 }
 
 function clearErrors() {
-    ['loginError', 'signupError', 'adminError'].forEach(id => {
+    ['loginError', 'signupError', 'adminError', 'forgotPasswordError', 'setNewPasswordError'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
@@ -1267,6 +1304,106 @@ async function handleLogin(e) {
         console.error('Login error:', err);
     } finally {
         btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+        btn.disabled = false;
+    }
+}
+
+function showForgotPasswordForm() {
+    clearErrors();
+    document.getElementById('mainToggle').style.display = 'none';
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('signupForm').classList.add('hidden');
+    document.getElementById('adminForm').classList.add('hidden');
+    document.getElementById('forgotPasswordForm').classList.remove('hidden');
+    document.getElementById('forgotPasswordFields').classList.remove('hidden');
+    document.getElementById('forgotPasswordSuccess').classList.add('hidden');
+    document.getElementById('forgotEmail').focus();
+}
+
+function backToSignInFromForgot() {
+    clearErrors();
+    document.getElementById('forgotPasswordForm').classList.add('hidden');
+    document.getElementById('loginForm').classList.remove('hidden');
+    document.getElementById('mainToggle').style.display = '';
+    document.getElementById('toggleLogin').classList.add('active');
+    document.getElementById('toggleSignup').classList.remove('active');
+}
+
+async function handleForgotPassword(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    clearErrors();
+
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email) { showError('forgotPasswordError', 'Enter your email address.'); return; }
+
+    const btn = document.querySelector('#forgotPasswordFields .login-btn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    btn.disabled = true;
+
+    try {
+        const result = await sbRecoverPassword(email);
+        if (!result.ok) {
+            showError('forgotPasswordError', result.error_description || result.msg || 'Something went wrong. Please try again.');
+            return;
+        }
+        document.getElementById('forgotEmailDisplay').textContent = email;
+        document.getElementById('forgotPasswordFields').classList.add('hidden');
+        document.getElementById('forgotPasswordSuccess').classList.remove('hidden');
+    } catch(err) {
+        showError('forgotPasswordError', 'Something went wrong. Please try again.');
+        console.error('Password recovery error:', err);
+    } finally {
+        btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Reset Link';
+        btn.disabled = false;
+    }
+}
+
+async function handleSetNewPassword(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    clearErrors();
+
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmPassword = document.getElementById('confirmNewPassword').value;
+
+    if (!newPassword || newPassword.length < 6) {
+        showError('setNewPasswordError', 'Password must be at least 6 characters.');
+        return;
+    }
+    if (newPassword !== confirmPassword) {
+        showError('setNewPasswordError', 'Passwords do not match.');
+        return;
+    }
+    if (!_recoveryAccessToken) {
+        showError('setNewPasswordError', 'This reset link has expired. Please request a new one.');
+        return;
+    }
+
+    const btn = document.querySelector('#setNewPasswordForm .login-btn');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    btn.disabled = true;
+
+    try {
+        const result = await sbSetNewPassword(_recoveryAccessToken, newPassword);
+        // Supabase Auth errors show up in different shapes depending on the
+        // failure (error/error_description for some, msg/error_code for
+        // others like an expired or malformed token) — a real success is
+        // only ever a genuine user object with an id, so check for that
+        // positively rather than just the absence of known error fields.
+        if (!result || !result.id) {
+            showError('setNewPasswordError', result?.error_description || result?.msg || result?.error || 'This reset link may have expired. Please request a new one.');
+            return;
+        }
+        // Password set — the recovery token is now a valid session token, log them straight in.
+        sbSaveSession({ access_token: _recoveryAccessToken, refresh_token: _recoveryRefreshToken, user: result }, true);
+        _recoveryAccessToken = null;
+        _recoveryRefreshToken = null;
+        document.getElementById('setNewPasswordForm').classList.add('hidden');
+        await loadUserFromSession({ access_token: _accessToken, user: result });
+    } catch(err) {
+        showError('setNewPasswordError', 'Something went wrong. Please try again.');
+        console.error('Set new password error:', err);
+    } finally {
+        btn.innerHTML = '<i class="fas fa-key"></i> Set New Password';
         btn.disabled = false;
     }
 }
