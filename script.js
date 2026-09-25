@@ -1001,6 +1001,10 @@ const verbConjugations = [
     { inf: "divertirse", en: "to have fun", presente: ["me divierto", "te diviertes", "se divierte", "nos divertimos", "os divertís", "se divierten"], preterito: ["me divertí", "te divertiste", "se divirtió", "nos divertimos", "os divertisteis", "se divirtieron"], imperfecto: ["me divertía", "te divertías", "se divertía", "nos divertíamos", "os divertíais", "se divertían"], futuro: ["me divertiré", "te divertirás", "se divertirá", "nos divertiremos", "os divertiréis", "se divertirán"], condicional: ["me divertiría", "te divertirías", "se divertiría", "nos divertiríamos", "os divertiríais", "se divertirían"], presentePerfecto: ["me he divertido", "te has divertido", "se ha divertido", "nos hemos divertido", "os habéis divertido", "se han divertido"], pluscuamperfecto: ["me había divertido", "te habías divertido", "se había divertido", "nos habíamos divertido", "os habíais divertido", "se habían divertido"], futuroPerfecto: ["me habré divertido", "te habrás divertido", "se habrá divertido", "nos habremos divertido", "os habréis divertido", "se habrán divertido"], condicionalPerfecto: ["me habría divertido", "te habrías divertido", "se habría divertido", "nos habríamos divertido", "os habríais divertido", "se habrían divertido"], presenteSubjuntivo: ["me divierta", "te diviertas", "se divierta", "nos divirtamos", "os divirtáis", "se diviertan"], imperfectoSubjuntivo: ["me divirtiera", "te divirtieras", "se divirtiera", "nos divirtiéramos", "os divirtierais", "se divirtieran"], participle: "divertido", note: null },
     { inf: "dormirse", en: "to fall asleep", presente: ["me duermo", "te duermes", "se duerme", "nos dormimos", "os dormís", "se duermen"], preterito: ["me dormí", "te dormiste", "se durmió", "nos dormimos", "os dormisteis", "se durmieron"], imperfecto: ["me dormía", "te dormías", "se dormía", "nos dormíamos", "os dormíais", "se dormían"], futuro: ["me dormiré", "te dormirás", "se dormirá", "nos dormiremos", "os dormiréis", "se dormirán"], condicional: ["me dormiría", "te dormirías", "se dormiría", "nos dormiríamos", "os dormiríais", "se dormirían"], presentePerfecto: ["me he dormido", "te has dormido", "se ha dormido", "nos hemos dormido", "os habéis dormido", "se han dormido"], pluscuamperfecto: ["me había dormido", "te habías dormido", "se había dormido", "nos habíamos dormido", "os habíais dormido", "se habían dormido"], futuroPerfecto: ["me habré dormido", "te habrás dormido", "se habrá dormido", "nos habremos dormido", "os habréis dormido", "se habrán dormido"], condicionalPerfecto: ["me habría dormido", "te habrías dormido", "se habría dormido", "nos habríamos dormido", "os habríais dormido", "se habrían dormido"], presenteSubjuntivo: ["me duerma", "te duermas", "se duerma", "nos durmamos", "os durmáis", "se duerman"], imperfectoSubjuntivo: ["me durmiera", "te durmieras", "se durmiera", "nos durmiéramos", "os durmierais", "se durmieran"], participle: "dormido", note: null },
     { inf: "contestar", en: "to answer / respond", presente: ["contesto", "contestas", "contesta", "contestamos", "contestáis", "contestan"], preterito: ["contesté", "contestaste", "contestó", "contestamos", "contestasteis", "contestaron"], imperfecto: ["contestaba", "contestabas", "contestaba", "contestábamos", "contestabais", "contestaban"], futuro: ["contestaré", "contestarás", "contestará", "contestaremos", "contestaréis", "contestarán"], condicional: ["contestaría", "contestarías", "contestaría", "contestaríamos", "contestaríais", "contestarían"], presentePerfecto: ["he contestado", "has contestado", "ha contestado", "hemos contestado", "habéis contestado", "han contestado"], pluscuamperfecto: ["había contestado", "habías contestado", "había contestado", "habíamos contestado", "habíais contestado", "habían contestado"], futuroPerfecto: ["habré contestado", "habrás contestado", "habrá contestado", "habremos contestado", "habréis contestado", "habrán contestado"], condicionalPerfecto: ["habría contestado", "habrías contestado", "habría contestado", "habríamos contestado", "habríais contestado", "habrían contestado"], presenteSubjuntivo: ["conteste", "contestes", "conteste", "contestemos", "contestéis", "contesten"], imperfectoSubjuntivo: ["contestara", "contestaras", "contestara", "contestáramos", "contestarais", "contestaran"], participle: "contestado", note: null },
+    { inf: "olvidar", en: "to forget", presente: ["olvido", "olvidas", "olvida", "olvidamos", "olvidáis", "olvidan"], preterito: ["olvidé", "olvidaste", "olvidó", "olvidamos", "olvidasteis", "olvidaron"], imperfecto: ["olvidaba", "olvidabas", "olvidaba", "olvidábamos", "olvidabais", "olvidaban"], futuro: ["olvidaré", "olvidarás", "olvidará", "olvidaremos", "olvidaréis", "olvidarán"], condicional: ["olvidaría", "olvidarías", "olvidaría", "olvidaríamos", "olvidaríais", "olvidarían"], presentePerfecto: ["he olvidado", "has olvidado", "ha olvidado", "hemos olvidado", "habéis olvidado", "han olvidado"], pluscuamperfecto: ["había olvidado", "habías olvidado", "había olvidado", "habíamos olvidado", "habíais olvidado", "habían olvidado"], futuroPerfecto: ["habré olvidado", "habrás olvidado", "habrá olvidado", "habremos olvidado", "habréis olvidado", "habrán olvidado"], condicionalPerfecto: ["habría olvidado", "habrías olvidado", "habría olvidado", "habríamos olvidado", "habríais olvidado", "habrían olvidado"], presenteSubjuntivo: ["olvide", "olvides", "olvide", "olvidemos", "olvidéis", "olviden"], imperfectoSubjuntivo: ["olvidara", "olvidaras", "olvidara", "olvidáramos", "olvidarais", "olvidaran"], participle: "olvidado", note: null },
+    { inf: "desayunar", en: "to have breakfast", presente: ["desayuno", "desayunas", "desayuna", "desayunamos", "desayunáis", "desayunan"], preterito: ["desayuné", "desayunaste", "desayunó", "desayunamos", "desayunasteis", "desayunaron"], imperfecto: ["desayunaba", "desayunabas", "desayunaba", "desayunábamos", "desayunabais", "desayunaban"], futuro: ["desayunaré", "desayunarás", "desayunará", "desayunaremos", "desayunaréis", "desayunarán"], condicional: ["desayunaría", "desayunarías", "desayunaría", "desayunaríamos", "desayunaríais", "desayunarían"], presentePerfecto: ["he desayunado", "has desayunado", "ha desayunado", "hemos desayunado", "habéis desayunado", "han desayunado"], pluscuamperfecto: ["había desayunado", "habías desayunado", "había desayunado", "habíamos desayunado", "habíais desayunado", "habían desayunado"], futuroPerfecto: ["habré desayunado", "habrás desayunado", "habrá desayunado", "habremos desayunado", "habréis desayunado", "habrán desayunado"], condicionalPerfecto: ["habría desayunado", "habrías desayunado", "habría desayunado", "habríamos desayunado", "habríais desayunado", "habrían desayunado"], presenteSubjuntivo: ["desayune", "desayunes", "desayune", "desayunemos", "desayunéis", "desayunen"], imperfectoSubjuntivo: ["desayunara", "desayunaras", "desayunara", "desayunáramos", "desayunarais", "desayunaran"], participle: "desayunado", note: null },
+    { inf: "llover", en: "to rain", presente: ["lluevo", "llueves", "llueve", "llovemos", "llovéis", "llueven"], preterito: ["lloví", "lloviste", "llovió", "llovimos", "llovisteis", "llovieron"], imperfecto: ["llovía", "llovías", "llovía", "llovíamos", "llovíais", "llovían"], futuro: ["lloveré", "lloverás", "lloverá", "lloveremos", "lloveréis", "lloverán"], condicional: ["llovería", "lloverías", "llovería", "lloveríamos", "lloveríais", "lloverían"], presentePerfecto: ["he llovido", "has llovido", "ha llovido", "hemos llovido", "habéis llovido", "han llovido"], pluscuamperfecto: ["había llovido", "habías llovido", "había llovido", "habíamos llovido", "habíais llovido", "habían llovido"], futuroPerfecto: ["habré llovido", "habrás llovido", "habrá llovido", "habremos llovido", "habréis llovido", "habrán llovido"], condicionalPerfecto: ["habría llovido", "habrías llovido", "habría llovido", "habríamos llovido", "habríais llovido", "habrían llovido"], presenteSubjuntivo: ["llueva", "lluevas", "llueva", "llovamos", "llováis", "lluevan"], imperfectoSubjuntivo: ["lloviera", "llovieras", "lloviera", "lloviéramos", "llovierais", "llovieran"], participle: "llovido", note: "Almost always used impersonally in the 3rd person singular: llueve (it's raining), llovió (it rained). Full conjugation shown for reference." },
+    { inf: "prepararse", en: "to get ready / prepare oneself", presente: ["me preparo", "te preparas", "se prepara", "nos preparamos", "os preparáis", "se preparan"], preterito: ["me preparé", "te preparaste", "se preparó", "nos preparamos", "os preparasteis", "se prepararon"], imperfecto: ["me preparaba", "te preparabas", "se preparaba", "nos preparábamos", "os preparabais", "se preparaban"], futuro: ["me prepararé", "te prepararás", "se preparará", "nos prepararemos", "os prepararéis", "se prepararán"], condicional: ["me prepararía", "te prepararías", "se prepararía", "nos prepararíamos", "os prepararíais", "se prepararían"], presentePerfecto: ["me he preparado", "te has preparado", "se ha preparado", "nos hemos preparado", "os habéis preparado", "se han preparado"], pluscuamperfecto: ["me había preparado", "te habías preparado", "se había preparado", "nos habíamos preparado", "os habíais preparado", "se habían preparado"], futuroPerfecto: ["me habré preparado", "te habrás preparado", "se habrá preparado", "nos habremos preparado", "os habréis preparado", "se habrán preparado"], condicionalPerfecto: ["me habría preparado", "te habrías preparado", "se habría preparado", "nos habríamos preparado", "os habríais preparado", "se habrían preparado"], presenteSubjuntivo: ["me prepare", "te prepares", "se prepare", "nos preparemos", "os preparéis", "se preparen"], imperfectoSubjuntivo: ["me preparara", "te prepararas", "se preparara", "nos preparáramos", "os prepararais", "se prepararan"], participle: "preparado", note: "Also used non-reflexively as preparar (to prepare something): preparo la cena." },
 ];
 
 // ============================================================
@@ -3737,6 +3741,146 @@ async function loadLessonPrep() {
     } catch(e) {
         container.innerHTML = `<p style="color:#dc2626;">Error loading summaries. Make sure the lesson_summaries table exists in Supabase.</p>`;
     }
+}
+
+let _billingCache = [];
+
+// sbRpc() resolves (doesn't throw) even on a PostgREST error — it just
+// returns the parsed error body ({code, message, ...}). Billing writes are
+// real money records, so every call site here checks the shape explicitly
+// instead of trusting a resolved promise to mean success.
+function _rpcErrorMessage(result) {
+    return (result && !Array.isArray(result) && result.message) ? result.message : null;
+}
+
+function openBillingOverlay() {
+    document.getElementById('adminBillingOverlay').classList.remove('hidden');
+    loadAdminBilling();
+}
+
+async function loadAdminBilling() {
+    const container = document.getElementById('adminBillingContent');
+    container.innerHTML = '<p style="color:var(--text-secondary);">Loading...</p>';
+    try {
+        const [rows, profiles] = await Promise.all([
+            sbRpc('admin_list_billing', { admin_secret: ADMIN_SECRET }),
+            sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET })
+        ]);
+        const rowsErr = _rpcErrorMessage(rows);
+        if (rowsErr) throw new Error(rowsErr);
+        _billingCache = Array.isArray(rows) ? rows : [];
+
+        const nameSet = new Set((Array.isArray(profiles) ? profiles : []).map(p => p.name));
+        _billingCache.forEach(r => nameSet.add(r.student_name));
+        document.getElementById('billingStudentNames').innerHTML =
+            Array.from(nameSet).sort().map(n => `<option value="${n}">`).join('');
+
+        const outstanding = _billingCache
+            .filter(r => r.status !== 'paid')
+            .reduce((sum, r) => sum + Number(r.amount || 0), 0);
+        document.getElementById('billingOutstandingTotal').textContent =
+            outstanding > 0 ? `$${outstanding.toFixed(2)} outstanding` : 'Nothing outstanding';
+
+        if (_billingCache.length === 0) {
+            container.innerHTML = `<div style="text-align:center;padding:48px;color:var(--text-secondary);">
+                <i class="fas fa-file-invoice-dollar" style="font-size:32px;margin-bottom:16px;display:block;opacity:0.3;"></i>
+                <p>No charges logged yet. Click "Add Charge" to log the first one.</p>
+            </div>`;
+            return;
+        }
+
+        const byStudent = {};
+        _billingCache.forEach(r => {
+            if (!byStudent[r.student_name]) byStudent[r.student_name] = [];
+            byStudent[r.student_name].push(r);
+        });
+
+        container.innerHTML = Object.entries(byStudent).map(([name, entries]) => {
+            return `
+            <div class="admin-course-card">
+                <h3 style="font-size:16px;font-weight:700;margin:0 0 12px;">${name}</h3>
+                ${entries.map(e => `
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border-light);">
+                        <div>
+                            <div style="font-size:14px;font-weight:600;">${e.period_label || ''} — $${Number(e.amount).toFixed(2)}
+                                <span style="font-size:11px;font-weight:600;margin-left:8px;padding:2px 8px;border-radius:20px;background:${e.status === 'paid' ? '#f0fdf4;color:#15803d' : '#fffbeb;color:#b45309'};">${e.status}</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${e.lesson_count || 0} lessons${e.lesson_dates ? ' — ' + e.lesson_dates : ''} · ${e.payment_method || ''}</div>
+                            ${e.notes ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${e.notes}</div>` : ''}
+                        </div>
+                        <div style="display:flex;gap:8px;flex-shrink:0;">
+                            ${e.status !== 'paid' ? `<button class="admin-btn small" onclick="markBillingPaid(${e.id})">Mark Paid</button>` : ''}
+                            <button class="admin-btn small" onclick='openBillingEntryModal(${JSON.stringify(e)})'>Edit</button>
+                            <button class="admin-btn small danger" onclick="deleteBillingEntry(${e.id})">Delete</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>`;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = `<p style="color:#dc2626;">Error loading billing entries. Make sure billing_entries and the admin_*_billing RPCs exist in Supabase (see supabase/billing_setup.sql).</p>`;
+    }
+}
+
+function openBillingEntryModal(entry) {
+    document.getElementById('billingEntryModalTitle').textContent = entry ? 'Edit Charge' : 'Add Charge';
+    document.getElementById('billingEntryId').value = entry ? entry.id : '';
+    document.getElementById('billingStudentName').value = entry ? entry.student_name : '';
+    document.getElementById('billingPeriodLabel').value = entry ? (entry.period_label || '') : '';
+    document.getElementById('billingLessonDates').value = entry ? (entry.lesson_dates || '') : '';
+    document.getElementById('billingLessonCount').value = entry ? (entry.lesson_count || '') : '';
+    document.getElementById('billingAmount').value = entry ? entry.amount : '';
+    document.getElementById('billingPaymentMethod').value = entry ? (entry.payment_method || 'PayPal') : 'PayPal';
+    document.getElementById('billingStatus').value = entry ? entry.status : 'charged';
+    document.getElementById('billingNotes').value = entry ? (entry.notes || '') : '';
+    document.getElementById('billingSaveStatus').textContent = '';
+    document.getElementById('billingEntryModal').classList.remove('hidden');
+}
+
+async function saveBillingEntry() {
+    const statusEl = document.getElementById('billingSaveStatus');
+    const idVal = document.getElementById('billingEntryId').value;
+    const studentName = document.getElementById('billingStudentName').value.trim();
+    const amount = parseFloat(document.getElementById('billingAmount').value);
+    if (!studentName || isNaN(amount)) {
+        statusEl.innerHTML = '<span style="color:#dc2626;">Student name and amount are required.</span>';
+        return;
+    }
+    try {
+        const result = await sbRpc('admin_upsert_billing_entry', {
+            admin_secret: ADMIN_SECRET,
+            p_id: idVal ? parseInt(idVal, 10) : null,
+            p_student_name: studentName,
+            p_period_label: document.getElementById('billingPeriodLabel').value.trim(),
+            p_lesson_count: parseInt(document.getElementById('billingLessonCount').value, 10) || null,
+            p_lesson_dates: document.getElementById('billingLessonDates').value.trim(),
+            p_amount: amount,
+            p_payment_method: document.getElementById('billingPaymentMethod').value,
+            p_status: document.getElementById('billingStatus').value,
+            p_notes: document.getElementById('billingNotes').value.trim()
+        });
+        const err = _rpcErrorMessage(result);
+        if (err) throw new Error(err);
+        document.getElementById('billingEntryModal').classList.add('hidden');
+        loadAdminBilling();
+    } catch (e) {
+        statusEl.innerHTML = `<span style="color:#dc2626;">Failed to save (${e.message || 'unknown error'}). Check that the Supabase billing setup (supabase/billing_setup.sql) has been run.</span>`;
+    }
+}
+
+async function markBillingPaid(id) {
+    const result = await sbRpc('admin_mark_billing_paid', { admin_secret: ADMIN_SECRET, p_id: id });
+    const err = _rpcErrorMessage(result);
+    if (err) { alert('Failed to update: ' + err); return; }
+    loadAdminBilling();
+}
+
+async function deleteBillingEntry(id) {
+    if (!confirm('Delete this charge? This cannot be undone.')) return;
+    const result = await sbRpc('admin_delete_billing_entry', { admin_secret: ADMIN_SECRET, p_id: id });
+    const err = _rpcErrorMessage(result);
+    if (err) { alert('Failed to delete: ' + err); return; }
+    loadAdminBilling();
 }
 
 function openSettingsOverlay() {
