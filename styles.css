@@ -2999,3 +2999,91 @@ footer p {
     width: 100%;
     min-width: 0;
 }
+
+/* ============================================================
+   SPEAKING PRACTICE — personalised plan, recap, admin panel
+   (muted palette on purpose; see feedback on calm UI colours)
+   ============================================================ */
+
+.ai-plan-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+    text-align: left;
+    background: #f3f6fa;
+    border: 1px solid #d5deea;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: inherit;
+}
+.ai-plan-card:hover { border-color: var(--accent-color); box-shadow: var(--shadow-md); }
+.ai-plan-card .ai-mode-icon { margin: 0; }
+.ai-plan-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ai-plan-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.ai-plan-sub { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+.ai-plan-sub b { color: var(--text-primary); font-weight: 600; }
+.ai-plan-last { font-size: 12px; color: var(--text-light); }
+.ai-plan-go { font-size: 13px; font-weight: 600; color: var(--accent-color); white-space: nowrap; }
+
+.ai-target-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.ai-chips-label { font-size: 12px; color: var(--text-secondary); margin-right: 2px; }
+.ai-chip {
+    font-size: 12px; font-weight: 500; color: #44546a;
+    background: #eaeff6; border: 1px solid #d5deea;
+    padding: 3px 10px; border-radius: 99px;
+}
+
+.ai-recap-card {
+    max-width: 640px; margin: 0 auto; padding: 26px 28px;
+    background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+}
+.ai-recap-title { font-size: 18px; font-weight: 700; margin-bottom: 14px; }
+.ai-recap-block { margin-bottom: 14px; }
+.ai-recap-block h5 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 4px; }
+.ai-recap-block p, .ai-recap-plain { font-size: 14px; line-height: 1.6; }
+.ai-recap-loading { text-align: center; padding: 24px 0; color: var(--text-secondary); }
+
+.practice-callout { background: #fbf6ea; border: 1px solid #ecdfb8; border-radius: var(--radius-md); padding: 14px 16px; font-size: 14px; line-height: 1.6; }
+.practice-callout code { background: #f3ecd3; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+.practice-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.practice-h { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); margin: 6px 0 10px; }
+.practice-card { background: #fff; border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 12px; }
+.practice-card > summary { cursor: pointer; font-size: 14px; }
+.practice-digest { border-left: 3px solid #8aa4c8; }
+.practice-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.practice-card h5, .practice-body h5 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin: 14px 0 6px; }
+.practice-card ul { margin: 0 0 4px 18px; font-size: 13px; line-height: 1.6; }
+.practice-muted { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+.practice-empty { font-size: 13px; color: var(--text-secondary); margin: 6px 0; }
+.practice-summary { font-size: 14px; line-height: 1.6; margin: 4px 0 8px; }
+.practice-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: #eef0f3; color: #6b7280; margin: 0 6px; }
+.practice-badge.on { background: #e4efe8; color: #3f6b52; }
+.practice-body { padding-top: 10px; }
+.practice-settings { display: grid; gap: 10px; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-md); margin-bottom: 6px; }
+.practice-settings input[type="text"], .practice-settings textarea, .practice-form input, .practice-form textarea, .practice-form select {
+    width: 100%; font-size: 13px; font-family: inherit; padding: 7px 9px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: #fff;
+}
+.practice-form select { width: auto; }
+.practice-label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 3px; }
+.practice-check { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.practice-form { display: grid; gap: 8px; margin-top: 10px; padding: 12px; border: 1px dashed var(--border-color); border-radius: var(--radius-md); }
+.practice-focus { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-light); }
+.practice-focus.resolved { opacity: 0.55; }
+.practice-focus-main { flex: 1; min-width: 0; font-size: 13px; line-height: 1.5; }
+.practice-focus-ctl { display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; }
+.practice-focus-ctl select { font-size: 12px; padding: 4px 6px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
+.practice-tag { font-size: 11px; color: #5d6b7e; background: #eaeff6; padding: 1px 7px; border-radius: 99px; margin-left: 4px; }
+.practice-ex { font-size: 12px; color: #44546a; background: #f3f6fa; border-radius: 4px; padding: 3px 8px; margin-top: 4px; display: block; }
+.practice-hist { margin-left: 6px; }
+.practice-v { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; margin-right: 4px; background: #eef0f3; color: #6b7280; }
+.practice-v.solid { background: #e4efe8; color: #3f6b52; }
+.practice-v.improving { background: #e8eef7; color: #46648f; }
+.practice-v.struggling { background: #f6e9e6; color: #96503f; }
+.practice-session { border-top: 1px solid var(--border-light); padding: 8px 0; }
+.practice-session > summary { cursor: pointer; font-size: 13px; }
+.practice-turn { font-size: 12px; line-height: 1.5; padding: 3px 0; }
+.practice-turn.ai { color: var(--text-secondary); }

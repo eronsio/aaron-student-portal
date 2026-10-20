@@ -208,7 +208,7 @@
                 <button class="tab-btn" data-tab="your-space">
                     <i class="fas fa-folder"></i> Your Space
                 </button>
-                <button class="tab-btn" data-tab="ai-companion" id="aiCompanionTab" style="display:none!important;">
+                <button class="tab-btn" data-tab="ai-companion" id="aiCompanionTab" style="display:none;">
                     <i class="fas fa-robot"></i> Speaking & Writing Practice
                 </button>
                 <button class="tab-btn" data-tab="community" id="communityTab" style="display:none;">
@@ -245,6 +245,15 @@
                                 <h3>🗣️ Práctica de Español</h3>
                                 <p>Choose how you want to practice today. The companion will respond almost entirely in Spanish and correct your mistakes naturally as you go.</p>
                             </div>
+                            <button id="aiPlanCard" class="ai-plan-card hidden" onclick="startAiMode('plan')">
+                                <span class="ai-mode-icon">🎯</span>
+                                <span class="ai-plan-text">
+                                    <span class="ai-plan-title">My Practice Plan</span>
+                                    <span class="ai-plan-sub">Built from your lesson notes — today: <b id="aiPlanSummary"></b></span>
+                                    <span id="aiPlanLast" class="ai-plan-last"></span>
+                                </span>
+                                <span class="ai-plan-go">Start <i class="fas fa-arrow-right"></i></span>
+                            </button>
                             <div class="ai-mode-grid">
                                 <button class="ai-mode-card" onclick="startAiMode('free')">
                                     <span class="ai-mode-icon">💬</span>
@@ -314,6 +323,7 @@
                                     </button>
                                 </div>
                             </div>
+                            <div id="aiTargetChips" class="ai-target-chips hidden"></div>
                             <div class="ai-chat-container">
                                 <div class="ai-chat-messages" id="aiChatMessages"></div>
                                 <div class="ai-chat-input-container">
@@ -325,6 +335,16 @@
                                         <i class="fas fa-paper-plane"></i>
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Recap (shown after End session) -->
+                        <div id="aiRecapView" class="hidden">
+                            <div class="ai-recap-card">
+                                <div id="aiRecapBody"></div>
+                                <button class="back-btn" onclick="leaveAiChat()" style="margin:18px 0 0;">
+                                    <i class="fas fa-arrow-left"></i> Back to practice
+                                </button>
                             </div>
                         </div>
 
@@ -423,6 +443,7 @@
             <button onclick="closeAdminMenu();openExportModal()"><i class="fas fa-download"></i> Export courses</button>
             <hr style="border:none;border-top:1px solid var(--border-light);margin:4px 0;">
             <button onclick="closeAdminMenu();loadAdminStudentsOverlay()"><i class="fas fa-users"></i> Students &amp; Insights</button>
+            <button onclick="closeAdminMenu();openPracticeOverlay()"><i class="fas fa-microphone-lines"></i> Speaking Practice</button>
             <button onclick="closeAdminMenu();openLessonPrep()"><i class="fas fa-brain"></i> Lesson Prep</button>
             <button onclick="closeAdminMenu();openSettingsOverlay()"><i class="fas fa-cog"></i> Settings</button>
             <hr style="border:none;border-top:1px solid var(--border-light);margin:4px 0;">
@@ -462,6 +483,17 @@
                 <button onclick="document.getElementById('lessonPrepOverlay').classList.add('hidden')" class="logout-btn" style="padding:8px 16px;">Close</button>
             </div>
             <div id="lessonPrepContent"><p style="color:var(--text-secondary);">Loading...</p></div>
+        </div>
+    </div>
+
+    <!-- Speaking Practice Overlay -->
+    <div id="adminPracticeOverlay" class="hidden" style="position:fixed;inset:0;background:var(--bg-secondary);z-index:10001;overflow-y:auto;padding:24px;">
+        <div style="max-width:860px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                <h2 style="font-size:20px;font-weight:700;"><i class="fas fa-microphone-lines" style="margin-right:10px;color:var(--accent-color);"></i>Speaking Practice</h2>
+                <button onclick="document.getElementById('adminPracticeOverlay').classList.add('hidden')" class="logout-btn" style="padding:8px 16px;">Close</button>
+            </div>
+            <div id="adminPracticeContent"><p style="color:var(--text-secondary);">Loading...</p></div>
         </div>
     </div>
 
@@ -634,5 +666,6 @@
 
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     <script src="script.js"></script>
+    <script src="practice.js"></script>
 </body>
 </html>

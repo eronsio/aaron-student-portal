@@ -1498,9 +1498,11 @@ async function showMainApp() {
     document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
     document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
 
-    // AI companion is hidden until ready to launch, for both subjects.
+    // AI companion is hidden by default; it appears per student once Aaron enables Speaking Practice for them.
     // Courses tab is shown for both — each subject only ever renders/fetches its own courses.
     aiCompanionTab.style.display = 'none';
+    // Login must never depend on practice.js loading (e.g. a stale cached index.html without its script tag).
+    if (typeof practiceMaybeShowTab === 'function') practiceMaybeShowTab(); // shows the tab only for students Aaron has switched on
     document.getElementById('coursesTab').style.display = '';
 
     // Show admin toolbar if admin
@@ -2101,37 +2103,7 @@ async function saveConversationTurn(role, content) {
     } catch(e) {}
 }
 
-function buildAISystemPrompt(mode, context, insight) {
-    const weaknesses = insight?.insight_text
-        ? `\n\nKnown weak areas for ${currentUser.name} from previous sessions (prioritise these):\n${insight.insight_text}`
-        : '';
-
-    const modeInstructions = {
-        free: `You are having a free conversation with ${currentUser.name}. Topic: anything they bring up. Keep it natural and flowing.`,
-        roleplay: `You are playing a roleplay scenario: ${context}. You play the native Spanish speaker in that situation (waiter, hotel receptionist, local person, etc.). Stay in character. Start by setting the scene in Spanish.`,
-        picture: `You are helping ${currentUser.name} practise picture description (like Aaron's Module 7 exercise). Tell them you are going to describe a scene to them, then describe a vivid everyday Spanish-world scene (a market in Barcelona, a family dinner, a beach in Valencia, etc.) and ask them to describe what's happening using their Spanish.`,
-        grammar: `You are running a focused grammar drill on: ${context}. Create short exercises, ask them to form sentences, and drill this specific topic through conversation. Make it feel like a game, not a test.`
-    };
-
-    return `Eres un compañero de práctica de español para ${currentUser.name}, estudiante de Aaron.
-
-${modeInstructions[mode] || modeInstructions.free}
-${weaknesses}
-
-REGLAS ABSOLUTAS — sigue estas sin excepción:
-1. Responde SIEMPRE en español. Nunca escribas oraciones completas en inglés.
-2. Las correcciones van entre corchetes en la misma frase: "¡Casi! [✓ fui, not 'fue' — 'fue' is él/ella] ¿Y qué compraste?"
-3. Máximo 3 frases por respuesta. Sé conciso y directo.
-4. Termina SIEMPRE con una pregunta o mini-reto para mantener la conversación.
-5. Si el estudiante escribe en inglés, responde en español y añade: [Inténtalo en español — I'll help if you get stuck!]
-6. Adapta el nivel: vocabulario sencillo, verbos del presente principalmente.
-7. Sé cálido, paciente y animador. Celebra los aciertos.
-8. Si el estudiante menciona un mensaje de voz, responde como si hubieras escuchado un intento en español.
-
-Ejemplo de respuesta ideal:
-Estudiante: "Ayer yo fue al supermercado"
-Tú: "¡Bien! [✓ 'fui' para yo — 'fue' es para él/ella] ¿Y qué compraste allí?"`;
-}
+// buildAISystemPrompt() lives in practice.js (persona + rules + the teacher's per-student plan).
 
 const AI_COMPANION_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-companion`;
 
@@ -2164,6 +2136,7 @@ function showGrammarPicker() {
 }
 
 const MODE_LABELS = {
+    plan: '🎯 My Practice Plan',
     free: '💬 Free Conversation',
     picture: '🖼️ Picture Description',
     roleplay: '🎭 Roleplay',
@@ -2171,6 +2144,7 @@ const MODE_LABELS = {
 };
 
 const MODE_OPENING = {
+    plan: null, // AI generates this, aimed at today's first target
     free: '¡Hola! ¿De qué quieres hablar hoy? Cuéntame algo — ¿qué has hecho esta semana?',
     picture: null, // AI generates this
     roleplay: null, // AI generates this
@@ -2182,6 +2156,7 @@ async function startAiMode(mode, context) {
     currentAiContext = context || null;
     aiConversationHistory = [];
     studentInsightCache = await loadStudentInsight();
+    await practiceBeginSession(mode, context);
 
     // Show chat view
     document.getElementById('aiModeSelector').classList.add('hidden');
@@ -2200,6 +2175,8 @@ async function startAiMode(mode, context) {
     if (MODE_OPENING[mode]) {
         appendAiMessage('bot', MODE_OPENING[mode]);
         speakText(MODE_OPENING[mode]);
+        aiConversationHistory.push({ role: 'user', content: '[START SESSION]' }, { role: 'assistant', content: MODE_OPENING[mode] });
+        practiceRecordTurn('assistant', MODE_OPENING[mode]);
     } else {
         // Let AI generate the opening
         appendAiMessage('bot', '<em style="color:var(--text-secondary)">Iniciando sesión...</em>');
@@ -2208,18 +2185,29 @@ async function startAiMode(mode, context) {
         document.getElementById('aiChatMessages').lastElementChild.remove();
         appendAiMessage('bot', opening);
         speakText(opening);
-        aiConversationHistory.push({ role: 'assistant', content: opening });
+        // Keep the hidden start prompt in the history so the model still sees its own opening line.
+        aiConversationHistory.push({ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }, { role: 'assistant', content: opening });
         saveConversationTurn('assistant', opening);
+        if (!opening.startsWith('⚠️')) practiceRecordTurn('assistant', opening);
     }
 }
 
-function endAiSession() {
+async function endAiSession() {
     if (isListening) stopListening();
+    const tookOverScreen = await practiceFinishSession();
+    if (!tookOverScreen) leaveAiChat();
+}
+
+// Back to the mode picker (the recap's "Back to practice" button calls this too).
+function leaveAiChat() {
     document.getElementById('aiChatView').classList.add('hidden');
+    document.getElementById('aiRecapView').classList.add('hidden');
     document.getElementById('aiModeSelector').classList.remove('hidden');
     aiConversationHistory = [];
     currentAiMode = null;
     currentAiContext = null;
+    practiceResetSession();
+    practiceRenderPlanCard();
 }
 
 function appendAiMessage(type, html) {
@@ -2247,12 +2235,14 @@ async function sendAiMessage() {
 
     aiConversationHistory.push({ role: 'user', content: message });
     saveConversationTurn('user', message);
+    practiceRecordTurn('user', message);
 
     const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache);
     const response = await callAnthropicAPI(aiConversationHistory, systemPrompt);
 
     aiConversationHistory.push({ role: 'assistant', content: response });
     saveConversationTurn('assistant', response);
+    if (!response.startsWith('⚠️')) practiceRecordTurn('assistant', response);
 
     typing.remove();
     appendAiMessage('bot', response);
@@ -2269,6 +2259,9 @@ function initAiCompanion() {
     document.getElementById('aiScenarioPicker').classList.add('hidden');
     document.getElementById('aiGrammarPicker').classList.add('hidden');
     document.getElementById('aiChatView').classList.add('hidden');
+    document.getElementById('aiRecapView').classList.add('hidden');
+    practiceResetSession();
+    practiceRenderPlanCard();
 }
 
 
@@ -2294,6 +2287,7 @@ function initSpeechRecognition() {
             else interim += chunk;
         }
         aiMessageInput.value = (committedTranscript + ' ' + interim).trim();
+        practiceMarkVoice();
     };
     rec.onerror = (event) => {
         stopListeningUI();

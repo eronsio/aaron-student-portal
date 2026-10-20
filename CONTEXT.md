@@ -4,7 +4,7 @@
 A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pages**. Students log in to access Spanish/music lesson resources, a personal Google Drive folder, a course player, and (for Spanish students) an AI speaking companion. Aaron logs in via admin code to manage courses, students, and resources.
 
 ## Stack
-- **Frontend:** Pure static HTML/CSS/JS — three files: `index.html`, `styles.css`, `script.js`
+- **Frontend:** Pure static HTML/CSS/JS — `index.html`, `styles.css`, `script.js`, plus `practice.js` (Speaking Practice; loaded after `script.js` and uses its globals)
 - **Backend:** Supabase (no SDK — raw `fetch` calls against the REST/Auth APIs)
 - **Hosting:** Cloudflare Pages (drag-and-drop or GitHub-connected auto-deploy)
 - **Rich text editor:** Quill.js (CDN) used in the admin lesson editor
@@ -19,6 +19,7 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   - `progress` — user_id, course_id, lesson_id (lesson completion tracking)
   - `conversations` — AI chat history per student
   - `student_insights` — AI-generated insight summaries per student
+  - `student_focus`, `student_practice_profile`, `practice_sessions` — Speaking Practice (see below). Created by `supabase/speaking_practice.sql`
 
 ## Auth flow
 - Students sign up with email/password (Supabase Auth) → email confirmation → profile created in `profiles`
@@ -48,11 +49,13 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - Students & Insights overlay (view all students, generate AI insights per student, preview as student)
 - Settings (reset courses, save Anthropic API key)
 
-## AI Companion (Spanish students)
-- Modes: Free Conversation, Roleplay Scenario, Picture Description, Grammar Focus
+## AI Companion + Speaking Practice (Spanish students)
+- Modes: **My Practice Plan** (personalised, see below), Free Conversation, Roleplay Scenario, Picture Description, Grammar Focus
 - Calls Anthropic API via a Supabase Edge Function `ai-companion` (key stored server-side as the
   `ANTHROPIC_API_KEY` secret, never sent to the browser). The function verifies the caller's Supabase
   JWT via `/auth/v1/user` before proxying to Anthropic — see `supabase/functions/ai-companion/index.ts`.
+  Normal chat turns use Haiku (250 tokens). `task: "report"` (end-of-session report) uses Sonnet with a
+  Haiku fallback and a larger budget.
 - Voice input via the browser's `SpeechRecognition` (Web Speech API) — free, client-side, no separate
   transcription service. Streams live into the chat text box while the mic button is held; the student
   can edit before sending. Browsers without support (Firefox, some older WebViews) get the mic button
@@ -61,6 +64,27 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - Admin-only insight generation (`generateInsightForStudent`/`generateAllInsights`, Students & Insights
   panel) still calls Anthropic directly from the browser using the key saved in Admin → Settings — that's
   fine since only Aaron ever triggers it, in his own browser
+
+### Speaking Practice (practice.js)
+Ties the companion to each student's lesson notes and reports back to Aaron.
+- **Focus areas** (`student_focus`): a short list per student of what they keep getting wrong (area, detail,
+  wrong→right examples, priority 1-3, status active/improving/resolved). Written by Aaron in the admin panel or
+  by the lesson-notes automation (upsert by `(user_id, key)` via `admin_upsert_focus`).
+- **Per student on/off** (`student_practice_profile`): `enabled`, `level`, `ai_notes` (instructions to the AI;
+  the student's browser can read these). The **Speaking & Writing Practice tab only appears for Spanish students
+  with `enabled = true`** (`practiceMaybeShowTab`). No row = tab hidden.
+- **Each session** picks the 1-2 most overdue focus areas (`practicePickTargets`: priority + staleness) and adds a
+  teacher's-plan block to the system prompt (`buildAISystemPrompt` lives in practice.js, not script.js). In other
+  modes the targets are woven in lightly.
+- **Sessions** (`practice_sessions`): transcript with voice/typed flags is saved each turn. On "End session" (>= 2 student
+  turns) the proxy produces a JSON report (per-focus verdict, new issues, vocab gaps, next-lesson suggestions, a
+  student-facing recap). Students can insert/update only their own rows and cannot set `reviewed_at`.
+- **Admin → Speaking Practice**: digest of unreviewed sessions per student, focus-area editor, level/instructions/on-off,
+  session transcripts, "+ Add to focus" for AI-spotted issues, "Analyze now" (uses the API key in Settings) for sessions
+  never analysed. Everything rendered from the database is escaped.
+- Degrades to the old behaviour when the tables don't exist yet (tab stays hidden, no errors).
+- Setup: run `supabase/speaking_practice.sql` once in the Supabase SQL editor, deploy the `ai-companion` function with the
+  `ANTHROPIC_API_KEY` secret, then enable students in Admin → Speaking Practice.
 
 ## Deployment
 - **Current:** drag-and-drop zip into Cloudflare Pages dashboard
