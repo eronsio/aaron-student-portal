@@ -2057,6 +2057,7 @@ function speakText(text) {
         .replace(/<[^>]+>/g, '')
         .replace(/\[.*?\]/g, '')
         .replace(/[⚠️🎭💬🖼️📚✈️☕👋🛒🏥🏨]/gu, '')
+        .replace(/\*+/g, '')
         .replace(/\s+/g, ' ')
         .trim();
     if (!clean) return;
@@ -2183,7 +2184,7 @@ async function startAiMode(mode, context) {
         const systemPrompt = buildAISystemPrompt(mode, context, studentInsightCache);
         const opening = await callAnthropicAPI([{ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }], systemPrompt);
         document.getElementById('aiChatMessages').lastElementChild.remove();
-        appendAiMessage('bot', opening);
+        appendAiMessage('bot', practiceFormatReply(opening));
         speakText(opening);
         // Keep the hidden start prompt in the history so the model still sees its own opening line.
         aiConversationHistory.push({ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }, { role: 'assistant', content: opening });
@@ -2245,7 +2246,7 @@ async function sendAiMessage() {
     if (!response.startsWith('⚠️')) practiceRecordTurn('assistant', response);
 
     typing.remove();
-    appendAiMessage('bot', response);
+    appendAiMessage('bot', practiceFormatReply(response));
     speakText(response);
 }
 

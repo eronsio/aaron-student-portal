@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
   // older cached copies of the portal keep working unchanged.
   const isReport = body.task === "report";
   const limits = isReport
-    ? { perMessage: 16000, system: 12000, maxTokens: 1800, models: REPORT_MODELS }
+    ? { perMessage: 16000, system: 12000, maxTokens: 3500, models: REPORT_MODELS }
     : { perMessage: 4000, system: 8000, maxTokens: 250, models: [CHAT_MODEL] };
 
   const safeMessages = messages
@@ -96,23 +96,51 @@ Deno.serve(async (req: Request) => {
 
   try {
     let lastError = "Anthropic API error";
-    for (const model of limits.models) {
-      const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const callAnthropic = (payload: Record<string, unknown>) =>
+      fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-api-key": ANTHROPIC_API_KEY,
           "anthropic-version": "2023-06-01",
         },
-        body: JSON.stringify({
-          model,
-          max_tokens: limits.maxTokens,
-          system: systemPrompt.slice(0, limits.system),
-          messages: safeMessages,
-        }),
+        body: JSON.stringify(payload),
       });
-      const data = await anthropicRes.json();
-      if (anthropicRes.ok) return json(req, { text: data.content?.[0]?.text || "" });
+
+    for (const model of limits.models) {
+      const payload: Record<string, unknown> = {
+        model,
+        max_tokens: limits.maxTokens,
+        system: systemPrompt.slice(0, limits.system),
+        messages: safeMessages,
+      };
+      // The report is structured extraction, not a puzzle. Left on, the stronger model spends
+      // a large share of max_tokens on hidden reasoning (measured: ~19 s, and the JSON came back
+      // cut off mid-answer), so reasoning is switched off for it.
+      if (isReport) payload.thinking = { type: "disabled" };
+
+      let anthropicRes = await callAnthropic(payload);
+      let data = await anthropicRes.json();
+      // If a model rejects the thinking setting, retry that model once without it.
+      if (!anthropicRes.ok && isReport && /thinking/i.test(data?.error?.message || "")) {
+        delete payload.thinking;
+        anthropicRes = await callAnthropic(payload);
+        data = await anthropicRes.json();
+      }
+      if (anthropicRes.ok) {
+        // Newer models can put non-text blocks (e.g. "thinking") before the answer, so
+        // gather every text block instead of assuming the first block is the text.
+        const text = (Array.isArray(data.content) ? data.content : [])
+          .filter((b: any) => b && b.type === "text" && typeof b.text === "string")
+          .map((b: any) => b.text)
+          .join("");
+        // For reports an empty answer is a failure: fall through to the next model.
+        if (text || !isReport) return json(req, { text, model, stop: data.stop_reason });
+        console.error("Empty report text for user", user.id, "model", model, "stop", data.stop_reason,
+          "blocks", (Array.isArray(data.content) ? data.content : []).map((b: any) => b?.type));
+        lastError = "The model returned no text";
+        continue;
+      }
       console.error("Anthropic error for user", user.id, "model", model, data);
       lastError = data?.error?.message || lastError;
     }
