@@ -1583,6 +1583,8 @@ async function showMainApp() {
     aiCompanionTab.style.display = 'none';
     // Login must never depend on practice.js loading (e.g. a stale cached index.html without its script tag).
     if (typeof practiceMaybeShowTab === 'function') practiceMaybeShowTab(); // shows the tab only for students Aaron has switched on
+    // The admin gets the tool too (as a preview: sign in once, pick a student to practise as, nothing is saved).
+    if (currentUser.isAdmin && activePortal() === 'spanish') aiCompanionTab.style.display = '';
     document.getElementById('coursesTab').style.display = '';
 
     // Show admin toolbar if admin
@@ -2206,7 +2208,7 @@ function toggleTTS() {
 }
 
 async function loadStudentInsight() {
-    if (!currentUser || currentUser.id === 'admin-preview') return null;
+    if (!currentUser || currentUser.isAdmin || currentUser.id === 'admin-preview') return null;
     try {
         const r = await fetch(`${SUPABASE_URL}/rest/v1/student_insights?user_id=eq.${currentUser.id}&select=*`, {
             headers: _headers(_accessToken)
@@ -2217,7 +2219,7 @@ async function loadStudentInsight() {
 }
 
 async function saveConversationTurn(role, content) {
-    if (!currentUser || currentUser.id === 'admin-preview' || !_accessToken) return;
+    if (!currentUser || currentUser.isAdmin || currentUser.id === 'admin-preview' || !_accessToken) return;
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/conversations`, {
             method: 'POST',
@@ -2451,6 +2453,7 @@ function ensureAiExtras() {
 
 function initAiCompanion() {
     ensureAiExtras();
+    if (currentUser?.isAdmin && typeof renderAiAdminBar === 'function') renderAiAdminBar();
     aiConversationHistory = [];
     studentInsightCache = null;
     currentAiMode = null;

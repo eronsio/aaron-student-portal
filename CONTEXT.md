@@ -97,6 +97,11 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
   that are saved with `help: true` and are never graded or counted as attempts; a plan session opens by referring to the last analysed session
   (`practiceLastSessionNote`); one question at a time (`aiBusy`) with a 45 s request timeout. Prompt rules 11-15 in `PRACTICE_BASE_RULES`
   (plain text, check before praising, full corrected sentence + max two corrections, ask when ambiguous, help-message exception).
+- **Admin preview of the student tool:** in the admin's Spanish portal the Speaking & Writing Practice tab is shown (hidden in the Music portal).
+  The proxy only answers real signed-in users, so the admin signs in once with their own student account (`practiceAdminSignIn`, token kept in
+  memory only) and picks "Practise as <student>": that student's focus areas / level / notes / last session are loaded through the admin RPCs
+  (`practiceLoadAdminPreviewContext`) and drive the session. The recap and teacher report still run, but NOTHING is written to the database
+  (`practiceActive()` stays false for the admin; `saveConversationTurn`/`loadStudentInsight` skip the admin).
 - **Admin → Speaking Practice**: digest of unreviewed sessions per student, focus-area editor, level/instructions/on-off,
   session transcripts, "+ Add to focus" for AI-spotted issues, "Analyze now" (uses the API key in Settings) for sessions
   never analysed. Everything rendered from the database is escaped.

@@ -3178,3 +3178,16 @@ body.ai-chat-open .floating-book-btn { display: none; }
 #ttsSlowBtn.active { background: #eaeff6; border-color: #b9c6d8; font-weight: 600; }
 .ai-again-btn { margin: 18px 0 0 10px; }
 #aiRecordBtn { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+
+/* ---- Admin preview of the Speaking Practice tool ---- */
+.ai-admin-bar { background: #f3f6fa; border: 1px solid #d5deea; border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 18px; }
+.ai-admin-title { font-size: 13px; font-weight: 700; color: #44546a; margin-bottom: 6px; }
+.ai-admin-sub { font-weight: 500; color: var(--text-secondary); }
+.ai-admin-bar p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px; }
+.ai-admin-login { display: flex; flex-wrap: wrap; gap: 8px; }
+.ai-admin-login input { flex: 1 1 200px; font-size: 13px; font-family: inherit; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: #fff; }
+.ai-admin-msg { font-size: 12px; margin-top: 8px; min-height: 16px; color: var(--text-secondary); }
+.ai-admin-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ai-admin-row label { font-size: 13px; font-weight: 600; }
+.ai-admin-row select { font-size: 13px; font-family: inherit; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: #fff; max-width: 100%; }
+.ai-chip-preview { background: #f7f1dc; border-color: #e3d49b; color: #6b5a22; }

@@ -333,6 +333,7 @@ function practiceVerdictHistory(sessions, key, max) {
 // ============================================================
 
 let practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
+let practiceAdminPreview = null;  // admin only: { uid, name } of the student whose plan is being tried
 let practiceLoadSeq = 0;          // only the most recently started load may commit (see practiceLoadContext)
 let practiceSession = null;       // the session in progress
 let practiceVoiceFlag = false;    // true when the text currently in the box came from the mic
@@ -340,6 +341,15 @@ let practiceSyncChain = Promise.resolve();
 
 function practiceActive() {
     return !!(currentUser && !currentUser.isAdmin && currentUser.id !== 'admin' && currentUser.id !== 'admin-preview' && _accessToken);
+}
+
+// The admin tests the tool with a real sign-in (only to reach the AI); nothing from that is saved.
+function practiceAdminTesting() {
+    return !!(currentUser && currentUser.isAdmin && _accessToken);
+}
+
+function practicePromptName() {
+    return practiceAdminPreview ? practiceAdminPreview.name : currentUser.name;
 }
 
 function practiceEsc(v) {
@@ -366,7 +376,30 @@ async function practiceRest(path) {
 // Loads this student's focus areas, practice profile and recent sessions. Every
 // piece degrades to "nothing" if the tables don't exist yet, so the companion
 // keeps working exactly as before until the SQL has been run.
+// Admin preview: load the chosen student's plan through the admin RPCs (the admin has no student rows of their own).
+async function practiceLoadAdminPreviewContext(force) {
+    const p = practiceAdminPreview;
+    if (!p) { practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] }; return practiceCtx; }
+    if (!force && practiceCtx.loadedFor === p.uid && Date.now() - practiceCtx.loadedAt < 60000) return practiceCtx;
+    const seq = ++practiceLoadSeq;
+    const [focus, settings, sessions] = await Promise.all([
+        sbRpc('admin_list_focus', { admin_secret: ADMIN_SECRET }),
+        sbRpc('admin_list_practice_profiles', { admin_secret: ADMIN_SECRET }),
+        sbRpc('admin_list_practice_sessions', { admin_secret: ADMIN_SECRET, p_user_id: p.uid, p_limit: 15 })
+    ]);
+    const arr = a => Array.isArray(a) ? a : [];
+    const ctx = {
+        loadedFor: p.uid, loadedAt: Date.now(),
+        focus: arr(focus).filter(f => f.user_id === p.uid && f.status !== 'resolved'),
+        profile: arr(settings).find(x => x.user_id === p.uid) || null,
+        sessions: arr(sessions).map(x => ({ id: x.id, started_at: x.started_at, student_turns: x.student_turns, targets: x.targets, report: x.report }))
+    };
+    if (seq === practiceLoadSeq) practiceCtx = ctx;
+    return practiceCtx;
+}
+
 async function practiceLoadContext(force) {
+    if (currentUser && currentUser.isAdmin) return practiceLoadAdminPreviewContext(force);
     if (!practiceActive()) { practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] }; return practiceCtx; }
     const uid = currentUser.id;
     if (!force && practiceCtx.loadedFor === uid && Date.now() - practiceCtx.loadedAt < 60000) return practiceCtx;
@@ -398,7 +431,7 @@ function practiceSessionTargets() {
 // Builds the system prompt for every companion turn. Replaces the old version in
 // script.js: same persona and rules, plus the teacher's plan when there is one.
 function buildAISystemPrompt(mode, context, insight) {
-    const name = practiceDisplayName(currentUser.name);
+    const name = practiceDisplayName(practicePromptName());
     const profile = practiceCtx.profile;
     const targets = practiceSessionTargets();
     const targetKeys = new Set(targets.map(t => t.key));
@@ -445,9 +478,11 @@ function practiceRenderChips() {
     const wrap = document.getElementById('aiTargetChips');
     if (!wrap) return;
     const targets = practiceSessionTargets();
-    if (!targets.length) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
-    const label = currentAiMode === 'plan' ? 'Practising today' : 'On your plan';
-    wrap.innerHTML = `<span class="ai-chips-label">${label}:</span>` + targets.map(t => `<span class="ai-chip">${practiceEsc(practiceClip(t.area, 60))}</span>`).join('');
+    const admin = !!(currentUser && currentUser.isAdmin);
+    if (!targets.length && !admin) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
+    const label = currentAiMode === 'plan' ? 'Practising today' : 'On the plan';
+    const preview = admin ? `<span class="ai-chip ai-chip-preview">👁 Admin preview${practiceAdminPreview ? ' as ' + practiceEsc(practiceAdminPreview.name) : ''} — nothing is saved</span>` : '';
+    wrap.innerHTML = preview + (targets.length ? `<span class="ai-chips-label">${label}:</span>` : '') + targets.map(t => `<span class="ai-chip">${practiceEsc(practiceClip(t.area, 60))}</span>`).join('');
     wrap.classList.remove('hidden');
 }
 
@@ -530,7 +565,7 @@ async function practiceCallForReport(system, user) {
 async function practiceGenerateReport(session) {
     const profile = practiceCtx.profile;
     const { system, user } = practiceBuildReportPrompt({
-        name: currentUser.name, level: profile && profile.level, mode: session.mode, context: session.context,
+        name: practicePromptName(), level: profile && profile.level, mode: session.mode, context: session.context,
         focus: practiceCtx.focus, targets: session.targets, turns: session.turns
     });
     return practiceParseReport(await practiceCallForReport(system, user));
@@ -569,7 +604,7 @@ async function practiceFinishSession() {
     const s = practiceSession;
     if (!s) return false;
     const studentTurns = s.turns.filter(t => t.role === 'user' && !t.help).length;
-    if (!practiceActive() || studentTurns < PRACTICE_MIN_TURNS_FOR_REPORT) {
+    if (!(practiceActive() || practiceAdminTesting()) || studentTurns < PRACTICE_MIN_TURNS_FOR_REPORT) {
         practiceMarkEnded(s, null);
         practiceSession = null;
         return false;
@@ -608,6 +643,95 @@ async function practiceRenderPlanCard() {
         lastEl.textContent = '';
     }
     card.classList.remove('hidden');
+}
+
+// ============================================================
+// ADMIN PREVIEW — try the student tool from the admin portal
+// ============================================================
+// The AI proxy only answers real signed-in users, and the admin login isn't one. So the admin signs in once
+// with their own student account (kept in memory, used only to reach the AI), then picks which student to
+// practise as: that student's focus areas / level / notes drive the session. Nothing is written to the database.
+async function practiceAdminStudents() {
+    let list = Object.values(_studentCache || {});
+    if (!list.length) {
+        const profiles = await sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET });
+        list = Array.isArray(profiles) ? profiles : [];
+    }
+    return list.filter(p => (p.type || 'spanish') === 'spanish' && p.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+async function renderAiAdminBar() {
+    if (!(currentUser && currentUser.isAdmin)) return;
+    const host = document.querySelector('#ai-companion .ai-companion-section');
+    if (!host) return;
+    let bar = document.getElementById('aiAdminBar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'aiAdminBar';
+        bar.className = 'ai-admin-bar';
+        host.insertBefore(bar, host.firstChild);
+    }
+    if (!_accessToken) {
+        bar.innerHTML = `<div class="ai-admin-title">👁 Admin preview</div>
+            <p>This is the tool your students use. To chat with the AI, sign in with <b>your own student account</b> — it is only used to reach the AI, and nothing from this preview is saved.</p>
+            <form id="aiAdminLoginForm" class="ai-admin-login" autocomplete="on">
+                <input type="email" id="aiAdminEmail" placeholder="Your student account email" autocomplete="username" required>
+                <input type="password" id="aiAdminPassword" placeholder="Password" autocomplete="current-password" required>
+                <button type="submit" class="admin-btn small primary">Sign in to preview</button>
+            </form>
+            <div id="aiAdminLoginMsg" class="ai-admin-msg"></div>`;
+        document.getElementById('aiAdminLoginForm').addEventListener('submit', practiceAdminSignIn);
+        return;
+    }
+    const students = await practiceAdminStudents();
+    const current = practiceAdminPreview ? practiceAdminPreview.uid : '';
+    bar.innerHTML = `<div class="ai-admin-title">👁 Admin preview <span class="ai-admin-sub">— nothing is saved</span></div>
+        <div class="ai-admin-row">
+            <label for="aiAdminStudent">Practise as</label>
+            <select id="aiAdminStudent">
+                <option value="">Nobody in particular (no plan)</option>
+                ${students.map(s => `<option value="${practiceEsc(s.id)}" ${s.id === current ? 'selected' : ''}>${practiceEsc(s.name)}</option>`).join('')}
+            </select>
+            <button type="button" class="admin-btn small" id="aiAdminSignOut">Sign out of preview</button>
+        </div>`;
+    document.getElementById('aiAdminStudent').addEventListener('change', e => {
+        const opt = e.target.selectedOptions[0];
+        practiceAdminChooseStudent(e.target.value, opt && e.target.value ? opt.textContent : '');
+    });
+    document.getElementById('aiAdminSignOut').addEventListener('click', practiceAdminSignOut);
+}
+
+async function practiceAdminSignIn(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const email = document.getElementById('aiAdminEmail').value.trim();
+    const password = document.getElementById('aiAdminPassword').value;
+    const msg = document.getElementById('aiAdminLoginMsg');
+    msg.textContent = 'Signing in…'; msg.style.color = '';
+    let data = null;
+    try { data = await sbSignIn(email, password); } catch (err) { data = null; }
+    document.getElementById('aiAdminPassword').value = '';
+    if (data && data.access_token) {
+        _accessToken = data.access_token;   // memory only: not saved, not used for the admin's own data
+        await renderAiAdminBar();
+        practiceRenderPlanCard();
+    } else {
+        msg.style.color = '#b45309';
+        msg.textContent = 'Could not sign in: ' + ((data && (data.error_description || data.msg || data.message)) || 'check the email and password.');
+    }
+}
+
+function practiceAdminSignOut() {
+    _accessToken = null;
+    practiceAdminPreview = null;
+    practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
+    renderAiAdminBar();
+    practiceRenderPlanCard();
+}
+
+async function practiceAdminChooseStudent(uid, name) {
+    practiceAdminPreview = uid ? { uid, name } : null;
+    practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
+    await practiceRenderPlanCard();
 }
 
 // ============================================================
