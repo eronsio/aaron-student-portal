@@ -3087,3 +3087,51 @@ footer p {
 .practice-session > summary { cursor: pointer; font-size: 13px; }
 .practice-turn { font-size: 12px; line-height: 1.5; padding: 3px 0; }
 .practice-turn.ai { color: var(--text-secondary); }
+
+/* ============================================================
+   ADMIN PORTAL SWITCH — which portal Aaron is editing
+   ============================================================ */
+.admin-portal-switch {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 99px;
+    margin: 0 16px;
+}
+.admin-portal-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-light);
+    padding: 0 8px 0 12px;
+}
+.admin-portal-switch button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 99px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+}
+.admin-portal-switch button:hover { color: var(--text-primary); }
+.admin-portal-switch button.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-weight: 600;
+    border-color: var(--border-color);
+    box-shadow: var(--shadow-sm);
+}
+@media (max-width: 760px) {
+    .admin-portal-label { display: none; }
+    .admin-portal-switch { margin: 0 8px; }
+    .admin-portal-switch button { padding: 6px 10px; font-size: 12px; }
+}

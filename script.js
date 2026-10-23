@@ -1074,7 +1074,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Restore admin session across refreshes
     if (localStorage.getItem('adminLoggedIn')) {
-        currentUser = { id: 'admin', name: 'Aaron', type: 'spanish', isAdmin: true, driveFolder: '' };
+        currentUser = newAdminUser();
         showMainApp();
         return;
     }
@@ -1412,6 +1412,66 @@ async function handleSetNewPassword(e) {
     }
 }
 
+// ============================================================
+// ADMIN PORTAL SWITCH — Aaron edits two separate portals (Spanish / Music)
+// ============================================================
+// The admin is a normal portal user with isAdmin = true and a `type` that says which portal is
+// showing. Branding, resources, students and the toolbar all follow that type. The COURSE DATA stays
+// one shared list (saveCourses splits it by subject), so the switch only filters what is *shown* —
+// never getCourses() itself, or a save would drop the other subject's courses.
+const ADMIN_PORTAL_KEY = 'adminPortal';
+
+function adminPortalChoice() {
+    try { return localStorage.getItem(ADMIN_PORTAL_KEY) === 'music' ? 'music' : 'spanish'; } catch (e) { return 'spanish'; }
+}
+
+function newAdminUser() {
+    return { id: 'admin', name: 'Aaron', type: adminPortalChoice(), isAdmin: true, driveFolder: '' };
+}
+
+function activePortal() {
+    return currentUser?.type === 'music' ? 'music' : 'spanish';
+}
+
+async function switchAdminPortal(portal) {
+    if (!currentUser?.isAdmin) return;
+    const next = portal === 'music' ? 'music' : 'spanish';
+    if (next === activePortal()) return;
+    try { localStorage.setItem(ADMIN_PORTAL_KEY, next); } catch (e) {}
+    currentUser.type = next;
+    await showMainApp();
+}
+
+// The segmented control in the header (admin only). Built here so it needs no markup of its own.
+function renderAdminPortalSwitch() {
+    let box = document.getElementById('adminPortalSwitch');
+    if (!currentUser?.isAdmin) { if (box) box.remove(); return; }
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'adminPortalSwitch';
+        box.className = 'admin-portal-switch';
+        box.setAttribute('role', 'tablist');
+        box.setAttribute('aria-label', 'Which portal are you editing?');
+        box.innerHTML = `<span class="admin-portal-label">Editing</span>
+            <button type="button" role="tab" data-portal="spanish" onclick="switchAdminPortal('spanish')">🗣️ Spanish portal</button>
+            <button type="button" role="tab" data-portal="music" onclick="switchAdminPortal('music')">🎵 Music portal</button>`;
+        const userInfo = document.querySelector('#mainApp .header-top .user-info');
+        userInfo.parentNode.insertBefore(box, userInfo);
+    }
+    box.querySelectorAll('button[data-portal]').forEach(b => {
+        const on = b.dataset.portal === activePortal();
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+}
+
+// Toolbar items that only make sense for one portal.
+function applyAdminPortalTools() {
+    const musicPortal = activePortal() === 'music';
+    document.querySelectorAll('#adminMenuDropdown button[onclick*="openPracticeOverlay"], #adminMenuDropdown button[onclick*="openLessonPrep"]')
+        .forEach(b => { b.style.display = (currentUser?.isAdmin && musicPortal) ? 'none' : ''; });
+}
+
 function handleAdminLogin(e) {
     if (e && e.preventDefault) e.preventDefault();
     clearErrors();
@@ -1420,7 +1480,7 @@ function handleAdminLogin(e) {
         loginModal.classList.add('hidden');
         document.body.style.overflow = 'auto';
         localStorage.setItem('adminLoggedIn', 'true');
-        currentUser = { id: 'admin', name: 'Aaron', type: 'spanish', isAdmin: true, driveFolder: '' };
+        currentUser = newAdminUser();
         showMainApp();
     } else {
         showError('adminError', 'Incorrect admin code.');
@@ -1497,6 +1557,8 @@ async function showMainApp() {
     portalTitle.textContent = isMusic ? 'Aaron Siebert Music' : 'Spanish with Aaron';
     document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
     document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
+    renderAdminPortalSwitch();
+    applyAdminPortalTools();
 
     // AI companion is hidden by default; it appears per student once Aaron enables Speaking Practice for them.
     // Courses tab is shown for both — each subject only ever renders/fetches its own courses.
@@ -2339,13 +2401,20 @@ function saveLastLesson(courseId, lessonId) {
 }
 
 async function renderCourseList() {
-    const courses = getCourses();
+    // Admin: show only the active portal's courses (the shared list itself is untouched).
+    const courses = currentUser?.isAdmin
+        ? getCourses().filter(c => (c.subject || 'spanish') === activePortal())
+        : getCourses();
     const progress = await getProgress();
     const grid = document.getElementById('courseGrid');
     const noMsg = document.getElementById('noCoursesMsg');
 
     if (!courses || courses.length === 0) {
         grid.innerHTML = '';
+        const p = noMsg.querySelector('p');
+        if (p) p.textContent = currentUser?.isAdmin
+            ? `No ${activePortal() === 'music' ? 'music' : 'Spanish'} courses yet. Open the tools button (bottom-left) → New Course, and the subject is already set to ${activePortal() === 'music' ? 'Music' : 'Spanish'}.`
+            : 'No courses yet — Aaron will add them here soon!';
         noMsg.classList.remove('hidden');
         return;
     }
@@ -2901,7 +2970,7 @@ function openCourseEditor(courseId) {
     document.getElementById('courseEditorTitle').textContent = course ? 'Edit Course' : 'New Course';
     document.getElementById('editCourseTitle').value = course ? course.title : '';
     document.getElementById('editCourseDesc').value = course ? course.description : '';
-    document.getElementById('editCourseSubject').value = course ? (course.subject || 'spanish') : 'spanish';
+    document.getElementById('editCourseSubject').value = course ? (course.subject || 'spanish') : (currentUser?.isAdmin ? activePortal() : 'spanish');
     document.getElementById('editCourseLevel').value = course ? course.level : 'Beginner';
     document.getElementById('editCourseCover').value = course ? (course.coverImage || '') : '';
     const prev = document.getElementById('coverPreview');
@@ -2932,6 +3001,7 @@ function saveCourseEdit() {
     saveCourses(courses);
     closeCourseEditor();
     renderAdminCourseList();
+    renderCourseList();
 }
 
 function deleteCourse(courseId) {
@@ -2939,6 +3009,7 @@ function deleteCourse(courseId) {
     const courses = getCourses().filter(c => c.id !== courseId);
     saveCourses(courses);
     renderAdminCourseList();
+    renderCourseList();
 }
 
 // ============================================================
@@ -3438,8 +3509,10 @@ async function loadAdminStudents() {
             return;
         }
 
-        if (profiles.length === 0) {
-            container.innerHTML = '<p style="color:var(--text-secondary);">No students signed up yet.</p>';
+        // Each portal lists only its own students (the cache below keeps everyone, for Preview).
+        const portalProfiles = profiles.filter(s => (s.type || 'spanish') === activePortal());
+        if (portalProfiles.length === 0) {
+            container.innerHTML = `<p style="color:var(--text-secondary);">No ${activePortal() === 'music' ? 'music' : 'Spanish'} students signed up yet.</p>`;
             return;
         }
 
@@ -3457,7 +3530,7 @@ async function loadAdminStudents() {
         _studentCache = {};
         profiles.forEach(s => { _studentCache[s.id] = s; });
 
-        container.innerHTML = profiles.map(student => {
+        container.innerHTML = portalProfiles.map(student => {
             const insight = insightMap[student.id];
             const hasInsight = insight && insight.insight_text;
             const preview = hasInsight ? insight.insight_text.slice(0, 120) + '...' : '';
@@ -4117,6 +4190,10 @@ function switchResTab(tab) {
 }
 
 function openResourcesEditor() {
+    if (activePortal() === 'music') {
+        alert("The Music portal's Resources tab can't be edited from here yet — it is still the \"Coming Soon\" placeholder. (This editor changes the Spanish resources.)");
+        return;
+    }
     const resources = getResources();
 
     // Deep copy sections

@@ -42,6 +42,12 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - `music` — sees Resources (Coming Soon placeholder), Your Space, Community; no Courses tab
 
 ## Admin capabilities
+- **Portal switch (header, admin only):** "Editing · Spanish portal | Music portal". The admin is a normal portal user with `isAdmin = true`
+  and `type` = the portal showing (`activePortal()`, remembered in localStorage `adminPortal`, restored on reload). Branding, Courses grid,
+  Resources, Students list and toolbar all follow it (Speaking Practice and Lesson Prep are hidden in Music). **Course data stays ONE shared
+  list** (`saveCourses` splits it by subject), so the switch only filters what is shown (`renderCourseList`) — never filter `getCourses()`
+  itself or a save would drop the other subject's courses. "Edit Resources" only edits Spanish; in Music it says so (music resources are a
+  hardcoded placeholder in `sharedResources.music` until an editor + persistent storage exist). `Preview: Spanish/Music` still opens the exact student view.
 - Edit Mode (inline WYSIWYG lesson editing)
 - Course/lesson CRUD via modal editors with Quill rich text
 - Import/Export course JSON
