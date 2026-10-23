@@ -2215,7 +2215,8 @@ function chooseTtsVoice(uri) {
     try { localStorage.setItem('aiTtsVoice', uri || ''); } catch (e) {}
     const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
     ttsVoice = (uri && voices.find(v => v.voiceURI === uri)) || ttsPickVoice(voices, 'es-ES');
-    speakText('Hola, ¿cómo estás?', { force: true });
+    stopSpeaking();   // a preview of the browser voice being chosen, not the natural voice
+    speakInBrowser('Hola, ¿cómo estás?', false);
 }
 
 // "Slow" is a learner aid: the AI's Spanish is read at a gentler pace. Remembered per browser.
@@ -2255,13 +2256,72 @@ function ttsLooksEnglish(text) {
     return e >= 3 && e > s * 1.5;
 }
 
-// opts.force = the student pressed a replay button, so speak even if the voice is switched off.
-function speakText(text, opts) {
-    if ((!ttsEnabled && !(opts && opts.force)) || !window.speechSynthesis) return;
-    const clean = ttsCleanText(text);
-    if (!clean) return;
-    window.speechSynthesis.cancel();
-    const english = ttsLooksEnglish(clean);
+// --- Natural voice -----------------------------------------------------------------------------
+// Replies are read by a neural voice from the `ai-speak` proxy when it is set up; otherwise (or on any
+// failure) by the browser's own voice. Failures switch the natural voice off for a while so the chat
+// never waits on a service that is down or not configured.
+const AI_SPEAK_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-speak`;
+let ttsServerUntil = 0;     // skip the natural voice until this time (ms) after a failure
+let ttsSpeakSeq = 0;        // bumps on every speak/stop so a slow, superseded request never talks over a newer one
+let ttsAudio = null;
+const ttsAudioCache = new Map();   // "lang|pace|text" -> blob URL, so "listen again" costs nothing
+
+function stopSpeaking() {
+    ttsSpeakSeq++;
+    if (ttsAudio) { try { ttsAudio.pause(); } catch (e) {} ttsAudio = null; }
+    window.speechSynthesis?.cancel();
+}
+
+// Resolves true once audio is playing (or the request was superseded), false when the browser voice should take over.
+async function speakViaServer(clean, english, seq) {
+    const pace = ttsSlow ? 'slow' : 'normal';
+    const key = `${english ? 'en' : 'es'}|${pace}|${clean}`;
+    let url = ttsAudioCache.get(key);
+    if (!url) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 10000);
+        try {
+            const r = await fetch(AI_SPEAK_FUNCTION_URL, {
+                method: 'POST',
+                headers: _headers(_accessToken),
+                body: JSON.stringify({ text: clean, lang: english ? 'en' : 'es', pace }),
+                signal: controller.signal
+            });
+            if (!r.ok || !/audio/i.test(r.headers.get('Content-Type') || '')) {
+                // 503/404 = not set up, 401 = not signed in as a student: don't retry for a long while. Anything else: a short pause.
+                ttsServerUntil = Date.now() + ((r.status === 503 || r.status === 404 || r.status === 401) ? 30 * 60000 : r.status === 429 ? 30000 : 2 * 60000);
+                return false;
+            }
+            url = URL.createObjectURL(await r.blob());
+            ttsAudioCache.set(key, url);
+            if (ttsAudioCache.size > 30) {
+                const oldest = ttsAudioCache.keys().next().value;
+                URL.revokeObjectURL(ttsAudioCache.get(oldest));
+                ttsAudioCache.delete(oldest);
+            }
+        } catch (e) {
+            ttsServerUntil = Date.now() + 2 * 60000;
+            return false;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    if (seq !== ttsSpeakSeq) return true;
+    return new Promise(resolve => {
+        const audio = new Audio(url);
+        ttsAudio = audio;
+        audio.onended = () => { if (ttsAudio === audio) ttsAudio = null; };
+        audio.play().then(() => resolve(true), () => resolve(false));   // autoplay blocked -> browser voice
+    });
+}
+
+function speakInBrowser(clean, english) {
+    if (!window.speechSynthesis) return;
+    if (!ttsVoice || !ttsEnVoice) {   // voices can finish loading after init (Firefox): pick again
+        const voices = window.speechSynthesis.getVoices();
+        if (!ttsVoice) ttsVoice = ttsPickVoice(voices, 'es-ES');
+        if (!ttsEnVoice) ttsEnVoice = ttsPickVoice(voices, 'en-US');
+    }
     const utt = new SpeechSynthesisUtterance(clean);
     utt.lang = english ? 'en-US' : 'es-ES';
     utt.rate = english ? 0.95 : (ttsSlow ? 0.7 : 0.88);
@@ -2269,6 +2329,21 @@ function speakText(text, opts) {
     const voice = english ? ttsEnVoice : ttsVoice;
     if (voice) utt.voice = voice;
     window.speechSynthesis.speak(utt);
+}
+
+// opts.force = the student pressed a replay button, so speak even if the voice is switched off.
+async function speakText(text, opts) {
+    if (!ttsEnabled && !(opts && opts.force)) return;
+    const clean = ttsCleanText(text);
+    if (!clean) return;
+    stopSpeaking();
+    const seq = ttsSpeakSeq;
+    const english = ttsLooksEnglish(clean);
+    try {
+        if (_accessToken && Date.now() >= ttsServerUntil && await speakViaServer(clean, english, seq)) return;
+    } catch (e) { /* fall through to the browser voice */ }
+    if (seq !== ttsSpeakSeq) return;
+    speakInBrowser(clean, english);
 }
 
 function toggleTTS() {
@@ -2280,7 +2355,7 @@ function toggleTTS() {
             : '<i class="fas fa-volume-mute"></i> Voice off';
         btn.style.opacity = ttsEnabled ? '1' : '0.5';
     }
-    if (!ttsEnabled) window.speechSynthesis?.cancel();
+    if (!ttsEnabled) stopSpeaking();
 }
 
 async function loadStudentInsight() {
@@ -2427,7 +2502,7 @@ function appendAiMessage(type, html, raw) {
     el.className = `ai-message ai-${type}`;
     if (type === 'bot') {
         el.innerHTML = `<div class="ai-avatar"><i class="fas fa-robot"></i></div><div class="ai-bubble"><p>${html}</p></div>`;
-        if (typeof raw === 'string' && raw && window.speechSynthesis) {
+        if (typeof raw === 'string' && raw && (window.speechSynthesis || window.Audio)) {
             const b = document.createElement('button');
             b.type = 'button'; b.className = 'ai-replay'; b.title = 'Listen again'; b.setAttribute('aria-label', 'Listen again');
             b.innerHTML = '<i class="fas fa-volume-up"></i>';
@@ -2613,6 +2688,7 @@ function micRelease() {
 
 function startListening() {
     if (!speechSupported || isListening || !currentAiMode) return;
+    stopSpeaking();   // the student is about to talk: don't let the reply play over them
     if (!recognition) recognition = initSpeechRecognition();
     committedTranscript = aiMessageInput.value.trim();
     try {

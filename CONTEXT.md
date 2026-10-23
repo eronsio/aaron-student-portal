@@ -69,7 +69,11 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   transcription service. Streams live into the chat text box while the mic button is held; the student
   can edit before sending. Browsers without support (Firefox, some older WebViews) get the mic button
   disabled with a tooltip — typing always works.
-- TTS via browser Web Speech API (`speechSynthesis`) — bot replies are read aloud in Spanish
+- Reading replies aloud: **natural voice** from the `ai-speak` Edge Function (ElevenLabs behind the same student-JWT check and a per-student rate
+  limit; secrets `ELEVENLABS_API_KEY`, optional `ELEVENLABS_VOICE_ID` / `ELEVENLABS_MODEL`; clips are cached client-side per text+pace), with the
+  browser's `speechSynthesis` as the automatic fallback whenever the function is missing/unconfigured (503/404 backs off 30 min), errors, times out
+  (10 s) or autoplay is blocked. Browser-voice path: `ttsCleanText` (strips emoji/dashes/markup/[notes]), `ttsLooksEnglish` (English help is read by
+  an English voice), `ttsPickVoice` ranking (skips macOS novelty voices) and a "Voice" dropdown remembered in localStorage (`aiTtsVoice`).
 - Portal-wide safety/polish (2026-10-23): `driveLinkFor()` turns a bare Drive ID into a folder URL for the student "materials" button; names and
   notes are escaped before going into pages; `saveCourses` refuses to save (and says why) if a subject's course list failed to load or the server
   rejects the save, and shows a "Saved" toast on success; the floating Book button hides while the AI chat is open (`syncAiChatClass`).
