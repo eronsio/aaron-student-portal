@@ -63,11 +63,16 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   Chat turns and the end-of-session report (`task: "report"`) use `claude-sonnet-5` with reasoning switched
   off, falling back to Haiku 4.5 if it errors or returns nothing. Chat replies are capped at 300 tokens, reports
   at 3500. (A live comparison showed Haiku praising "Me gustan correr y nadar"; Sonnet corrects it.)
+  Per-student rate limit (best-effort, in the function instance's memory): chat 30/min + 600/day, reports 10/hour; over the limit
+  the function answers 429 with a Spanish "Vas muy rápido…" message.
 - Voice input via the browser's `SpeechRecognition` (Web Speech API) — free, client-side, no separate
   transcription service. Streams live into the chat text box while the mic button is held; the student
   can edit before sending. Browsers without support (Firefox, some older WebViews) get the mic button
   disabled with a tooltip — typing always works.
 - TTS via browser Web Speech API (`speechSynthesis`) — bot replies are read aloud in Spanish
+- Portal-wide safety/polish (2026-10-23): `driveLinkFor()` turns a bare Drive ID into a folder URL for the student "materials" button; names and
+  notes are escaped before going into pages; `saveCourses` refuses to save (and says why) if a subject's course list failed to load or the server
+  rejects the save, and shows a "Saved" toast on success; the floating Book button hides while the AI chat is open (`syncAiChatClass`).
 - Admin-only insight generation (`generateInsightForStudent`/`generateAllInsights`, Students & Insights
   panel) still calls Anthropic directly from the browser using the key saved in Admin → Settings — that's
   fine since only Aaron ever triggers it, in his own browser
@@ -86,6 +91,12 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
 - **Sessions** (`practice_sessions`): transcript with voice/typed flags is saved each turn. On "End session" (>= 2 student
   turns) the proxy produces a JSON report (per-focus verdict, new issues, vocab gaps, next-lesson suggestions, a
   student-facing recap). Students can insert/update only their own rows and cannot set `reviewed_at`.
+- **Chat features (script.js / practice.js):** corrections arrive as `[✓ full corrected sentence — reason]` and render as highlighted
+  callouts (`practiceFormatReply` escapes everything, renders **bold**); a replay button on each reply and a Slow switch (TTS); the mic works by
+  tap-to-start/tap-to-stop or press-and-hold (`micPress`/`micRelease`); Hint / Explain in English / Say it simpler buttons send help requests
+  that are saved with `help: true` and are never graded or counted as attempts; a plan session opens by referring to the last analysed session
+  (`practiceLastSessionNote`); one question at a time (`aiBusy`) with a 45 s request timeout. Prompt rules 11-15 in `PRACTICE_BASE_RULES`
+  (plain text, check before praising, full corrected sentence + max two corrections, ask when ambiguous, help-message exception).
 - **Admin → Speaking Practice**: digest of unreviewed sessions per student, focus-area editor, level/instructions/on-off,
   session transcripts, "+ Add to focus" for AI-spotted issues, "Analyze now" (uses the API key in Settings) for sessions
   never analysed. Everything rendered from the database is escaped.

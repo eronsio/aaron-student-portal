@@ -49,6 +49,34 @@ function json(req: Request, body: unknown, status = 200) {
   });
 }
 
+// Best-effort per-student rate limit (cost/abuse guard). Counters live in this server instance's memory, so
+// they reset when it restarts and are not shared between instances — enough to stop one account hammering the
+// API (each chat turn costs money), not a hard quota.
+const recentRequests = new Map<string, number[]>();
+type RateRule = { name: string; limit: number; windowMs: number };
+
+function tryConsume(userId: string, rules: RateRule[], now = Date.now()): boolean {
+  const used = rules.map((r) => {
+    const key = `${r.name}:${userId}`;
+    const fresh = (recentRequests.get(key) || []).filter((t) => now - t < r.windowMs);
+    recentRequests.set(key, fresh);
+    return { key, fresh, rule: r };
+  });
+  // All rules must have room before any request is counted.
+  if (used.some((u) => u.fresh.length >= u.rule.limit)) return false;
+  used.forEach((u) => u.fresh.push(now));
+  if (recentRequests.size > 5000) {
+    for (const [k, v] of recentRequests) if (!v.length || now - v[v.length - 1] > 24 * 3600_000) recentRequests.delete(k);
+  }
+  return true;
+}
+
+const CHAT_RULES: RateRule[] = [
+  { name: "chat-min", limit: 30, windowMs: 60_000 },
+  { name: "chat-day", limit: 600, windowMs: 24 * 3600_000 },
+];
+const REPORT_RULES: RateRule[] = [{ name: "report-hour", limit: 10, windowMs: 3600_000 }];
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
@@ -81,6 +109,9 @@ Deno.serve(async (req: Request) => {
   // Anything other than the exact string "report" is a normal chat turn, so
   // older cached copies of the portal keep working unchanged.
   const isReport = body.task === "report";
+  if (!tryConsume(user.id, isReport ? REPORT_RULES : CHAT_RULES)) {
+    return json(req, { error: "Vas muy rápido. Espera un momento e inténtalo otra vez." }, 429);
+  }
   const limits = isReport
     ? { perMessage: 16000, system: 12000, maxTokens: 3500, models: MODELS }
     : { perMessage: 4000, system: 8000, maxTokens: 300, models: MODELS };
