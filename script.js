@@ -706,6 +706,9 @@ const defaultCourses = [
 ];
 
 let _coursesCache = null;
+// Which subjects' course lists actually loaded. saveCourses() rewrites BOTH rows, so if one failed to
+// load (flaky network) saving would overwrite it with an empty list — it refuses instead.
+let _catalogOk = { spanish: false, music: false };
 
 // Courses are stored as SEPARATE Supabase rows per subject (id='catalog' for
 // spanish, id='catalog_music' for music) so a student's browser only ever
@@ -735,6 +738,7 @@ async function initCourses() {
     // Admin manages both subjects; students only ever fetch their own.
     if (currentUser?.isAdmin) {
         const [spanish, music] = await Promise.all([_fetchCatalogRow('spanish'), _fetchCatalogRow('music')]);
+        _catalogOk = { spanish: spanish !== null, music: music !== null };
         if (spanish !== null || music !== null) {
             _coursesCache = [...(spanish || []), ...(music || [])];
             return;
@@ -747,6 +751,7 @@ async function initCourses() {
 
     const subject = currentUser?.type === 'music' ? 'music' : 'spanish';
     const fetched = await _fetchCatalogRow(subject);
+    _catalogOk = { spanish: subject === 'spanish' && fetched !== null, music: subject === 'music' && fetched !== null };
     if (fetched !== null) {
         _coursesCache = fetched; // correctly includes the "row not created yet" empty-array case
         return;
@@ -762,6 +767,10 @@ function getCourses() {
 }
 
 async function saveCourses(courses) {
+    if (currentUser?.isAdmin && !(_catalogOk.spanish && _catalogOk.music)) {
+        alert("The course lists didn't finish loading, so saving is blocked to avoid overwriting them with an empty list. Please reload the page and try again.");
+        return false;
+    }
     _coursesCache = courses;
     const spanishCourses = courses.filter(c => (c.subject || 'spanish') === 'spanish');
     const musicCourses = courses.filter(c => c.subject === 'music');
@@ -771,11 +780,19 @@ async function saveCourses(courses) {
     // Save to Supabase so it persists across devices and builds — split by
     // subject so each subject's data lives in its own row.
     if (currentUser?.isAdmin) {
-        await Promise.all([
+        const results = await Promise.all([
             sbRpc('save_courses_admin', { admin_secret: ADMIN_SECRET, p_data: spanishCourses }),
             sbRpc('save_music_courses_admin', { admin_secret: ADMIN_SECRET, p_data: musicCourses })
         ]);
+        // A successful save returns nothing (204); an error comes back as an object with a message.
+        const failed = results.find(r => r && !Array.isArray(r) && r.message);
+        if (failed) {
+            alert('Saving the courses failed: ' + failed.message + '\n\nYour change is only on this screen — reload and try again.');
+            return false;
+        }
+        showImportSuccess('Saved');
     }
+    return true;
 }
 
 async function getProgress() {
@@ -1064,7 +1081,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Show a preview banner
             const banner = document.createElement('div');
             banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#1e40af;color:#fff;padding:8px 16px;font-size:13px;font-weight:600;z-index:99999;display:flex;justify-content:space-between;align-items:center;';
-            banner.innerHTML = `<span>👁 Previewing as: ${s.name}</span><button onclick="window.close()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;">Close Tab</button>`;
+            banner.innerHTML = `<span>👁 Previewing as: ${escapeHtml(String(s.name || ''))}</span><button onclick="window.close()" style="background:rgba(255,255,255,0.2);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;">Close Tab</button>`;
             document.body.appendChild(banner);
             document.body.style.paddingTop = '36px';
             showMainApp();
@@ -1239,11 +1256,11 @@ function setupEventListeners() {
 
     // Voice input (press & hold) — live transcription into the text box
     if (speechSupported) {
-        aiRecordBtn.addEventListener('mousedown', startListening);
-        aiRecordBtn.addEventListener('mouseup', stopListening);
-        aiRecordBtn.addEventListener('mouseleave', stopListening);
-        aiRecordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startListening(); });
-        aiRecordBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopListening(); });
+        aiRecordBtn.addEventListener('mousedown', micPress);
+        aiRecordBtn.addEventListener('mouseup', micRelease);
+        aiRecordBtn.addEventListener('mouseleave', micRelease);
+        aiRecordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); micPress(); });
+        aiRecordBtn.addEventListener('touchend', (e) => { e.preventDefault(); micRelease(); });
     } else {
         aiRecordBtn.disabled = true;
         aiRecordBtn.title = 'La entrada de voz no está disponible en este navegador. Prueba Chrome, Edge o Safari — o simplemente escribe.';
@@ -1555,6 +1572,7 @@ async function showMainApp() {
     welcomeMessage.textContent = `Welcome, ${currentUser.name}!`;
     const isMusic = currentUser.type === 'music';
     portalTitle.textContent = isMusic ? 'Aaron Siebert Music' : 'Spanish with Aaron';
+    document.title = portalTitle.textContent;
     document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
     document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
     renderAdminPortalSwitch();
@@ -1577,6 +1595,12 @@ async function showMainApp() {
     updateCommunityDescription();
 
     showTab('courses');
+    // Don't leave the page blank while the course list loads.
+    const loadingGrid = document.getElementById('courseGrid');
+    if (loadingGrid && !loadingGrid.children.length) {
+        document.getElementById('noCoursesMsg').classList.add('hidden');
+        loadingGrid.innerHTML = '<div class="grid-loading"><i class="fas fa-circle-notch fa-spin"></i> Loading courses…</div>';
+    }
     // Must run after currentUser is set (it decides which subject's catalog to fetch) —
     // NOT at DOMContentLoaded time, when currentUser is still null for every user.
     await initCourses();
@@ -1893,6 +1917,22 @@ async function loadMoviePosters() {
 
 // YOUR SPACE TAB (personal Drive folder)
 // ============================================================
+// Students' materials links are saved by hand and by automation in several shapes: a full URL, or
+// just the Drive folder/file ID. A bare ID used to become a broken relative link (aaron-learning.com/<id>).
+function driveLinkFor(value) {
+    const v = String(value == null ? '' : value).trim();
+    if (!v) return '';
+    if (/^https?:\/\//i.test(v)) return v;
+    if (/^[A-Za-z0-9_-]{20,}$/.test(v)) return `https://drive.google.com/drive/folders/${v}`;
+    if (/^(drive|docs)\.google\.com\//i.test(v)) return 'https://' + v;
+    return '';
+}
+
+function openStudentFolder() {
+    const url = driveLinkFor(currentUser?.driveFolder);
+    if (url) window.open(url, '_blank', 'noopener');
+}
+
 function populatePersonalFolder() {
     const container = document.getElementById('personalFolder');
 
@@ -1907,11 +1947,11 @@ function populatePersonalFolder() {
                     <h4 style="font-size:14px;font-weight:700;color:#1e40af;margin:0;">This Week from Aaron</h4>
                 </div>
             </div>
-            <p style="font-size:14px;line-height:1.7;color:#1e3a5f;white-space:pre-wrap;">${currentUser.thisWeek}</p>
+            <p style="font-size:14px;line-height:1.7;color:#1e3a5f;white-space:pre-wrap;">${escapeHtml(String(currentUser.thisWeek))}</p>
         </div>
     ` : '';
 
-    if (!currentUser.driveFolder) {
+    if (!driveLinkFor(currentUser.driveFolder)) {
         if (currentUser.isNewSignup) {
             container.innerHTML = thisWeekHtml + `
                 <div class="folder-card cta-card">
@@ -1927,7 +1967,7 @@ function populatePersonalFolder() {
             container.innerHTML = thisWeekHtml + `
                 <div class="folder-card">
                     <i class="fab fa-google-drive"></i>
-                    <h4>${currentUser.name}'s Folder</h4>
+                    <h4>${escapeHtml(currentUser.name || '')}'s Folder</h4>
                     <p>Your personal folder is being set up. Check back soon!</p>
                 </div>
             `;
@@ -1938,9 +1978,9 @@ function populatePersonalFolder() {
     container.innerHTML = thisWeekHtml + `
         <div class="folder-card">
             <i class="fab fa-google-drive"></i>
-            <h4>${currentUser.name}'s Folder</h4>
+            <h4>${escapeHtml(currentUser.name || '')}'s Folder</h4>
             <p>Access your personal learning materials, lesson notes, and assignments</p>
-            <button class="access-btn" onclick="window.open('${currentUser.driveFolder}', '_blank')">
+            <button class="access-btn" onclick="openStudentFolder()">
                 <i class="fas fa-external-link-alt"></i> Open Your Google Drive Folder
             </button>
         </div>
@@ -1960,6 +2000,15 @@ function updateCommunityDescription() {
 // ============================================================
 // TAB SWITCHING
 // ============================================================
+// The floating "Book Your Next Lesson" button sat on top of the chat's send button, so it hides while
+// the Speaking Practice chat (or its recap) is on screen.
+function syncAiChatClass() {
+    const tab = document.getElementById('ai-companion');
+    const chatOpen = !!tab && tab.classList.contains('active') &&
+        (!document.getElementById('aiChatView')?.classList.contains('hidden') || !document.getElementById('aiRecapView')?.classList.contains('hidden'));
+    document.body.classList.toggle('ai-chat-open', chatOpen);
+}
+
 function showTab(tabName) {
     tabBtns.forEach(btn => btn.classList.remove('active'));
     tabPanes.forEach(pane => pane.classList.remove('active'));
@@ -1969,6 +2018,7 @@ function showTab(tabName) {
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.classList.add('active');
+    syncAiChatClass();
 
     if (tabName === 'community') {
         setTimeout(() => messageInput.focus(), 100);
@@ -2113,8 +2163,19 @@ function initTTS() {
     }
 }
 
-function speakText(text) {
-    if (!ttsEnabled || !window.speechSynthesis) return;
+// "Slow" is a learner aid: the AI's Spanish is read at a gentler pace. Remembered per browser.
+let ttsSlow = (() => { try { return localStorage.getItem('aiTtsSlow') === '1'; } catch (e) { return false; } })();
+
+function toggleSlowTTS() {
+    ttsSlow = !ttsSlow;
+    try { localStorage.setItem('aiTtsSlow', ttsSlow ? '1' : '0'); } catch (e) {}
+    const btn = document.getElementById('ttsSlowBtn');
+    if (btn) { btn.classList.toggle('active', ttsSlow); btn.setAttribute('aria-pressed', ttsSlow ? 'true' : 'false'); }
+}
+
+// opts.force = the student pressed a replay button, so speak even if the voice is switched off.
+function speakText(text, opts) {
+    if ((!ttsEnabled && !(opts && opts.force)) || !window.speechSynthesis) return;
     const clean = text
         .replace(/<[^>]+>/g, '')
         .replace(/\[.*?\]/g, '')
@@ -2126,7 +2187,7 @@ function speakText(text) {
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(clean);
     utt.lang = 'es-ES';
-    utt.rate = 0.88;
+    utt.rate = ttsSlow ? 0.7 : 0.88;
     utt.pitch = 1.05;
     if (ttsVoice) utt.voice = ttsVoice;
     window.speechSynthesis.speak(utt);
@@ -2174,17 +2235,24 @@ async function callAnthropicAPI(messages, systemPrompt) {
     if (!_accessToken) {
         return '⚠️ Necesitas iniciar sesión como estudiante para usar el compañero de práctica.';
     }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
     try {
         const r = await fetch(AI_COMPANION_FUNCTION_URL, {
             method: 'POST',
             headers: _headers(_accessToken),
-            body: JSON.stringify({ messages: messages.slice(-20), systemPrompt })
+            body: JSON.stringify({ messages: messages.slice(-20), systemPrompt }),
+            signal: controller.signal
         });
         const data = await r.json();
         if (!r.ok || data.error) return `⚠️ Error: ${data.error || 'No se pudo conectar con el compañero de práctica.'}`;
         return data.text || '...';
     } catch(e) {
-        return '⚠️ No se pudo conectar. Comprueba tu conexión.';
+        return e && e.name === 'AbortError'
+            ? '⚠️ Tardó demasiado en responder. Inténtalo otra vez.'
+            : '⚠️ No se pudo conectar. Comprueba tu conexión.';
+    } finally {
+        clearTimeout(timer);
     }
 }
 
@@ -2226,6 +2294,7 @@ async function startAiMode(mode, context) {
     document.getElementById('aiScenarioPicker').classList.add('hidden');
     document.getElementById('aiGrammarPicker').classList.add('hidden');
     document.getElementById('aiChatView').classList.remove('hidden');
+    syncAiChatClass();
 
     // Set mode label
     const label = MODE_LABELS[mode] + (context ? ` — ${context}` : '');
@@ -2236,7 +2305,7 @@ async function startAiMode(mode, context) {
 
     // Show opening message
     if (MODE_OPENING[mode]) {
-        appendAiMessage('bot', MODE_OPENING[mode]);
+        appendAiMessage('bot', MODE_OPENING[mode], MODE_OPENING[mode]);
         speakText(MODE_OPENING[mode]);
         aiConversationHistory.push({ role: 'user', content: '[START SESSION]' }, { role: 'assistant', content: MODE_OPENING[mode] });
         practiceRecordTurn('assistant', MODE_OPENING[mode]);
@@ -2246,7 +2315,7 @@ async function startAiMode(mode, context) {
         const systemPrompt = buildAISystemPrompt(mode, context, studentInsightCache);
         const opening = await callAnthropicAPI([{ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }], systemPrompt);
         document.getElementById('aiChatMessages').lastElementChild.remove();
-        appendAiMessage('bot', practiceFormatReply(opening));
+        appendAiMessage('bot', practiceFormatReply(opening), opening.startsWith('⚠️') ? '' : opening);
         speakText(opening);
         // Keep the hidden start prompt in the history so the model still sees its own opening line.
         aiConversationHistory.push({ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }, { role: 'assistant', content: opening });
@@ -2269,15 +2338,24 @@ function leaveAiChat() {
     aiConversationHistory = [];
     currentAiMode = null;
     currentAiContext = null;
+    syncAiChatClass();
     practiceResetSession();
     practiceRenderPlanCard();
 }
 
-function appendAiMessage(type, html) {
+// `raw` (optional, bot messages only) is the plain reply text; when given the bubble gets a "listen again" button.
+function appendAiMessage(type, html, raw) {
     const el = document.createElement('div');
     el.className = `ai-message ai-${type}`;
     if (type === 'bot') {
         el.innerHTML = `<div class="ai-avatar"><i class="fas fa-robot"></i></div><div class="ai-bubble"><p>${html}</p></div>`;
+        if (typeof raw === 'string' && raw && window.speechSynthesis) {
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = 'ai-replay'; b.title = 'Listen again'; b.setAttribute('aria-label', 'Listen again');
+            b.innerHTML = '<i class="fas fa-volume-up"></i>';
+            b.addEventListener('click', () => speakText(raw, { force: true }));
+            el.querySelector('.ai-bubble').appendChild(b);
+        }
     } else {
         el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div><div class="ai-avatar user-avatar"><i class="fas fa-user"></i></div>`;
     }
@@ -2286,33 +2364,93 @@ function appendAiMessage(type, html) {
     return el;
 }
 
-async function sendAiMessage() {
+let aiBusy = false; // one question at a time, so replies can't arrive out of order
+
+function sendAiMessage() {
     const message = aiMessageInput.value.trim();
-    if (!message || !currentAiMode) return;
+    if (!message) return;
+    submitAiMessage(message, {});
+}
 
-    appendAiMessage('user', escapeHtml(message));
-    aiMessageInput.value = '';
+// One-tap help from the student: shown in the chat like a normal message, but recorded as a help request
+// (not graded, not counted as an attempt). The text box is left alone, so a half-typed answer survives.
+const AI_HELP_MESSAGES = {
+    hint: 'Can I have a hint?',
+    explain: 'Can you explain that in English?',
+    simpler: 'Can you say that more simply?'
+};
+function sendAiHelp(kind) {
+    const message = AI_HELP_MESSAGES[kind];
+    if (message) submitAiMessage(message, { help: true });
+}
 
-    // Typing indicator
-    const typing = appendAiMessage('bot', '<span class="typing-indicator"><span></span><span></span><span></span></span>');
+async function submitAiMessage(message, opts) {
+    if (!message || !currentAiMode || aiBusy) return;
+    aiBusy = true;
+    setAiBusyUI(true);
+    try {
+        appendAiMessage('user', escapeHtml(message));
+        if (!opts.help) aiMessageInput.value = '';
 
-    aiConversationHistory.push({ role: 'user', content: message });
-    saveConversationTurn('user', message);
-    practiceRecordTurn('user', message);
+        // Typing indicator
+        const typing = appendAiMessage('bot', '<span class="typing-indicator"><span></span><span></span><span></span></span>');
 
-    const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache);
-    const response = await callAnthropicAPI(aiConversationHistory, systemPrompt);
+        aiConversationHistory.push({ role: 'user', content: message });
+        saveConversationTurn('user', message);
+        practiceRecordTurn('user', message, opts.help ? { help: true } : undefined);
 
-    aiConversationHistory.push({ role: 'assistant', content: response });
-    saveConversationTurn('assistant', response);
-    if (!response.startsWith('⚠️')) practiceRecordTurn('assistant', response);
+        const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache);
+        const response = await callAnthropicAPI(aiConversationHistory, systemPrompt);
 
-    typing.remove();
-    appendAiMessage('bot', practiceFormatReply(response));
-    speakText(response);
+        aiConversationHistory.push({ role: 'assistant', content: response });
+        saveConversationTurn('assistant', response);
+        const failed = response.startsWith('⚠️');
+        if (!failed) practiceRecordTurn('assistant', response);
+
+        typing.remove();
+        appendAiMessage('bot', practiceFormatReply(response), failed ? '' : response);
+        speakText(response);
+    } finally {
+        aiBusy = false;
+        setAiBusyUI(false);
+    }
+}
+
+function setAiBusyUI(busy) {
+    document.querySelectorAll('#aiQuickReplies button').forEach(b => { b.disabled = busy; });
+    if (aiSendBtn) aiSendBtn.disabled = busy;
+}
+
+// Adds the "slow" switch and the help buttons to the chat. Built here (once) so they need no markup of their own.
+function ensureAiExtras() {
+    if (!document.getElementById('ttsSlowBtn')) {
+        const voiceBtn = document.getElementById('ttsToggleBtn');
+        if (voiceBtn) {
+            const b = document.createElement('button');
+            b.id = 'ttsSlowBtn'; b.type = 'button'; b.className = 'admin-btn small'; b.style.fontSize = '12px';
+            b.innerHTML = '🐢 Slow';
+            b.title = 'Read the replies more slowly';
+            b.setAttribute('aria-pressed', ttsSlow ? 'true' : 'false');
+            b.classList.toggle('active', ttsSlow);
+            b.addEventListener('click', toggleSlowTTS);
+            voiceBtn.parentNode.insertBefore(b, voiceBtn);
+        }
+    }
+    if (!document.getElementById('aiQuickReplies')) {
+        const input = document.querySelector('#aiChatView .ai-chat-input-container');
+        if (input) {
+            const row = document.createElement('div');
+            row.id = 'aiQuickReplies'; row.className = 'ai-quick-replies';
+            row.innerHTML = `<button type="button" onclick="sendAiHelp('hint')">💡 Hint</button>
+                <button type="button" onclick="sendAiHelp('explain')">💬 Explain in English</button>
+                <button type="button" onclick="sendAiHelp('simpler')">🐢 Say it simpler</button>`;
+            input.parentNode.insertBefore(row, input);
+        }
+    }
 }
 
 function initAiCompanion() {
+    ensureAiExtras();
     aiConversationHistory = [];
     studentInsightCache = null;
     currentAiMode = null;
@@ -2360,6 +2498,28 @@ function initSpeechRecognition() {
     return rec;
 }
 
+// The mic works two ways: press and HOLD while talking (release to stop), or TAP once to start and
+// TAP again to stop. A press longer than HOLD_MS counts as a hold.
+const MIC_HOLD_MS = 500;
+let micDownAt = 0, micPressed = false, micIgnoreRelease = false;
+
+function micPress() {
+    if (micPressed) return;
+    micPressed = true;
+    if (isListening) { stopListening(); micIgnoreRelease = true; return; }   // second tap stops
+    micIgnoreRelease = false;
+    micDownAt = Date.now();
+    startListening();
+}
+
+function micRelease() {
+    if (!micPressed) return;
+    micPressed = false;
+    if (micIgnoreRelease) { micIgnoreRelease = false; return; }
+    if (isListening && Date.now() - micDownAt >= MIC_HOLD_MS) stopListening(); // it was a hold
+    // a short tap leaves the mic on until the next tap
+}
+
 function startListening() {
     if (!speechSupported || isListening || !currentAiMode) return;
     if (!recognition) recognition = initSpeechRecognition();
@@ -2369,6 +2529,7 @@ function startListening() {
         isListening = true;
         aiRecordBtn.classList.add('recording');
         aiRecordBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        aiMessageInput.placeholder = 'Escuchando… toca el micrófono otra vez para parar';
     } catch (err) {
         console.error('SpeechRecognition start failed:', err);
     }
@@ -2382,6 +2543,7 @@ function stopListeningUI() {
     isListening = false;
     aiRecordBtn.classList.remove('recording');
     aiRecordBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+    aiMessageInput.placeholder = 'Escribe en español...';
 }
 
 // ============================================================
@@ -3541,8 +3703,8 @@ async function loadAdminStudents() {
             const phoneVal = (student.phone || '').replace(/"/g, '&quot;');
 
             return `
-            <div class="admin-course-card" style="margin-bottom:16px;padding:16px;">
-                <h4 style="margin-bottom:2px;">${student.name || 'Unknown'}</h4>
+            <div class="admin-course-card" data-name="${escapeHtml(String(student.name || '').toLowerCase())}" style="margin-bottom:16px;padding:16px;">
+                <h4 style="margin-bottom:2px;">${escapeHtml(String(student.name || 'Unknown'))}</h4>
                 <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">joined ${new Date(student.created_at).toLocaleDateString()}</p>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -3567,7 +3729,7 @@ async function loadAdminStudents() {
                         </select>
                     </div>
                     <div>
-                        <label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Google Drive Folder</label>
+                        <label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px;">Google Drive Folder ${driveLinkFor(student.drive_folder) ? `<a href="${escapeHtml(driveLinkFor(student.drive_folder))}" target="_blank" rel="noopener" style="font-weight:500;margin-left:6px;">open ↗</a>` : ''}</label>
                         <input type="url" id="drive_${student.id}" value="${driveVal}" placeholder="https://drive.google.com/drive/folders/..."
                             style="width:100%;font-size:12px;padding:6px 8px;border:1px solid var(--border-color);border-radius:var(--radius-sm);">
                     </div>
@@ -3587,8 +3749,16 @@ async function loadAdminStudents() {
                 ${hasInsight ? `<p style="font-size:12px;color:var(--text-secondary);margin-top:10px;">${preview} (${date})</p>` : ''}
             </div>`;
         }).join('');
+        if (portalProfiles.length > 6) {
+            container.insertAdjacentHTML('afterbegin', `<input type="search" id="adminStudentSearch" placeholder="Search ${portalProfiles.length} students…" autocomplete="off"
+                style="width:100%;margin-bottom:16px;padding:10px 14px;font-size:14px;font-family:inherit;border:1px solid var(--border-color);border-radius:var(--radius-md);background:#fff;">`);
+            document.getElementById('adminStudentSearch').addEventListener('input', e => {
+                const q = e.target.value.trim().toLowerCase();
+                container.querySelectorAll('.admin-course-card[data-name]').forEach(c => { c.style.display = !q || c.dataset.name.includes(q) ? '' : 'none'; });
+            });
+        }
     } catch(e) {
-        container.innerHTML = `<p style="color:#dc2626;">Error loading students: ${e.message}</p>`;
+        container.innerHTML = `<p style="color:#dc2626;">Error loading students: ${escapeHtml(String(e.message))}</p>`;
     }
 }
 
@@ -3781,7 +3951,7 @@ async function loadLessonPrep() {
             <div style="background:#fff;border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;margin-bottom:16px;">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
                     <div>
-                        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">${name}</h3>
+                        <h3 style="font-size:17px;font-weight:700;margin:0 0 4px;">${escapeHtml(String(name))}</h3>
                         <span style="font-size:12px;color:var(--text-secondary);">Last lesson: ${dateStr}</span>
                     </div>
                     <span style="background:#eff6ff;color:#2563eb;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;">Latest</span>
@@ -3866,7 +4036,7 @@ async function loadAdminBilling() {
         container.innerHTML = Object.entries(byStudent).map(([name, entries]) => {
             return `
             <div class="admin-course-card">
-                <h3 style="font-size:16px;font-weight:700;margin:0 0 12px;">${name}</h3>
+                <h3 style="font-size:16px;font-weight:700;margin:0 0 12px;">${escapeHtml(String(name))}</h3>
                 ${entries.map(e => `
                     <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid var(--border-light);">
                         <div>

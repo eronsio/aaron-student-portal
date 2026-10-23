@@ -3135,3 +3135,46 @@ footer p {
     .admin-portal-switch { margin: 0 8px; }
     .admin-portal-switch button { padding: 6px 10px; font-size: 12px; }
 }
+
+/* ---- polish: loading state, AI chat vs floating button, phone layout for the admin switch ---- */
+.grid-loading { grid-column: 1 / -1; padding: 40px 0; text-align: center; color: var(--text-secondary); font-size: 14px; }
+.grid-loading i { margin-right: 8px; }
+body.ai-chat-open .floating-book-btn { display: none; }
+@media (max-width: 760px) {
+    .admin-portal-switch { width: 100%; margin: 0; }
+    .admin-portal-switch button { flex: 1; }
+}
+
+/* ---- Speaking Practice: correction callouts, replay, help buttons, slow switch ---- */
+.ai-fix {
+    display: inline-block;
+    background: #f7f1dc;
+    border-left: 3px solid #d2b45a;
+    border-radius: 4px;
+    padding: 1px 8px;
+    margin: 2px 0;
+    font-size: 0.96em;
+    color: #4d4120;
+}
+.ai-fix::before { content: "✓ "; font-weight: 700; color: #8a7326; }
+.ai-note { color: var(--text-secondary); font-style: italic; }
+.ai-bubble { position: relative; }
+.ai-replay {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; margin: 4px 0 -2px 0;
+    background: transparent; color: var(--text-light);
+    border: 1px solid var(--border-color); border-radius: 50%;
+    cursor: pointer; font-size: 11px; transition: color 0.15s ease, border-color 0.15s ease;
+}
+.ai-replay:hover { color: var(--accent-color); border-color: var(--accent-color); }
+.ai-quick-replies { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px 0; }
+.ai-quick-replies button {
+    font-family: inherit; font-size: 12px; font-weight: 500; color: #44546a;
+    background: #eaeff6; border: 1px solid #d5deea; border-radius: 99px;
+    padding: 5px 12px; cursor: pointer; transition: background 0.15s ease;
+}
+.ai-quick-replies button:hover:not(:disabled) { background: #dfe7f1; }
+.ai-quick-replies button:disabled { opacity: 0.5; cursor: default; }
+#ttsSlowBtn.active { background: #eaeff6; border-color: #b9c6d8; font-weight: 600; }
+.ai-again-btn { margin: 18px 0 0 10px; }
+#aiRecordBtn { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
