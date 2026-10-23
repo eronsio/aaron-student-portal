@@ -2148,21 +2148,74 @@ function closeAdminMenu() {
 
 let ttsEnabled = true;
 let ttsVoice = null;
+let ttsEnVoice = null;
+
+// Voices that are novelty/character voices in macOS and Chrome; never picked automatically.
+const TTS_NOVELTY = /\b(eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|albert|fred|junior|kathy|ralph)\b/i;
+
+// Higher = nicer sounding. Neural/online/enhanced voices beat the compact built-in ones.
+function ttsVoiceScore(v, lang) {
+    if (!v || !v.lang) return -1;
+    const l = v.lang.replace('_', '-').toLowerCase();
+    const want = lang.toLowerCase();
+    if (!l.startsWith(want.slice(0, 2))) return -1;
+    if (TTS_NOVELTY.test(v.name)) return -1;
+    let score = 0;
+    if (l === want) score += 40;
+    else if (want === 'es-es' && (l === 'es-mx' || l === 'es-us')) score += 25;
+    else if (want === 'en-us' && l.startsWith('en-')) score += 25;
+    else score += 10;
+    if (/natural|neural|online|premium|enhanced|siri/i.test(v.name)) score += 30;
+    if (/google/i.test(v.name)) score += 20;
+    if (/m[óo]nica|paulina|jorge|diego|juan|sabina|marisol|samantha|alex|ava|allison/i.test(v.name)) score += 10;
+    if (v.localService) score += 5;
+    return score;
+}
+
+function ttsPickVoice(voices, lang) {
+    let best = null, bestScore = 0;
+    (voices || []).forEach(v => {
+        const sc = ttsVoiceScore(v, lang);
+        if (sc > bestScore) { best = v; bestScore = sc; }
+    });
+    return best;
+}
+
+function ttsSavedVoiceName() { try { return localStorage.getItem('aiTtsVoice') || ''; } catch (e) { return ''; } }
 
 function initTTS() {
     if (!window.speechSynthesis) return;
     const loadVoices = () => {
         const voices = window.speechSynthesis.getVoices();
-        ttsVoice = voices.find(v => v.lang === 'es-ES' && v.name.includes('Google'))
-            || voices.find(v => v.lang === 'es-MX' && v.name.includes('Google'))
-            || voices.find(v => v.lang.startsWith('es') && v.localService)
-            || voices.find(v => v.lang.startsWith('es'))
-            || null;
+        const saved = ttsSavedVoiceName();
+        ttsVoice = (saved && voices.find(v => v.voiceURI === saved && /^es/i.test(v.lang))) || ttsPickVoice(voices, 'es-ES');
+        ttsEnVoice = ttsPickVoice(voices, 'en-US');
+        fillTtsVoiceSelect();
     };
     loadVoices();
     if (window.speechSynthesis.onvoiceschanged !== undefined) {
         window.speechSynthesis.onvoiceschanged = loadVoices;
     }
+}
+
+// The student's own voice choice (the "Voice" dropdown), remembered per browser. '' = automatic.
+function fillTtsVoiceSelect() {
+    const sel = document.getElementById('ttsVoiceSelect');
+    if (!sel || !window.speechSynthesis) return;
+    const spanish = window.speechSynthesis.getVoices()
+        .filter(v => /^es/i.test(v.lang))
+        .sort((a, b) => ttsVoiceScore(b, 'es-ES') - ttsVoiceScore(a, 'es-ES'));
+    const saved = ttsSavedVoiceName();
+    sel.innerHTML = '<option value="">Voice: automatic</option>' + spanish
+        .map(v => `<option value="${escapeHtml(v.voiceURI)}">${escapeHtml(v.name)} (${escapeHtml(v.lang)})</option>`).join('');
+    sel.value = spanish.some(v => v.voiceURI === saved) ? saved : '';
+}
+
+function chooseTtsVoice(uri) {
+    try { localStorage.setItem('aiTtsVoice', uri || ''); } catch (e) {}
+    const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    ttsVoice = (uri && voices.find(v => v.voiceURI === uri)) || ttsPickVoice(voices, 'es-ES');
+    speakText('Hola, ¿cómo estás?', { force: true });
 }
 
 // "Slow" is a learner aid: the AI's Spanish is read at a gentler pace. Remembered per browser.
@@ -2175,23 +2228,46 @@ function toggleSlowTTS() {
     if (btn) { btn.classList.toggle('active', ttsSlow); btn.setAttribute('aria-pressed', ttsSlow ? 'true' : 'false'); }
 }
 
+// Turns a chat reply into what should be said aloud: no markup, no [teacher notes], no emoji or symbols
+// (a speech voice reads those out literally or stumbles on them).
+function ttsCleanText(text) {
+    return String(text == null ? '' : text)
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\[[^\]]*\]/g, ' ')
+        .replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}‍︎️⃣]/gu, '')
+        .replace(/[*_`#~^|]+/g, '')
+        .replace(/\s*[—–]\s*/g, ', ')
+        .replace(/\.{3,}|…/g, '. ')
+        .replace(/\s*->\s*|\s*→\s*/g, ', ')
+        .replace(/\s+([,.;:!?])/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Rough language check so English explanations (the "Explain in English" help) are not read in a Spanish accent.
+function ttsLooksEnglish(text) {
+    const words = String(text || '').toLowerCase().match(/[a-záéíóúñü']+/g) || [];
+    if (words.length < 4) return false;
+    const en = new Set(['the', 'is', 'are', 'was', 'you', 'your', 'and', 'to', 'of', 'in', 'it', 'that', 'this', 'with', 'for', 'means', 'say', 'can', 'not', 'what', 'how', 'when', 'use', 'word', 'sentence', 'here', 'try', 'would', 'have', 'has', 'be', 'a', 'an', 'we', 'i']);
+    const es = new Set(['el', 'la', 'los', 'las', 'un', 'una', 'es', 'son', 'y', 'de', 'que', 'en', 'por', 'para', 'con', 'no', 'qué', 'cómo', 'cuándo', 'dónde', 'me', 'te', 'se', 'lo', 'mi', 'tu', 'su', 'muy', 'pero', 'si', 'sí', 'hola', 'estoy', 'estás', 'está', 'tengo', 'tienes', 'quiero', 'puedes', 'vamos', 'gracias']);
+    let e = 0, s = 0;
+    words.forEach(w => { if (en.has(w)) e++; if (es.has(w)) s++; });
+    return e >= 3 && e > s * 1.5;
+}
+
 // opts.force = the student pressed a replay button, so speak even if the voice is switched off.
 function speakText(text, opts) {
     if ((!ttsEnabled && !(opts && opts.force)) || !window.speechSynthesis) return;
-    const clean = text
-        .replace(/<[^>]+>/g, '')
-        .replace(/\[.*?\]/g, '')
-        .replace(/[⚠️🎭💬🖼️📚✈️☕👋🛒🏥🏨]/gu, '')
-        .replace(/\*+/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const clean = ttsCleanText(text);
     if (!clean) return;
     window.speechSynthesis.cancel();
+    const english = ttsLooksEnglish(clean);
     const utt = new SpeechSynthesisUtterance(clean);
-    utt.lang = 'es-ES';
-    utt.rate = ttsSlow ? 0.7 : 0.88;
-    utt.pitch = 1.05;
-    if (ttsVoice) utt.voice = ttsVoice;
+    utt.lang = english ? 'en-US' : 'es-ES';
+    utt.rate = english ? 0.95 : (ttsSlow ? 0.7 : 0.88);
+    utt.pitch = 1;
+    const voice = english ? ttsEnVoice : ttsVoice;
+    if (voice) utt.voice = voice;
     window.speechSynthesis.speak(utt);
 }
 
@@ -2436,6 +2512,18 @@ function ensureAiExtras() {
             b.classList.toggle('active', ttsSlow);
             b.addEventListener('click', toggleSlowTTS);
             voiceBtn.parentNode.insertBefore(b, voiceBtn);
+        }
+    }
+    if (!document.getElementById('ttsVoiceSelect') && window.speechSynthesis) {
+        const slowBtn = document.getElementById('ttsSlowBtn');
+        if (slowBtn) {
+            const sel = document.createElement('select');
+            sel.id = 'ttsVoiceSelect'; sel.className = 'tts-voice-select';
+            sel.title = 'Pick the voice that reads the replies aloud';
+            sel.setAttribute('aria-label', 'Reading voice');
+            sel.addEventListener('change', () => chooseTtsVoice(sel.value));
+            slowBtn.parentNode.insertBefore(sel, slowBtn);
+            fillTtsVoiceSelect();
         }
     }
     if (!document.getElementById('aiQuickReplies')) {
