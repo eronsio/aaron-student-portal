@@ -19,11 +19,12 @@
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-// Chat turns stay on the fast/cheap model. The end-of-session report for Aaron
-// (task: "report") is one call per session and its accuracy matters, so it gets
-// the stronger model, with Haiku as a fallback if that model call fails.
-const CHAT_MODEL = "claude-haiku-4-5-20251001";
-const REPORT_MODELS = ["claude-sonnet-5", CHAT_MODEL];
+// The stronger model answers chat turns and writes the end-of-session report; accuracy of the
+// corrections is the point of the product (a live test caught the faster model mis-correcting
+// "gusta" + infinitive). Haiku is the fallback if the strong model errors or returns nothing.
+const FAST_MODEL = "claude-haiku-4-5-20251001";
+const STRONG_MODEL = "claude-sonnet-5";
+const MODELS = [STRONG_MODEL, FAST_MODEL];
 
 const ALLOWED_ORIGINS = new Set([
   "https://aaron-learning.com",
@@ -81,8 +82,8 @@ Deno.serve(async (req: Request) => {
   // older cached copies of the portal keep working unchanged.
   const isReport = body.task === "report";
   const limits = isReport
-    ? { perMessage: 16000, system: 12000, maxTokens: 3500, models: REPORT_MODELS }
-    : { perMessage: 4000, system: 8000, maxTokens: 250, models: [CHAT_MODEL] };
+    ? { perMessage: 16000, system: 12000, maxTokens: 3500, models: MODELS }
+    : { perMessage: 4000, system: 8000, maxTokens: 300, models: MODELS };
 
   const safeMessages = messages
     .slice(-20)
@@ -114,15 +115,15 @@ Deno.serve(async (req: Request) => {
         system: systemPrompt.slice(0, limits.system),
         messages: safeMessages,
       };
-      // The report is structured extraction, not a puzzle. Left on, the stronger model spends
-      // a large share of max_tokens on hidden reasoning (measured: ~19 s, and the JSON came back
-      // cut off mid-answer), so reasoning is switched off for it.
-      if (isReport) payload.thinking = { type: "disabled" };
+      // Reasoning is switched off for everything: chat replies are three short sentences and the
+      // report is structured extraction. Left on, the stronger model spends a large share of
+      // max_tokens on hidden reasoning (measured on the report: ~19 s, JSON cut off mid-answer).
+      payload.thinking = { type: "disabled" };
 
       let anthropicRes = await callAnthropic(payload);
       let data = await anthropicRes.json();
       // If a model rejects the thinking setting, retry that model once without it.
-      if (!anthropicRes.ok && isReport && /thinking/i.test(data?.error?.message || "")) {
+      if (!anthropicRes.ok && /thinking/i.test(data?.error?.message || "")) {
         delete payload.thinking;
         anthropicRes = await callAnthropic(payload);
         data = await anthropicRes.json();
@@ -134,9 +135,9 @@ Deno.serve(async (req: Request) => {
           .filter((b: any) => b && b.type === "text" && typeof b.text === "string")
           .map((b: any) => b.text)
           .join("");
-        // For reports an empty answer is a failure: fall through to the next model.
-        if (text || !isReport) return json(req, { text, model, stop: data.stop_reason });
-        console.error("Empty report text for user", user.id, "model", model, "stop", data.stop_reason,
+        // An empty answer is a failure: fall through to the next model.
+        if (text) return json(req, { text, model, stop: data.stop_reason });
+        console.error("Empty text for user", user.id, "model", model, "stop", data.stop_reason,
           "blocks", (Array.isArray(data.content) ? data.content : []).map((b: any) => b?.type));
         lastError = "The model returned no text";
         continue;

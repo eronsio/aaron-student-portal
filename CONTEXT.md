@@ -54,8 +54,9 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - Calls Anthropic API via a Supabase Edge Function `ai-companion` (key stored server-side as the
   `ANTHROPIC_API_KEY` secret, never sent to the browser). The function verifies the caller's Supabase
   JWT via `/auth/v1/user` before proxying to Anthropic — see `supabase/functions/ai-companion/index.ts`.
-  Normal chat turns use Haiku (250 tokens). `task: "report"` (end-of-session report) uses Sonnet with a
-  Haiku fallback and a larger budget.
+  Chat turns and the end-of-session report (`task: "report"`) use `claude-sonnet-5` with reasoning switched
+  off, falling back to Haiku 4.5 if it errors or returns nothing. Chat replies are capped at 300 tokens, reports
+  at 3500. (A live comparison showed Haiku praising "Me gustan correr y nadar"; Sonnet corrects it.)
 - Voice input via the browser's `SpeechRecognition` (Web Speech API) — free, client-side, no separate
   transcription service. Streams live into the chat text box while the mic button is held; the student
   can edit before sending. Browsers without support (Firefox, some older WebViews) get the mic button
