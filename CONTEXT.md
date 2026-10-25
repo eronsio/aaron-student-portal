@@ -65,10 +65,18 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   at 3500. (A live comparison showed Haiku praising "Me gustan correr y nadar"; Sonnet corrects it.)
   Per-student rate limit (best-effort, in the function instance's memory): chat 30/min + 600/day, reports 10/hour; over the limit
   the function answers 429 with a Spanish "Vas muy rápido…" message.
-- Voice input via the browser's `SpeechRecognition` (Web Speech API) — free, client-side, no separate
-  transcription service. Streams live into the chat text box while the mic button is held; the student
-  can edit before sending. Browsers without support (Firefox, some older WebViews) get the mic button
-  disabled with a tooltip — typing always works.
+- **Voice conversation** (script.js "VOICE CONVERSATION" section, uses the browser's `SpeechRecognition`; free, client-side): the student taps the
+  mic once and just talks — speech is transcribed live into the box, **sent automatically** ~1.9 s after they stop (`CONVO_SILENCE_MS`), the reply is
+  read aloud, and the mic opens again, like a voice call. Tap the mic while the AI is talking = cut it off and answer; tap while listening = end.
+  State machine in `convo` (`listening`/`thinking`/`speaking`/`paused`); `speakText()` returns a promise that resolves when playback ends, which is
+  what reopens the mic (with a length-based timeout so a browser that never reports the end can't hang it). Turns arrive via `submitAiMessage(text, {voice:true})`;
+  those turns get `PRACTICE_VOICE_RULE` (practice.js: speech-to-text may lack accents/punctuation — never correct those; ask "¿Quisiste decir…?";
+  1–2 short sentences) and are flagged `voice` in the saved transcript. It pauses itself after ~25 s of silence, on any error, when the page is hidden,
+  on tab switch or when leaving the chat. On iPhone the browser may refuse the automatic re-open (needs a tap) → it pauses with "Tap the mic to keep
+  talking". Browsers without `SpeechRecognition` (Firefox) get the mic disabled with a tooltip — typing always works.
+- Phone layout (`@media (max-width: 640px)` at the end of styles.css): while the chat is open the page header and tab stack are hidden, the topbar
+  wraps (mode + End session / voice controls), the message box height follows the screen (`100dvh`), the quick replies scroll sideways and the input is 16px
+  (stops iPhone zoom-on-focus).
 - Reading replies aloud: **natural voice** from the `ai-speak` Edge Function (ElevenLabs behind the same student-JWT check and a per-student rate
   limit; secrets `ELEVENLABS_API_KEY`, optional `ELEVENLABS_VOICE_ID` / `ELEVENLABS_MODEL`; clips are cached client-side per text+pace), with the
   browser's `speechSynthesis` as the automatic fallback whenever the function is missing/unconfigured (503/404 backs off 30 min), errors, times out

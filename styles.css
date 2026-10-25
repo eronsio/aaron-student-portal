@@ -978,16 +978,41 @@ main {
 }
 
 .record-btn.recording {
-    background: #ef4444;
+    background: #c2736c;
     color: #fff;
-    border-color: #ef4444;
-    animation: pulse-record 1s infinite;
+    border-color: #c2736c;
+    animation: pulse-record 1.4s infinite;
 }
 
 @keyframes pulse-record {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-    50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194, 115, 108, 0.35); }
+    50% { box-shadow: 0 0 0 8px rgba(194, 115, 108, 0); }
 }
+
+/* Voice conversation: the mic stays "on" (calm slate) while the AI thinks and speaks, and turns warm while it listens */
+.record-btn.convo-on {
+    background: #475569;
+    color: #fff;
+    border-color: #475569;
+}
+
+.ai-voice-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding: 6px 12px;
+    background: #eef2f7;
+    border: 1px solid #d5dbe3;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.ai-voice-status i { font-size: 8px; color: #94a3b8; }
+.ai-voice-status.state-listening i { color: #c2736c; animation: pulse-dot 1.2s infinite; }
+.ai-voice-status.state-speaking i { color: #5b7fa6; animation: pulse-dot 1.2s infinite; }
+.ai-voice-status.state-thinking i { color: #94a3b8; animation: pulse-dot 1.2s infinite; }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 /* Signup Success Card */
 .success-card {
@@ -3198,3 +3223,29 @@ body.ai-chat-open .floating-book-btn { display: none; }
 .install-tip i { color: var(--text-secondary); font-size: 18px; }
 .install-tip span { flex: 1; line-height: 1.4; }
 .install-tip button { flex: none; padding: 6px 12px; border: 1px solid #b9c6d8; border-radius: var(--radius-md); background: #fff; color: var(--text-primary); font-size: 13px; cursor: pointer; }
+
+/* ---- Speaking Practice chat on phones ---- */
+@media (max-width: 640px) {
+    /* mode name + End session on one row, the voice controls on the next: nothing wider than the screen */
+    .ai-chat-topbar { flex-wrap: wrap; gap: 8px; }
+    .ai-chat-topbar > div:last-child { display: contents !important; }
+    .ai-mode-label { flex: 1 1 auto; min-width: 0; max-width: 100%; text-align: left; order: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ai-chat-topbar .back-btn { order: 1; margin: 0 !important; }
+    .ai-chat-topbar #ttsToggleBtn, .ai-chat-topbar #ttsSlowBtn, .ai-chat-topbar .tts-voice-select { order: 2; }
+    .tts-voice-select { max-width: 130px; }
+    /* the conversation gets the screen: no tab stack or page header above it, and a height that follows the phone, not a fixed 400px */
+    body.ai-chat-open #tabNav, body.ai-chat-open #mainApp > header { display: none; }
+    body.ai-chat-open main.container { padding: 8px; }
+    body.ai-chat-open .tab-content { padding: 12px; }
+    .ai-chat-messages { height: 50vh; height: calc(100dvh - 330px); min-height: 180px; padding: 12px; gap: 12px; }
+    .ai-message { max-width: 94%; gap: 8px; }
+    .ai-bubble { padding: 10px 12px; min-width: 0; overflow-wrap: anywhere; }
+    .ai-voice-status { margin: 8px 12px 0; }
+    .ai-quick-replies { flex-wrap: nowrap; overflow-x: auto; padding: 8px 12px 0; gap: 6px; -webkit-overflow-scrolling: touch; }
+    .ai-quick-replies { scrollbar-width: none; }
+    .ai-quick-replies::-webkit-scrollbar { display: none; }
+    .ai-quick-replies button { flex: none; white-space: nowrap; }
+    .ai-chat-input-container { padding: 10px 12px; gap: 8px; }
+    /* 16px stops iPhones from zooming the page when the box is focused */
+    #aiMessageInput { font-size: 16px; padding: 10px 12px; min-width: 0; }
+}

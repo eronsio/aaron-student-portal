@@ -202,6 +202,9 @@ Ejemplo de respuesta ideal:
 Estudiante: "Ayer yo fue al supermercado"
 Tú: "¡Bien! [✓ 'fui' para yo — 'fue' es para él/ella] ¿Y qué compraste allí?"`;
 
+// Added when the student's latest message came from the microphone (hands-free conversation mode).
+const PRACTICE_VOICE_RULE = `16. El último mensaje del estudiante viene del reconocimiento de voz, no está escrito: puede faltar puntuación, tildes y mayúsculas, y alguna palabra puede estar mal reconocida. NUNCA corrijas puntuación, tildes ni ortografía en un mensaje de voz; corrige solo errores claros de gramática o vocabulario. Si una palabra no tiene sentido y suena parecida a otra, pregunta "¿Quisiste decir…?" en vez de corregir. Esto es una conversación hablada: responde con 1 o 2 frases cortas y termina con una pregunta.`;
+
 const PRACTICE_REPORT_SCHEMA = `{
   "summary": "2-3 sentences for the teacher: what the student practised and how it went",
   "focus_results": [
@@ -430,7 +433,7 @@ function practiceSessionTargets() {
 
 // Builds the system prompt for every companion turn. Replaces the old version in
 // script.js: same persona and rules, plus the teacher's plan when there is one.
-function buildAISystemPrompt(mode, context, insight) {
+function buildAISystemPrompt(mode, context, insight, opts) {
     const name = practiceDisplayName(practicePromptName());
     const profile = practiceCtx.profile;
     const targets = practiceSessionTargets();
@@ -465,7 +468,7 @@ function buildAISystemPrompt(mode, context, insight) {
 ${modeInstructions[mode] || modeInstructions.free}
 ${plan ? '\n' + plan + '\n' : ''}${legacyWeaknesses}
 
-${PRACTICE_BASE_RULES(levelLine)}`;
+${PRACTICE_BASE_RULES(levelLine)}${opts && opts.voice ? '\n' + PRACTICE_VOICE_RULE : ''}`;
 }
 
 function practiceMarkVoice() { practiceVoiceFlag = true; }

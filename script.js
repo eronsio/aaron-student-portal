@@ -150,8 +150,6 @@ async function sbDeleteProgress(userId, courseId, lessonId) {
 const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
 const speechSupported = !!SpeechRecognitionCtor;
 let recognition = null;
-let isListening = false;
-let committedTranscript = '';
 
 // ============================================================
 // ADMIN CODE — Change this to whatever you want
@@ -1254,13 +1252,12 @@ function setupEventListeners() {
         if (e.key === 'Enter') sendAiMessage();
     });
 
-    // Voice input (press & hold) — live transcription into the text box
+    // Voice conversation: tap the mic and talk; it sends by itself and the reply is read aloud
     if (speechSupported) {
-        aiRecordBtn.addEventListener('mousedown', micPress);
-        aiRecordBtn.addEventListener('mouseup', micRelease);
-        aiRecordBtn.addEventListener('mouseleave', micRelease);
-        aiRecordBtn.addEventListener('touchstart', (e) => { e.preventDefault(); micPress(); });
-        aiRecordBtn.addEventListener('touchend', (e) => { e.preventDefault(); micRelease(); });
+        aiRecordBtn.addEventListener('click', convoToggle);
+        setConvoState('off');
+        // Never keep a microphone open while the page is in the background.
+        document.addEventListener('visibilitychange', () => { if (document.hidden && convo.on) convoStop(); });
     } else {
         aiRecordBtn.disabled = true;
         aiRecordBtn.title = 'La entrada de voz no está disponible en este navegador. Prueba Chrome, Edge o Safari — o simplemente escribe.';
@@ -2043,6 +2040,7 @@ function showTab(tabName) {
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.classList.add('active');
+    if (tabName !== 'ai-companion' && typeof convo !== 'undefined' && convo.on) convoStop();
     syncAiChatClass();
 
     if (tabName === 'community') {
@@ -2287,12 +2285,23 @@ const AI_SPEAK_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-speak`;
 let ttsServerUntil = 0;     // skip the natural voice until this time (ms) after a failure
 let ttsSpeakSeq = 0;        // bumps on every speak/stop so a slow, superseded request never talks over a newer one
 let ttsAudio = null;
+let ttsDoneResolve = null;  // resolves when the current reply has finished playing (or was cut off)
 const ttsAudioCache = new Map();   // "lang|pace|text" -> blob URL, so "listen again" costs nothing
+
+// Called when playback ends. `seq` (when given) must still be the current utterance, so the late "ended"
+// event of a reply that was cut off can't signal the end of the one that replaced it.
+function ttsEndDone(seq) {
+    if (seq !== undefined && seq !== ttsSpeakSeq) return;
+    const resolve = ttsDoneResolve;
+    ttsDoneResolve = null;
+    if (resolve) resolve();
+}
 
 function stopSpeaking() {
     ttsSpeakSeq++;
     if (ttsAudio) { try { ttsAudio.pause(); } catch (e) {} ttsAudio = null; }
     window.speechSynthesis?.cancel();
+    ttsEndDone();
 }
 
 // Resolves true once audio is playing (or the request was superseded), false when the browser voice should take over.
@@ -2333,13 +2342,14 @@ async function speakViaServer(clean, english, seq) {
     return new Promise(resolve => {
         const audio = new Audio(url);
         ttsAudio = audio;
-        audio.onended = () => { if (ttsAudio === audio) ttsAudio = null; };
+        audio.onended = () => { if (ttsAudio === audio) ttsAudio = null; ttsEndDone(seq); };
+        audio.onerror = () => { if (ttsAudio === audio) ttsAudio = null; ttsEndDone(seq); };
         audio.play().then(() => resolve(true), () => resolve(false));   // autoplay blocked -> browser voice
     });
 }
 
-function speakInBrowser(clean, english) {
-    if (!window.speechSynthesis) return;
+function speakInBrowser(clean, english, seq) {
+    if (!window.speechSynthesis) { ttsEndDone(seq); return; }
     if (!ttsVoice || !ttsEnVoice) {   // voices can finish loading after init (Firefox): pick again
         const voices = window.speechSynthesis.getVoices();
         if (!ttsVoice) ttsVoice = ttsPickVoice(voices, 'es-ES');
@@ -2351,22 +2361,30 @@ function speakInBrowser(clean, english) {
     utt.pitch = 1;
     const voice = english ? ttsEnVoice : ttsVoice;
     if (voice) utt.voice = voice;
+    utt.onend = utt.onerror = () => ttsEndDone(seq);
     window.speechSynthesis.speak(utt);
 }
 
 // opts.force = the student pressed a replay button, so speak even if the voice is switched off.
+// The returned promise resolves when the reply has finished playing (immediately if nothing is spoken).
 async function speakText(text, opts) {
     if (!ttsEnabled && !(opts && opts.force)) return;
     const clean = ttsCleanText(text);
     if (!clean) return;
     stopSpeaking();
     const seq = ttsSpeakSeq;
+    const done = new Promise(resolve => { ttsDoneResolve = resolve; });
     const english = ttsLooksEnglish(clean);
     try {
-        if (_accessToken && Date.now() >= ttsServerUntil && await speakViaServer(clean, english, seq)) return;
+        if (_accessToken && Date.now() >= ttsServerUntil && await speakViaServer(clean, english, seq)) return done;
     } catch (e) { /* fall through to the browser voice */ }
-    if (seq !== ttsSpeakSeq) return;
-    speakInBrowser(clean, english);
+    if (seq !== ttsSpeakSeq) return done;
+    speakInBrowser(clean, english, seq);
+    return done;
+}
+
+function setTtsEnabled(on) {
+    if (ttsEnabled !== on) toggleTTS();
 }
 
 function toggleTTS() {
@@ -2501,13 +2519,14 @@ async function startAiMode(mode, context) {
 }
 
 async function endAiSession() {
-    if (isListening) stopListening();
+    convoStop();
     const tookOverScreen = await practiceFinishSession();
     if (!tookOverScreen) leaveAiChat();
 }
 
 // Back to the mode picker (the recap's "Back to practice" button calls this too).
 function leaveAiChat() {
+    convoStop();
     document.getElementById('aiChatView').classList.add('hidden');
     document.getElementById('aiRecapView').classList.add('hidden');
     document.getElementById('aiModeSelector').classList.remove('hidden');
@@ -2564,6 +2583,8 @@ async function submitAiMessage(message, opts) {
     if (!message || !currentAiMode || aiBusy) return;
     aiBusy = true;
     setAiBusyUI(true);
+    if (convo.on) convoDetach();   // a typed message went out while the mic was open: the reply decides what happens next
+    let spoken = null, reply = '', failed = false;
     try {
         appendAiMessage('user', escapeHtml(message));
         if (!opts.help) aiMessageInput.value = '';
@@ -2575,20 +2596,25 @@ async function submitAiMessage(message, opts) {
         saveConversationTurn('user', message);
         practiceRecordTurn('user', message, opts.help ? { help: true } : undefined);
 
-        const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache);
+        const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache, { voice: !!opts.voice });
         const response = await callAnthropicAPI(aiConversationHistory, systemPrompt);
 
         aiConversationHistory.push({ role: 'assistant', content: response });
         saveConversationTurn('assistant', response);
-        const failed = response.startsWith('⚠️');
+        failed = response.startsWith('⚠️');
+        reply = response;
         if (!failed) practiceRecordTurn('assistant', response);
 
         typing.remove();
         appendAiMessage('bot', practiceFormatReply(response), failed ? '' : response);
-        speakText(response);
+        spoken = speakText(response);
     } finally {
         aiBusy = false;
         setAiBusyUI(false);
+    }
+    if (convo.on) {
+        if (failed || spoken === null) convoPause(failed ? 'Something went wrong — tap the mic to try again' : undefined);
+        else convoResume(spoken, reply.length);
     }
 }
 
@@ -2635,6 +2661,18 @@ function ensureAiExtras() {
             input.parentNode.insertBefore(row, input);
         }
     }
+    if (!document.getElementById('aiVoiceStatus')) {
+        const anchor = document.getElementById('aiQuickReplies') || document.querySelector('#aiChatView .ai-chat-input-container');
+        if (anchor) {
+            const bar = document.createElement('div');
+            bar.id = 'aiVoiceStatus';
+            bar.className = 'ai-voice-status hidden';
+            bar.setAttribute('role', 'status');
+            bar.setAttribute('aria-live', 'polite');
+            bar.innerHTML = '<i class="fas fa-circle"></i><span></span>';
+            anchor.parentNode.insertBefore(bar, anchor);
+        }
+    }
 }
 
 function initAiCompanion() {
@@ -2658,82 +2696,173 @@ function initAiCompanion() {
 
 
 // ============================================================
-// VOICE INPUT — live speech-to-text (Web Speech API)
+// VOICE CONVERSATION — hands-free speaking practice (Web Speech API)
 // ============================================================
-// Press-and-hold the mic button: recognized speech streams straight into
-// aiMessageInput as the student talks, so they can see and fix a mis-heard
-// word before sending — then it goes through the exact same send flow
-// (sendAiMessage) as if they'd typed it. No separate "voice message" pipeline.
-function initSpeechRecognition() {
+// Tap the mic once and just talk. Speech is transcribed live, sent automatically a moment after the
+// student stops talking, the reply is read aloud, and the mic opens again for the next turn — like a
+// voice call. Tap the mic again to end it. The transcript goes through the same send flow
+// (submitAiMessage) as typed text, flagged as voice so the AI and the teacher's report know.
+const CONVO_SILENCE_MS = 1900;      // pause after the last word that counts as "finished" (learners pause a lot)
+const CONVO_MAX_EMPTY_ROUNDS = 3;   // rounds with no speech before the conversation pauses itself (~25 s)
+const CONVO_LABELS = {
+    listening: 'Listening… just talk',
+    thinking: 'Thinking…',
+    speaking: 'Speaking… tap the mic to answer'
+};
+const convo = { on: false, state: 'off', rec: null, timer: null, empties: 0, granted: false };
+
+// state: 'off' | 'listening' | 'thinking' | 'speaking' | 'paused'. `message` overrides the status text.
+function setConvoState(state, message) {
+    convo.state = state;
+    const text = message || CONVO_LABELS[state] || (state === 'paused' ? 'Paused — tap the mic to keep talking' : '');
+    const bar = document.getElementById('aiVoiceStatus');
+    if (bar) {
+        bar.className = 'ai-voice-status state-' + state + (text ? '' : ' hidden');
+        const label = bar.querySelector('span');
+        if (label) label.textContent = text;
+    }
+    if (aiRecordBtn) {
+        aiRecordBtn.classList.toggle('convo-on', convo.on);
+        aiRecordBtn.classList.toggle('recording', convo.on && state === 'listening');
+        aiRecordBtn.innerHTML = convo.on ? '<i class="fas fa-stop"></i>' : '<i class="fas fa-microphone"></i>';
+        aiRecordBtn.title = convo.on ? 'Tap to end the voice conversation' : 'Tap and just talk: it sends by itself';
+    }
+    if (aiMessageInput) aiMessageInput.placeholder = state === 'listening' ? 'Listening…' : 'Escribe en español...';
+}
+
+function convoToggle() {
+    if (convo.on) {
+        if (convo.state === 'speaking') convoNext();   // the student wants to answer now: cut the reply short and listen
+        else convoStop();
+        return;
+    }
+    if (!speechSupported || !currentAiMode) return;
+    convo.on = true;
+    convo.empties = 0;
+    setTtsEnabled(true);   // a spoken conversation needs the replies read aloud
+    convoNext();
+}
+
+// Opens the mic, unless a reply is still being written (submitAiMessage hands control back when it is done).
+function convoNext() {
+    if (!convo.on || convo.rec) return;   // off, or the mic is already open
+    if (aiBusy) { setConvoState('thinking'); return; }
+    stopSpeaking();
+    convoListen();
+}
+
+function convoListen() {
+    if (!convo.on) return;
     const rec = new SpeechRecognitionCtor();
     rec.lang = 'es-ES';
     rec.continuous = true;
     rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    let finalText = '', interim = '', done = false;
+
+    const finish = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(convo.timer); convo.timer = null;
+        try { rec.stop(); } catch (e) {}
+        if (convo.rec === rec) convo.rec = null;
+        if (!convo.on) return;
+        const text = (finalText + ' ' + interim).replace(/\s+/g, ' ').trim();
+        if (!text) { convoEmptyRound(); return; }
+        convo.empties = 0;
+        aiMessageInput.value = '';
+        practiceMarkVoice();
+        setConvoState('thinking');
+        submitAiMessage(text, { voice: true });
+    };
+
+    rec.onaudiostart = () => { convo.granted = true; };
     rec.onresult = (event) => {
-        let interim = '';
+        convo.granted = true;
+        interim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const chunk = event.results[i][0].transcript;
-            if (event.results[i].isFinal) committedTranscript = (committedTranscript + ' ' + chunk).trim();
+            if (event.results[i].isFinal) finalText = (finalText + ' ' + chunk).trim();
             else interim += chunk;
         }
-        aiMessageInput.value = (committedTranscript + ' ' + interim).trim();
-        practiceMarkVoice();
+        aiMessageInput.value = (finalText + ' ' + interim).trim();   // shows what is being heard
+        clearTimeout(convo.timer);
+        convo.timer = setTimeout(finish, CONVO_SILENCE_MS);
     };
     rec.onerror = (event) => {
-        stopListeningUI();
-        if (event.error === 'not-allowed') alert('Por favor permite el acceso al micrófono.');
+        if (event.error === 'no-speech' || event.error === 'aborted') return;   // onend handles both
+        done = true;
+        clearTimeout(convo.timer); convo.timer = null;
+        if (convo.rec === rec) convo.rec = null;
+        if (!convo.on) return;
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            if (convo.granted) {
+                // Mic was working: the browser refused a restart that wasn't triggered by a tap (iPhone does this).
+                convoPause('Tap the mic to keep talking');
+            } else {
+                convoStop();
+                alert('Por favor permite el acceso al micrófono.');
+            }
+        } else if (event.error === 'audio-capture') {
+            convoPause('No microphone found');
+        } else {
+            convoPause('Voice input lost its connection — tap the mic to try again');
+        }
     };
-    rec.onend = () => stopListeningUI();
-    return rec;
-}
+    rec.onend = () => {
+        if (done || convo.rec !== rec) return;   // finished, errored, or replaced already
+        // The browser closed the round by itself (silence, or its time limit).
+        if ((finalText + interim).trim()) finish();
+        else { done = true; clearTimeout(convo.timer); convo.timer = null; convo.rec = null; convoEmptyRound(); }
+    };
 
-// The mic works two ways: press and HOLD while talking (release to stop), or TAP once to start and
-// TAP again to stop. A press longer than HOLD_MS counts as a hold.
-const MIC_HOLD_MS = 500;
-let micDownAt = 0, micPressed = false, micIgnoreRelease = false;
-
-function micPress() {
-    if (micPressed) return;
-    micPressed = true;
-    if (isListening) { stopListening(); micIgnoreRelease = true; return; }   // second tap stops
-    micIgnoreRelease = false;
-    micDownAt = Date.now();
-    startListening();
-}
-
-function micRelease() {
-    if (!micPressed) return;
-    micPressed = false;
-    if (micIgnoreRelease) { micIgnoreRelease = false; return; }
-    if (isListening && Date.now() - micDownAt >= MIC_HOLD_MS) stopListening(); // it was a hold
-    // a short tap leaves the mic on until the next tap
-}
-
-function startListening() {
-    if (!speechSupported || isListening || !currentAiMode) return;
-    stopSpeaking();   // the student is about to talk: don't let the reply play over them
-    if (!recognition) recognition = initSpeechRecognition();
-    committedTranscript = aiMessageInput.value.trim();
+    convo.rec = rec;
     try {
-        recognition.start();
-        isListening = true;
-        aiRecordBtn.classList.add('recording');
-        aiRecordBtn.innerHTML = '<i class="fas fa-stop"></i>';
-        aiMessageInput.placeholder = 'Escuchando… toca el micrófono otra vez para parar';
+        rec.start();
+        setConvoState('listening');
     } catch (err) {
         console.error('SpeechRecognition start failed:', err);
+        convo.rec = null;
+        convoPause('Could not start the microphone — tap the mic to try again');
     }
 }
 
-function stopListening() {
-    if (isListening) recognition.stop(); // onend -> stopListeningUI()
+function convoEmptyRound() {
+    convo.empties++;
+    if (convo.empties >= CONVO_MAX_EMPTY_ROUNDS) { convoPause('Paused — tap the mic to keep talking'); return; }
+    convoListen();   // keep the mic open for the student's next try
 }
 
-function stopListeningUI() {
-    isListening = false;
-    aiRecordBtn.classList.remove('recording');
-    aiRecordBtn.innerHTML = '<i class="fas fa-microphone"></i>';
-    aiMessageInput.placeholder = 'Escribe en español...';
+// Stops listening without sending anything (a typed message is about to go out instead).
+function convoDetach() {
+    clearTimeout(convo.timer); convo.timer = null;
+    if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} }
+    setConvoState('thinking');
+}
+
+// After the reply has been spoken, open the mic again.
+async function convoResume(spoken, replyLength) {
+    if (!convo.on) return;
+    setConvoState('speaking');
+    // Browsers sometimes never report the end of a spoken reply: don't let the conversation hang on it.
+    const cap = Math.min(45000, 4000 + replyLength * 110);
+    await Promise.race([spoken, new Promise(resolve => setTimeout(resolve, cap))]);
+    if (!convo.on) return;
+    setTimeout(() => { if (convo.on && !aiBusy) convoNext(); }, 350);
+}
+
+// The conversation stops but the status line stays, saying why and how to carry on.
+function convoPause(message) {
+    convoStop();
+    setConvoState('paused', message);
+}
+
+function convoStop() {
+    convo.on = false;
+    clearTimeout(convo.timer); convo.timer = null;
+    if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} }
+    stopSpeaking();
+    setConvoState('off');
 }
 
 // ============================================================
