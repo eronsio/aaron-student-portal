@@ -113,6 +113,14 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
 - Setup: run `supabase/speaking_practice.sql` once in the Supabase SQL editor, deploy the `ai-companion` function with the
   `ANTHROPIC_API_KEY` secret, then enable students in Admin → Speaking Practice.
 
+## Home-screen app (PWA, no App Store)
+- `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.
+  iPhone students open the site in Safari → Share → Add to Home Screen; it then opens full-screen with its own icon (name "Aaron Learning").
+- `maybeShowInstallTip()` (script.js, called from `showMainApp`) shows a one-time dismissible hint to iPhone/iPad students who haven't installed it
+  (never for the admin, never inside the installed app; dismissal remembered in localStorage `installTipDismissed`).
+- Deliberately NO service worker: iOS doesn't need one to install, and a caching worker would risk serving stale `script.js` after deploys. So no offline mode.
+- Not verified on a physical iPhone (no simulator here): check that voice input (Web Speech) works inside the installed app. The installed app has its own storage, so students sign in again there.
+
 ## Deployment
 - **Current:** drag-and-drop zip into Cloudflare Pages dashboard
 - **Goal:** GitHub repo connected to Cloudflare Pages for auto-deploy on `git push`
