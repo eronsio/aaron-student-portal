@@ -3192,3 +3192,9 @@ body.ai-chat-open .floating-book-btn { display: none; }
 .ai-admin-row label { font-size: 13px; font-weight: 600; }
 .ai-admin-row select { font-size: 13px; font-family: inherit; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: #fff; max-width: 100%; }
 .ai-chip-preview { background: #f7f1dc; border-color: #e3d49b; color: #6b5a22; }
+
+/* "Add to Home Screen" hint for iPhone students */
+.install-tip { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 10px 14px; background: #eef2f7; border: 1px solid #d5dbe3; border-radius: var(--radius-lg); font-size: 14px; color: var(--text-primary); }
+.install-tip i { color: var(--text-secondary); font-size: 18px; }
+.install-tip span { flex: 1; line-height: 1.4; }
+.install-tip button { flex: none; padding: 6px 12px; border: 1px solid #b9c6d8; border-radius: var(--radius-md); background: #fff; color: var(--text-primary); font-size: 13px; cursor: pointer; }

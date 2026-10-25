@@ -1563,6 +1563,28 @@ function showLoginModal() {
 // ============================================================
 // MAIN APP
 // ============================================================
+// iPhone/iPad students get a one-time hint on how to put the portal on their home screen
+// (iOS has no install prompt of its own). Not shown to the admin, inside the installed app, or after "Got it".
+function maybeShowInstallTip() {
+    if (!currentUser || currentUser.isAdmin || document.getElementById('installTip')) return;
+    const ua = navigator.userAgent || '';
+    const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const installed = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    let dismissed = false;
+    try { dismissed = localStorage.getItem('installTipDismissed') === '1'; } catch (e) {}
+    if (!ios || installed || dismissed) return;
+    const tip = document.createElement('div');
+    tip.id = 'installTip';
+    tip.className = 'install-tip';
+    tip.innerHTML = '<i class="fas fa-mobile-alt"></i><span>Keep this portal on your home screen: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</span><button type="button">Got it</button>';
+    tip.querySelector('button').addEventListener('click', () => {
+        tip.remove();
+        try { localStorage.setItem('installTipDismissed', '1'); } catch (e) {}
+    });
+    const main = document.querySelector('#mainApp main');
+    if (main) main.prepend(tip);
+}
+
 async function showMainApp() {
     loginModal.classList.add('hidden');
     mainApp.classList.remove('hidden');
@@ -1595,6 +1617,7 @@ async function showMainApp() {
     populateResources();
     populatePersonalFolder();
     updateCommunityDescription();
+    maybeShowInstallTip();
 
     showTab('courses');
     // Don't leave the page blank while the course list loads.
