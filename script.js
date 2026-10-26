@@ -2810,7 +2810,9 @@ function ensureAiExtras() {
             <div class="ai-pop-row"><span>Pace</span>
                 <div class="ai-seg" id="aiPaceSeg" role="group" aria-label="Reading pace">
                     <button type="button" data-pace="normal">Normal</button><button type="button" data-pace="slow">Slow</button>
-                </div></div>`;
+                </div></div>
+            <div class="ai-pop-row"><span>Microphone problems?</span><button type="button" id="aiDiagBtn" class="ai-pop-link">Copy diagnostics</button></div>
+            <pre id="aiDiagBox" class="ai-diag hidden"></pre>`;
         actions.insertBefore(btn, document.getElementById('ttsToggleBtn'));
         actions.appendChild(menu);
         btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiSettingsMenu', btn); });
@@ -2818,6 +2820,8 @@ function ensureAiExtras() {
         const sel = menu.querySelector('#ttsVoiceSelect');
         if (sel) { sel.addEventListener('change', () => chooseTtsVoice(sel.value)); fillTtsVoiceSelect(); }
         setSlowTTS(ttsSlow);
+        const diag = menu.querySelector('#aiDiagBtn');
+        if (diag) diag.addEventListener('click', () => convoCopyDiagnostics(diag));
     }
     // The admin's floating tools button would sit on top of the composer while the chat is open (see styles.css), so the
     // chat header carries its own Tools button for the admin.
@@ -2851,13 +2855,15 @@ function ensureAiExtras() {
         const panel = document.createElement('div');
         panel.id = 'aiVoicePanel'; panel.className = 'ai-voice-panel hidden';
         panel.innerHTML = `<button type="button" id="aiVoiceOrb" class="voice-orb" aria-label="Voice conversation: tap while it speaks to answer now"><i class="fas fa-microphone"></i></button>
-            <div class="voice-text"><div id="aiVoiceState" class="voice-state" role="status" aria-live="polite"></div><div id="aiVoiceHeard" class="voice-heard"></div></div>
+            <div class="voice-text"><div id="aiVoiceState" class="voice-state" role="status" aria-live="polite"></div><div id="aiVoiceHeard" class="voice-heard"></div>
+                <div class="voice-meter" aria-hidden="true"><i id="aiVoiceMeter"></i></div>
+                <div id="aiVoiceHint" class="voice-hint" role="status"></div><div id="aiVoiceEngine" class="voice-engine"></div></div>
             <div class="voice-actions">
                 <button type="button" id="aiVoiceType" title="Stop talking and type instead"><i class="fas fa-keyboard"></i><span>Type</span></button>
                 <button type="button" id="aiVoiceEnd" class="is-end" title="End the voice conversation"><i class="fas fa-phone-slash"></i><span>End</span></button>
             </div>`;
         footer.insertBefore(panel, composer);
-        document.getElementById('aiVoiceOrb').addEventListener('click', () => { if (convo.state === 'speaking') convoNext(); });
+        document.getElementById('aiVoiceOrb').addEventListener('click', () => { if (convo.state === 'speaking') convoNext(); else convoSendNow(); });
         document.getElementById('aiVoiceEnd').addEventListener('click', convoStop);
         document.getElementById('aiVoiceType').addEventListener('click', () => { convoStop(); aiMessageInput.focus(); });
     }
@@ -2936,6 +2942,45 @@ const convo = { on: false, state: 'off', engine: '', rec: null, timer: null, emp
                 ctx: null, stream: null, node: null, src: null, vad: null };
 let sttServerUntil = 0;   // skip the server transcriber until this time (ms) after it failed
 
+// A short rolling log of what the voice conversation did, so "it's glitchy" can be diagnosed: ⚙ → Voice diagnostics → Copy.
+const convoLogLines = [];
+function convoLog(msg) {
+    const t = new Date();
+    const stamp = t.toTimeString().slice(0, 8) + '.' + String(t.getMilliseconds()).padStart(3, '0');
+    convoLogLines.push(`${stamp}  ${msg}`);
+    if (convoLogLines.length > 80) convoLogLines.shift();
+}
+async function convoDiagnosticsText() {
+    const v = convo.vad;
+    let perm = 'unknown';
+    try { if (navigator.permissions) perm = (await navigator.permissions.query({ name: 'microphone' })).state; } catch (e) {}
+    const labels = convo.stream ? convo.stream.getAudioTracks().map(t => `${t.label || '(unnamed)'} [${t.readyState}]`).join('; ') : '(microphone not open)';
+    return [
+        'Voice diagnostics ' + new Date().toString(),
+        'Browser: ' + navigator.userAgent,
+        `Engine: ${convo.engine || '(none yet)'} | state: ${convo.state} | on: ${convo.on} | server transcriber retry after: ${sttServerUntil ? new Date(sttServerUntil).toTimeString().slice(0, 8) : 'n/a'}`,
+        `Signed in with token: ${!!_accessToken} | microphone permission: ${perm} | speechSupported: ${speechSupported}`,
+        `Microphone: ${labels}` + (convo.ctx ? ` | sample rate ${convo.ctx.sampleRate} | audio context ${convo.ctx.state}` : ''),
+        v ? `Levels: floor ${v.floor.toFixed(4)}, on-threshold ${v.onThr.toFixed(4)}, off-threshold ${v.offThr.toFixed(4)}, last level ${v.level.toFixed(4)}, loudest since listening ${v.maxSince.toFixed(4)}` : 'Levels: (no detector running)',
+        '--- recent events ---',
+        ...convoLogLines
+    ].join('\n');
+}
+async function convoCopyDiagnostics(btn) {
+    const text = await convoDiagnosticsText();
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {}
+    if (!ok) {   // clipboard blocked: show the text so it can be selected by hand
+        const box = document.getElementById('aiDiagBox');
+        if (box) { box.textContent = text; box.classList.remove('hidden'); }
+    }
+    if (btn) { const old = btn.textContent; btn.textContent = ok ? 'Copied ✓' : 'Select the text below'; setTimeout(() => { btn.textContent = old; }, 2200); }
+}
+function convoSetHint(text) {
+    const h = document.getElementById('aiVoiceHint');
+    if (h) h.textContent = text || '';
+}
+
 function convoSupported() {
     return !!(speechSupported || (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext)));
 }
@@ -2988,13 +3033,55 @@ async function convoToggle() {
     convo.empties = 0;
     convo.retries = 0;
     setTtsEnabled(true);   // a spoken conversation needs the replies read aloud
-    convo.engine = convoServerOk() ? 'server' : 'browser';
-    if (convo.engine === 'server') {
-        setConvoState('thinking', 'Opening the microphone…');
-        const opened = await convoOpenMic();   // inside the tap, so the browser lets the audio start
-        if (!opened) return;
+    convoLog('conversation started');
+    convo.engine = 'browser';
+    if (convoServerOk()) {
+        setConvoState('thinking', 'Getting ready…');
+        // The audio context must be created inside the tap, so open the microphone first and check the transcriber while it opens.
+        const [opened, serverUp] = await Promise.all([convoOpenMic(), convoProbeServer()]);
+        if (!convo.on) return;   // the microphone could not be opened (already reported) or the student ended it meanwhile
+        if (opened && serverUp) convo.engine = 'server';
+        else if (opened) convoCloseMic();   // the transcriber is not available: use the browser recognizer instead
     }
+    convoLog('engine: ' + convo.engine);
+    const label = document.getElementById('aiVoiceEngine');
+    if (label) label.textContent = convo.engine === 'browser' ? 'Basic recognition (your browser)' : '';
     convoNext();
+}
+
+// Ask the transcriber once (a 0.4 s silent clip, costs nothing noticeable) whether it works for this login, BEFORE opening the
+// microphone: if it doesn't, start on the browser recognizer straight away instead of losing the first sentence to a failure.
+let convoProbe = { at: 0, ok: false };
+async function convoProbeServer() {
+    if (Date.now() - convoProbe.at < 20 * 60000) return convoProbe.ok;
+    const rate = 16000, n = Math.floor(rate * 0.4);
+    const chunk = [new Float32Array(n)];
+    let ok = false, why = '';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+        const r = await fetch(`${AI_TRANSCRIBE_FUNCTION_URL}?lang=es`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'audio/wav', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + _accessToken },
+            body: convoEncodeWav(chunk, rate, rate), signal: controller.signal
+        });
+        if (r.ok) { ok = true; why = 'ok'; }
+        else {
+            let body = {};
+            try { body = await r.json(); } catch (e) {}
+            // The clip is silence: a 400/422 from ElevenLabs means "reachable and allowed, but nothing to transcribe".
+            ok = r.status === 502 && (body.status === 400 || body.status === 422);
+            why = `HTTP ${r.status} ${body.error || ''}${body.status ? ' (upstream ' + body.status + ')' : ''}`;
+        }
+    } catch (e) {
+        why = 'no answer (' + (e && e.name) + ')';
+    } finally {
+        clearTimeout(timer);
+    }
+    convoProbe = { at: Date.now(), ok };
+    convoLog('probe of the server transcriber: ' + (ok ? 'works' : 'NOT available — ' + why));
+    if (!ok) sttServerUntil = Date.now() + 30 * 60000;
+    return ok;
 }
 
 // ---- server engine: one open microphone + volume-based speech detection ----
@@ -3013,8 +3100,10 @@ async function convoOpenMic() {
         const mute = ctx.createGain();
         mute.gain.value = 0;   // the processor must be connected to run; nothing is played back
         src.connect(node); node.connect(mute); mute.connect(ctx.destination);
-        convo.vad = { rate: ctx.sampleRate, frameMs: 2048 / ctx.sampleRate * 1000, floor: 0.006, loud: 0, speaking: false,
-                      silentMs: 0, speechMs: 0, idleMs: 0, chunks: [], pre: [], ignoreUntil: 0 };
+        convo.vad = { rate: ctx.sampleRate, frameMs: 2048 / ctx.sampleRate * 1000, floor: 0.004, level: 0, onThr: 0.006, offThr: 0.005,
+                      loud: 0, speaking: false, silentMs: 0, speechMs: 0, idleMs: 0, peak: 0, speechLevel: 0, maxSince: 0, listenStart: 0, hinted: false,
+                      chunks: [], pre: [], ignoreUntil: 0 };
+        convoLog(`microphone open: ${stream.getAudioTracks().map(t => t.label || 'unnamed').join(', ')} @ ${ctx.sampleRate} Hz`);
         node.onaudioprocess = (e) => convoVadFrame(e.inputBuffer.getChannelData(0));
         convo.ctx = ctx; convo.stream = stream; convo.node = node; convo.src = src;
         return true;
@@ -3044,48 +3133,83 @@ function convoCloseMic() {
 function convoVadReset() {
     const v = convo.vad;
     if (!v) return;
-    v.loud = 0; v.speaking = false; v.silentMs = 0; v.speechMs = 0; v.idleMs = 0; v.chunks = []; v.pre = [];
+    v.loud = 0; v.speaking = false; v.silentMs = 0; v.speechMs = 0; v.idleMs = 0; v.peak = 0; v.speechLevel = 0; v.chunks = []; v.pre = [];
+    v.maxSince = 0; v.hinted = false; v.listenStart = performance.now();
+    convoSetHint('');
 }
 
-// One 2048-sample slice of microphone audio.
+// One 2048-sample slice (~43 ms) of microphone audio. Speech is found by LOUDNESS RELATIVE TO THE ROOM: the detector keeps
+// learning the quietest recent level (the background) and counts something as speech when it is clearly above that,
+// so a quiet laptop microphone and a noisy room both work (fixed volume limits do not).
 function convoVadFrame(buf) {
     const v = convo.vad;
     if (!v || !convo.on) return;
-    let sum = 0;
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    let sum = 0, peak = 0;
+    for (let i = 0; i < buf.length; i++) { const x = buf[i]; sum += x * x; const a = x < 0 ? -x : x; if (a > peak) peak = a; }
     const rms = Math.sqrt(sum / buf.length);
+    v.level = v.level * 0.5 + rms * 0.5;
+    // background estimate: drops to a quieter level at once, creeps up slowly (so a long loud stretch isn't taken for "background")
+    v.floor = Math.max(0.0015, Math.min(v.level, v.floor * 1.004 + 0.00001));
+    v.onThr = Math.max(0.006, v.floor * 3.2);
+    v.offThr = Math.max(0.0045, v.floor * 1.9);
+    // live feedback: the circle swells and the meter moves with the voice
+    const lvl = Math.min(1, v.level * 9);
     const orb = document.getElementById('aiVoiceOrb');
-    if (orb) orb.style.setProperty('--level', String(Math.min(1, rms * 9)));
+    if (orb) orb.style.setProperty('--level', String(lvl));
+    const meter = document.getElementById('aiVoiceMeter');
+    if (meter) { meter.style.width = (convo.state === 'listening' ? Math.min(100, v.level * 800) : 0) + '%'; meter.classList.toggle('hot', v.speaking); }
     // Only listen while it is the student's turn (not while the AI thinks or speaks, and not for the tail of its voice).
-    if (convo.state !== 'listening' || performance.now() < v.ignoreUntil) { v.pre = []; v.loud = 0; return; }
+    const now = performance.now();
+    if (convo.state !== 'listening' || now < v.ignoreUntil) { v.pre = []; v.loud = 0; return; }
+    if (v.level > v.maxSince) v.maxSince = v.level;
     const copy = new Float32Array(buf);   // the browser reuses its buffer
-    const threshold = Math.max(0.018, v.floor * 4);
     if (!v.speaking) {
         v.pre.push(copy);
         if (v.pre.length > 10) v.pre.shift();   // ~0.4 s before the first loud frame, so the first word is not clipped
-        if (rms > threshold) {
-            if (++v.loud >= 3) { v.speaking = true; v.chunks = v.pre; v.pre = []; v.silentMs = 0; v.speechMs = v.chunks.length * v.frameMs; v.idleMs = 0; }
+        if (v.level > v.onThr) {
+            if (++v.loud >= 2) {
+                v.speaking = true; v.chunks = v.pre; v.pre = []; v.silentMs = 0; v.speechMs = v.chunks.length * v.frameMs; v.idleMs = 0; v.peak = peak; v.speechLevel = v.level;
+                convoSetHint('');
+                convoLog(`speech started (level ${v.level.toFixed(4)} > ${v.onThr.toFixed(4)}, background ${v.floor.toFixed(4)})`);
+            }
         } else {
             v.loud = 0;
-            v.floor = v.floor * 0.97 + rms * 0.03;   // learn the room's background level
             v.idleMs += v.frameMs;
-            if (v.idleMs > CONVO_IDLE_MS) { v.idleMs = 0; setTimeout(() => { if (convo.on && convo.state === 'listening') convoPause('Paused — tap the mic to keep talking'); }, 0); }
+            if (!v.hinted && now - v.listenStart > 7000 && v.maxSince < 0.004) {
+                v.hinted = true;
+                convoSetHint("I can't hear you. Check that the right microphone is selected and not muted.");
+                convoLog(`no sound for 7 s (loudest ${v.maxSince.toFixed(4)})`);
+            }
+            if (v.idleMs > CONVO_IDLE_MS) { v.idleMs = 0; convoLog('paused: no speech for a long time'); setTimeout(() => { if (convo.on && convo.state === 'listening') convoPause('Paused — tap the mic to keep talking'); }, 0); }
         }
     } else {
         v.chunks.push(copy);
         v.speechMs += v.frameMs;
-        if (rms > threshold * 0.7) v.silentMs = 0; else v.silentMs += v.frameMs;
+        if (peak > v.peak) v.peak = peak;
+        // "Quiet again" is judged against how loud THIS speaker was, not only against the background: in a noisy room the
+        // hiss may stay above the quiet-line forever, but it is always far below the voice itself.
+        v.speechLevel = Math.max(v.level, v.speechLevel * 0.995);
+        const quietLine = Math.max(v.offThr, v.speechLevel * 0.18);
+        if (v.level > quietLine) v.silentMs = 0; else v.silentMs += v.frameMs;
         if (v.silentMs >= CONVO_SILENCE_MS || v.speechMs > 45000) convoVadEnd();
     }
 }
 
-function convoVadEnd() {
+// The sentence is over (quiet long enough, or the student tapped the circle): send what was captured.
+function convoVadEnd(force) {
     const v = convo.vad;
-    const chunks = v.chunks, spokenMs = v.speechMs - v.silentMs, rate = v.rate;
+    if (!v || !v.speaking) return;
+    const chunks = v.chunks, spokenMs = v.speechMs - (force ? 0 : v.silentMs), rate = v.rate, peak = v.peak;
     v.speaking = false; v.chunks = []; v.loud = 0; v.silentMs = 0; v.speechMs = 0;
-    if (spokenMs < 450) return;   // a click or a cough, not a sentence: keep listening
+    convoLog(`speech ended: ${Math.round(spokenMs)} ms of speech, peak ${peak.toFixed(3)}${force ? ' (student tapped)' : ''}`);
+    if (spokenMs < 450) { convoLog('  too short: ignored'); return; }   // a click or a cough, not a sentence: keep listening
     setConvoState('thinking', 'Transcribing…');
     convoTranscribe(convoEncodeWav(chunks, rate, 16000));
+}
+
+// Tapping the circle while it is listening to you = "I'm done, send it" (for noisy rooms where it would keep waiting).
+function convoSendNow() {
+    if (convo.on && convo.engine === 'server' && convo.state === 'listening' && convo.vad && convo.vad.speaking) convoVadEnd(true);
 }
 
 // Float32 chunks at `inRate` -> a 16 kHz mono 16-bit WAV (about 32 KB per second).
@@ -3095,6 +3219,10 @@ function convoEncodeWav(chunks, inRate, outRate) {
     const ratio = inRate / outRate;
     const outLen = Math.floor(total / ratio);
     const pcm = new Int16Array(outLen);
+    // quiet microphones: lift the recording to a healthy level (at most 10x) so the transcriber can hear it
+    let peakAll = 0;
+    chunks.forEach(c => { for (let i = 0; i < c.length; i++) { const a = c[i] < 0 ? -c[i] : c[i]; if (a > peakAll) peakAll = a; } });
+    const boost = peakAll > 0.0005 && peakAll < 0.6 ? Math.min(10, 0.7 / peakAll) : 1;
     let ci = 0, offset = 0;   // read position inside the chunk list
     const at = (i) => {       // sample i of the concatenation
         while (ci < chunks.length && i - offset >= chunks[ci].length) { offset += chunks[ci].length; ci++; }
@@ -3104,7 +3232,7 @@ function convoEncodeWav(chunks, inRate, outRate) {
         const start = Math.floor(o * ratio), end = Math.max(start + 1, Math.floor((o + 1) * ratio));
         let acc = 0;
         for (let i = start; i < end; i++) acc += at(i);   // averaging = a simple low-pass before dropping samples
-        const x = Math.max(-1, Math.min(1, acc / (end - start)));
+        const x = Math.max(-1, Math.min(1, acc / (end - start) * boost));
         pcm[o] = x < 0 ? x * 0x8000 : x * 0x7fff;
     }
     const header = new ArrayBuffer(44), dv = new DataView(header);
@@ -3140,6 +3268,7 @@ async function convoTranscribe(wav) {
         clearTimeout(timer);
     }
     if (!convo.on) return;
+    convoLog(`transcribe: ${failure || 'ok'} → "${text.slice(0, 60)}"`);
     if (failure === 'slow') { convoPause('Vas muy rápido — wait a moment, then tap the mic'); return; }
     if (failure === 'down') { convoFallbackToBrowser(); return; }
     if (!text) { setConvoState('listening'); convoVadReset(); return; }   // nothing recognised: keep listening
@@ -3151,7 +3280,10 @@ async function convoTranscribe(wav) {
 
 // The server transcriber failed (not set up, no permission, down): use the browser's own recognizer instead.
 function convoFallbackToBrowser() {
+    convoLog('server transcriber failed: switching to the browser recognizer');
     sttServerUntil = Date.now() + 30 * 60000;
+    const label = document.getElementById('aiVoiceEngine');
+    if (label) label.textContent = 'Basic recognition (your browser)';
     convoCloseMic();
     if (speechSupported) {
         convo.engine = 'browser';
@@ -3178,6 +3310,7 @@ function convoListen() {
         if (convo.vad) convo.vad.ignoreUntil = performance.now() + 500;   // let the tail of the AI's voice die away first
         setConvoState('listening');
         convoSetHeard('');
+        convoLog('listening');
     } else {
         convoListenBrowser();
     }
@@ -3299,12 +3432,16 @@ function convoPause(message) {
 }
 
 function convoStop() {
+    if (convo.on) convoLog('conversation stopped');
     convo.on = false;
     clearTimeout(convo.timer); convo.timer = null;
     if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} convo.lastRecEnd = Date.now(); }
     convoCloseMic();
     stopSpeaking();
     convoSetHeard('');
+    convoSetHint('');
+    const engineLabel = document.getElementById('aiVoiceEngine');
+    if (engineLabel) engineLabel.textContent = '';
     setConvoState('off');
 }
 

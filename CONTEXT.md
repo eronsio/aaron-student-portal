@@ -108,6 +108,13 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   * **browser** (fallback): the browser's `SpeechRecognition`. Used when `ai-transcribe` fails (503 not set up / 502 no permission / network): `convoFallbackToBrowser()`
     switches over for 30 min (`sttServerUntil`). It rebuilds the sentence from all results each time (no doubled text), shows it in the panel, waits ≥0.7 s between
     recognizers and retries `audio-capture` up to 3 times before giving up.
+  Hardening (2026-10-26, after "mic still very glitchy"): `convoToggle` opens the mic AND probes `ai-transcribe` with a 0.4 s silent WAV at the same time
+  (`convoProbeServer`, cached 20 min): if the transcriber is unusable (e.g. the ElevenLabs key lacks Speech to Text) it starts on the browser recognizer straight away instead
+  of losing the first sentence, and the panel says "Basic recognition (your browser)". Speech detection is relative to the room, not fixed volume limits: it tracks the
+  quietest recent level (`floor`), starts at ~3.2x that, and ends when the level falls below max(1.9x floor, 18% of the speaker's own loudness) for `CONVO_SILENCE_MS`
+  (so a quiet laptop mic and a noisy room both work). Quiet recordings are lifted up to 10x before upload. Tapping the circle while it is hearing you sends immediately.
+  The panel has a live level meter and, after 7 s of silence, "I can't hear you…". ⚙ → "Copy diagnostics" copies a text report (engine, mic label, permission state,
+  thresholds, last ~80 events from `convoLog`) to paste into a bug report.
   The conversation pauses itself after ~25 s of silence, on errors, when the page is hidden, on tab switch or when leaving the chat. `speakText()` returns a promise that
   resolves when playback ends (that is what reopens the mic; a length-based timeout stops a browser that never reports the end from hanging it). Voice turns get
   `PRACTICE_VOICE_RULE` (practice.js) and are flagged `voice` in the saved transcript. Mic permission refused → alert; no device → "No microphone found".
