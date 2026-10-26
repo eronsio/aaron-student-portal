@@ -170,6 +170,14 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
 - Deliberately NO service worker: iOS doesn't need one to install, and a caching worker would risk serving stale `script.js` after deploys. So no offline mode.
 - Not verified on a physical iPhone (no simulator here): check that voice input (Web Speech) works inside the installed app. The installed app has its own storage, so students sign in again there.
 
+## Updates reach open copies (added 2026-10-26)
+- A home-screen app (iPhone) or a long-open tab keeps running the JS it loaded, sometimes for days, and a student cannot hard-refresh an installed app. So the page loads `build.js`
+  (`window.APP_BUILD`) and every 15 min / on resume fetches `version.json` fresh; if they differ it shows an "A new version of the portal is ready — Update / Later" banner
+  (`checkForUpdate` / `showUpdateBanner` in script.js; nothing reloads by itself, so nobody loses a half-written message or an unsaved course edit).
+- **Before committing a release of site files run `scripts/stamp-build.sh`** (rewrites `build.js` and `version.json` with a new stamp) and commit those two files with the change.
+  Forgetting only means open copies don't get the banner. (A git pre-commit hook for this was refused by the safety checks, so it is a manual step.)
+- A copy that predates this mechanism has no banner: it must be closed completely (iPhone: swipe up, flick the app away) and reopened once.
+
 ## Deployment
 - **Current:** drag-and-drop zip into Cloudflare Pages dashboard
 - **Goal:** GitHub repo connected to Cloudflare Pages for auto-deploy on `git push`

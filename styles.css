@@ -3315,3 +3315,15 @@ body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0;
 @media (prefers-reduced-motion: reduce) {
     #ai-companion *, .typing-indicator span { animation: none !important; transition: none !important; }
 }
+
+/* ---- "a new version is ready" banner ---- */
+.update-banner {
+    position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 10050;
+    display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 24px); padding: 10px 12px 10px 16px;
+    background: #2f3b4d; color: #f8fafc; border-radius: 16px; font-size: 14px; line-height: 1.35;
+    box-shadow: 0 18px 40px -12px rgba(16, 24, 40, 0.45);
+}
+.update-banner i { margin-right: 6px; opacity: 0.8; }
+.update-banner button { flex: none; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px; padding: 7px 14px; }
+.update-banner .update-now { background: #fff; color: #1f2937; }
+.update-banner .update-later { background: transparent; color: #cbd5e1; padding: 7px 8px; }

@@ -3446,6 +3446,37 @@ function convoStop() {
 }
 
 // ============================================================
+// UPDATES — tell an open copy of the portal that a newer version is live
+// ============================================================
+// A home-screen app (and any long-open tab) keeps running the code it loaded, sometimes for days. build.js (loaded with the
+// page) says which version is running; version.json (fetched fresh) says which is live. Both are stamped together by the
+// repo's pre-commit hook whenever site files change. When they differ a small banner offers "Update"; nothing reloads by itself,
+// so no one loses a half-written message or an unsaved course edit.
+const APP_BUILD_LOADED = window.APP_BUILD || '';
+async function checkForUpdate() {
+    if (!APP_BUILD_LOADED || document.getElementById('updateBanner')) return;
+    try {
+        const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) return;
+        const live = (await r.json()).build;
+        if (live && live !== APP_BUILD_LOADED) showUpdateBanner();
+    } catch (e) { /* offline: try again later */ }
+}
+function showUpdateBanner() {
+    const bar = document.createElement('div');
+    bar.id = 'updateBanner';
+    bar.className = 'update-banner';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = '<span><i class="fas fa-arrows-rotate"></i> A new version of the portal is ready.</span><button type="button" class="update-now">Update</button><button type="button" class="update-later" aria-label="Dismiss">Later</button>';
+    bar.querySelector('.update-now').addEventListener('click', () => { window.location.reload(); });
+    bar.querySelector('.update-later').addEventListener('click', () => bar.remove());
+    document.body.appendChild(bar);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
+setInterval(checkForUpdate, 15 * 60 * 1000);
+setTimeout(checkForUpdate, 20000);
+
+// ============================================================
 // COURSES TAB — Student View (two-column player)
 // ============================================================
 
