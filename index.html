@@ -248,78 +248,7 @@
                 <div id="ai-companion" class="tab-pane">
                     <div class="ai-companion-section">
 
-                        <!-- Mode selector (shown before conversation starts) -->
-                        <div id="aiModeSelector">
-                            <div class="ai-mode-header">
-                                <h3>🗣️ Práctica de Español</h3>
-                                <p>Choose how you want to practice today. The companion will respond almost entirely in Spanish and correct your mistakes naturally as you go.</p>
-                            </div>
-                            <button id="aiPlanCard" class="ai-plan-card hidden" onclick="startAiMode('plan')">
-                                <span class="ai-mode-icon">🎯</span>
-                                <span class="ai-plan-text">
-                                    <span class="ai-plan-title">My Practice Plan</span>
-                                    <span class="ai-plan-sub">Built from your lesson notes — today: <b id="aiPlanSummary"></b></span>
-                                    <span id="aiPlanLast" class="ai-plan-last"></span>
-                                </span>
-                                <span class="ai-plan-go">Start <i class="fas fa-arrow-right"></i></span>
-                            </button>
-                            <div class="ai-mode-grid">
-                                <button class="ai-mode-card" onclick="startAiMode('free')">
-                                    <span class="ai-mode-icon">💬</span>
-                                    <h4>Free Conversation</h4>
-                                    <p>Talk about anything — your day, your interests, anything you like</p>
-                                </button>
-                                <button class="ai-mode-card" onclick="showScenarioPicker()">
-                                    <span class="ai-mode-icon">🎭</span>
-                                    <h4>Roleplay Scenario</h4>
-                                    <p>Practice in a real-world situation — café, airport, meeting someone new</p>
-                                </button>
-                                <button class="ai-mode-card" onclick="startAiMode('picture')">
-                                    <span class="ai-mode-icon">🖼️</span>
-                                    <h4>Picture Description</h4>
-                                    <p>Aaron gives you a scene — describe what you see in Spanish</p>
-                                </button>
-                                <button class="ai-mode-card" onclick="showGrammarPicker()">
-                                    <span class="ai-mode-icon">📚</span>
-                                    <h4>Grammar Focus</h4>
-                                    <p>Drill a specific topic — ser/estar, verb conjugation, articles and more</p>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Scenario picker -->
-                        <div id="aiScenarioPicker" class="hidden">
-                            <button class="back-btn" onclick="document.getElementById('aiScenarioPicker').classList.add('hidden');document.getElementById('aiModeSelector').classList.remove('hidden');">
-                                <i class="fas fa-arrow-left"></i> Back
-                            </button>
-                            <h4 style="margin-bottom:16px;font-weight:600;">Choose a scenario:</h4>
-                            <div class="ai-mode-grid">
-                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'café')">☕ At a Café</button>
-                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'airport')">✈️ At the Airport</button>
-                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'meeting')">👋 Meeting Someone New</button>
-                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'shopping')">🛒 At the Supermarket</button>
-                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'doctor')">🏥 At the Doctor</button>
-                                <button class="ai-mode-card" onclick="startAiMode('roleplay', 'hotel')">🏨 Checking into a Hotel</button>
-                            </div>
-                        </div>
-
-                        <!-- Grammar picker -->
-                        <div id="aiGrammarPicker" class="hidden">
-                            <button class="back-btn" onclick="document.getElementById('aiGrammarPicker').classList.add('hidden');document.getElementById('aiModeSelector').classList.remove('hidden');">
-                                <i class="fas fa-arrow-left"></i> Back
-                            </button>
-                            <h4 style="margin-bottom:16px;font-weight:600;">What do you want to drill?</h4>
-                            <div class="ai-mode-grid">
-                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'ser vs estar')">⚖️ Ser vs Estar</button>
-                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'verb conjugation present tense')">🔤 Present Tense Verbs</button>
-                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'articles el la un una')">📌 Articles (el/la/un/una)</button>
-                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'numbers and time')">🔢 Numbers & Time</button>
-                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'preterite past tense')">⏮️ Past Tense (Preterite)</button>
-                                <button class="ai-mode-card" onclick="startAiMode('grammar', 'gustar and similar verbs')">❤️ Gustar & Similar Verbs</button>
-                            </div>
-                        </div>
-
-                        <!-- Chat view (hidden until mode selected) -->
+                        <!-- Chat (the tab opens straight into this) -->
                         <div id="aiChatView" class="hidden">
                             <div class="ai-chat-topbar">
                                 <div id="aiModeLabel" class="ai-mode-label"></div>
@@ -347,13 +276,10 @@
                             </div>
                         </div>
 
-                        <!-- Recap (shown after End session) -->
+                        <!-- Recap / session ended (shown after End session) -->
                         <div id="aiRecapView" class="hidden">
                             <div class="ai-recap-card">
                                 <div id="aiRecapBody"></div>
-                                <button class="back-btn" onclick="leaveAiChat()" style="margin:18px 0 0;">
-                                    <i class="fas fa-arrow-left"></i> Back to practice
-                                </button>
                             </div>
                         </div>
 

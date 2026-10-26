@@ -3234,10 +3234,14 @@ body.ai-chat-open .floating-book-btn { display: none; }
     .ai-chat-topbar #ttsToggleBtn, .ai-chat-topbar #ttsSlowBtn, .ai-chat-topbar .tts-voice-select { order: 2; }
     .tts-voice-select { max-width: 130px; }
     /* the conversation gets the screen: no tab stack or page header above it, and a height that follows the phone, not a fixed 400px */
-    body.ai-chat-open #tabNav, body.ai-chat-open #mainApp > header { display: none; }
+    body.ai-chat-open #mainApp > header { display: none; }
+    /* the tabs become one scrollable row (they stay reachable: the chat is where the AI tab opens) */
+    body.ai-chat-open .tab-nav { flex-direction: row; gap: 6px; overflow-x: auto; overflow-y: hidden; background: transparent; margin-bottom: 8px; scrollbar-width: none; }
+    body.ai-chat-open .tab-nav::-webkit-scrollbar { display: none; }
+    body.ai-chat-open .tab-btn { flex: none; white-space: nowrap; border-radius: 99px; padding: 8px 14px; }
     body.ai-chat-open main.container { padding: 8px; }
     body.ai-chat-open .tab-content { padding: 12px; }
-    .ai-chat-messages { height: 50vh; height: calc(100dvh - 330px); min-height: 180px; padding: 12px; gap: 12px; }
+    .ai-chat-messages { height: 50vh; height: calc(100dvh - 360px); min-height: 180px; padding: 12px; gap: 12px; }
     .ai-message { max-width: 94%; gap: 8px; }
     .ai-bubble { padding: 10px 12px; min-width: 0; overflow-wrap: anywhere; }
     .ai-voice-status { margin: 8px 12px 0; }
@@ -3249,3 +3253,7 @@ body.ai-chat-open .floating-book-btn { display: none; }
     /* 16px stops iPhones from zooming the page when the box is focused */
     #aiMessageInput { font-size: 16px; padding: 10px 12px; min-width: 0; }
 }
+
+/* ---- AI chat: activity chips, and the admin tools button (it floats bottom-left, exactly where the mic is) ---- */
+.ai-chip-sep { flex: none; align-self: center; width: 1px; height: 18px; background: #d5deea; margin: 0 2px; }
+body.ai-chat-live #adminFloatingBar > button { display: none !important; }

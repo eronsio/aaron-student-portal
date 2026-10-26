@@ -2029,6 +2029,9 @@ function syncAiChatClass() {
     const chatOpen = !!tab && tab.classList.contains('active') &&
         (!document.getElementById('aiChatView')?.classList.contains('hidden') || !document.getElementById('aiRecapView')?.classList.contains('hidden'));
     document.body.classList.toggle('ai-chat-open', chatOpen);
+    // The live chat itself (not the recap): the admin's floating tools button moves into its header instead of covering the mic.
+    const chatLive = !!tab && tab.classList.contains('active') && !document.getElementById('aiChatView')?.classList.contains('hidden');
+    document.body.classList.toggle('ai-chat-live', chatLive);
 }
 
 function showTab(tabName) {
@@ -2450,23 +2453,7 @@ async function callAnthropicAPI(messages, systemPrompt) {
     }
 }
 
-function showScenarioPicker() {
-    document.getElementById('aiModeSelector').classList.add('hidden');
-    document.getElementById('aiScenarioPicker').classList.remove('hidden');
-}
-
-function showGrammarPicker() {
-    document.getElementById('aiModeSelector').classList.add('hidden');
-    document.getElementById('aiGrammarPicker').classList.remove('hidden');
-}
-
-const MODE_LABELS = {
-    plan: '🎯 My Practice Plan',
-    free: '💬 Free Conversation',
-    picture: '🖼️ Picture Description',
-    roleplay: '🎭 Roleplay',
-    grammar: '📚 Grammar Drill'
-};
+const AI_CHAT_LABEL = '🗣️ Práctica de español';
 
 const MODE_OPENING = {
     plan: null, // AI generates this, aimed at today's first target
@@ -2476,39 +2463,41 @@ const MODE_OPENING = {
     grammar: null  // AI generates this
 };
 
+let aiStartSeq = 0;   // bumps whenever a chat starts or is left, so a start that is still loading can tell it was replaced
 async function startAiMode(mode, context) {
+    const startToken = ++aiStartSeq;
     currentAiMode = mode;
     currentAiContext = context || null;
     aiConversationHistory = [];
-    studentInsightCache = await loadStudentInsight();
-    await practiceBeginSession(mode, context);
 
-    // Show chat view
-    document.getElementById('aiModeSelector').classList.add('hidden');
-    document.getElementById('aiScenarioPicker').classList.add('hidden');
-    document.getElementById('aiGrammarPicker').classList.add('hidden');
+    // Show the chat straight away; the session itself loads behind a "starting" bubble.
+    document.getElementById('aiRecapView').classList.add('hidden');
     document.getElementById('aiChatView').classList.remove('hidden');
     syncAiChatClass();
-
-    // Set mode label
-    const label = MODE_LABELS[mode] + (context ? ` — ${context}` : '');
-    document.getElementById('aiModeLabel').textContent = label;
-
-    // Clear chat
+    document.getElementById('aiModeLabel').textContent = AI_CHAT_LABEL;
     document.getElementById('aiChatMessages').innerHTML = '';
+    appendAiMessage('bot', '<em style="color:var(--text-secondary)">Iniciando sesión...</em>');
+    refreshAiActivityChips();
 
-    // Show opening message
+    studentInsightCache = await loadStudentInsight();
+    await practiceBeginSession(mode, context);
+    refreshAiActivityChips();
+    if (aiStartSeq !== startToken) return;   // the student left (or restarted) while this was loading
+    const messages = document.getElementById('aiChatMessages');
+
+    // Opening message
     if (MODE_OPENING[mode]) {
+        messages.innerHTML = '';
         appendAiMessage('bot', MODE_OPENING[mode], MODE_OPENING[mode]);
         speakText(MODE_OPENING[mode]);
         aiConversationHistory.push({ role: 'user', content: '[START SESSION]' }, { role: 'assistant', content: MODE_OPENING[mode] });
         practiceRecordTurn('assistant', MODE_OPENING[mode]);
     } else {
-        // Let AI generate the opening
-        appendAiMessage('bot', '<em style="color:var(--text-secondary)">Iniciando sesión...</em>');
+        // Let the AI write the opening
         const systemPrompt = buildAISystemPrompt(mode, context, studentInsightCache);
         const opening = await callAnthropicAPI([{ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }], systemPrompt);
-        document.getElementById('aiChatMessages').lastElementChild.remove();
+        if (aiStartSeq !== startToken) return;
+        messages.innerHTML = '';
         appendAiMessage('bot', practiceFormatReply(opening), opening.startsWith('⚠️') ? '' : opening);
         speakText(opening);
         // Keep the hidden start prompt in the history so the model still sees its own opening line.
@@ -2518,24 +2507,43 @@ async function startAiMode(mode, context) {
     }
 }
 
+// There is no menu of activities any more: opening the tab goes straight into the chat (the student's practice
+// plan if they have one, otherwise free conversation) and the AI switches activity when the student asks.
+let aiStarting = false;
+async function startAiChat() {
+    if (aiStarting || currentAiMode) return;
+    if (currentUser?.isAdmin && !_accessToken) return;   // the admin bar asks for the preview sign-in first
+    aiStarting = true;
+    try {
+        await practiceLoadContext(true);
+        const hasPlan = practicePickTargets(practiceCtx.focus, practiceCtx.sessions).length > 0;
+        await startAiMode(hasPlan ? 'plan' : 'free');
+    } finally {
+        aiStarting = false;
+    }
+}
+
 async function endAiSession() {
     convoStop();
     const tookOverScreen = await practiceFinishSession();
-    if (!tookOverScreen) leaveAiChat();
+    if (!tookOverScreen) {
+        leaveAiChat();
+        practiceShowRecapShell(`<p class="ai-recap-plain">Session ended. Come back any time to practise again.</p>
+            <button class="back-btn ai-again-btn" onclick="practiceStartAnother()"><i class="fas fa-rotate-right"></i> Practice again</button>`);
+    }
 }
 
-// Back to the mode picker (the recap's "Back to practice" button calls this too).
+// Closes the current chat/recap and forgets it; the caller decides what comes next (usually startAiChat()).
 function leaveAiChat() {
+    aiStartSeq++;
     convoStop();
     document.getElementById('aiChatView').classList.add('hidden');
     document.getElementById('aiRecapView').classList.add('hidden');
-    document.getElementById('aiModeSelector').classList.remove('hidden');
     aiConversationHistory = [];
     currentAiMode = null;
     currentAiContext = null;
     syncAiChatClass();
     practiceResetSession();
-    practiceRenderPlanCard();
 }
 
 // `raw` (optional, bot messages only) is the plain reply text; when given the bubble gets a "listen again" button.
@@ -2577,6 +2585,26 @@ const AI_HELP_MESSAGES = {
 function sendAiHelp(kind) {
     const message = AI_HELP_MESSAGES[kind];
     if (message) submitAiMessage(message, { help: true });
+}
+
+// Asking for a different kind of practice is just a message: the AI switches activity itself (see
+// PRACTICE_ACTIVITIES_RULE in practice.js). Recorded like a help request: not graded, not an attempt.
+const AI_ACTIVITY_MESSAGES = {
+    plan: "Let's go back to my practice plan.",
+    roleplay: "Let's do a roleplay.",
+    picture: "Let's do a picture description.",
+    grammar: "I'd like a grammar drill.",
+    free: "Let's just chat freely."
+};
+function sendAiActivity(kind) {
+    const message = AI_ACTIVITY_MESSAGES[kind];
+    if (message) submitAiMessage(message, { help: true });
+}
+
+// "My plan" only makes sense when the student has one.
+function refreshAiActivityChips() {
+    const plan = document.getElementById('aiChipPlan');
+    if (plan) plan.classList.toggle('hidden', !(typeof practiceSessionTargets === 'function' && practiceSessionTargets().length));
 }
 
 async function submitAiMessage(message, opts) {
@@ -2657,8 +2685,27 @@ function ensureAiExtras() {
             row.id = 'aiQuickReplies'; row.className = 'ai-quick-replies';
             row.innerHTML = `<button type="button" onclick="sendAiHelp('hint')">💡 Hint</button>
                 <button type="button" onclick="sendAiHelp('explain')">💬 Explain in English</button>
-                <button type="button" onclick="sendAiHelp('simpler')">🐢 Say it simpler</button>`;
+                <button type="button" onclick="sendAiHelp('simpler')">🐢 Say it simpler</button>
+                <span class="ai-chip-sep" aria-hidden="true"></span>
+                <button type="button" id="aiChipPlan" class="hidden" onclick="sendAiActivity('plan')">🎯 My plan</button>
+                <button type="button" onclick="sendAiActivity('roleplay')">🎭 Roleplay</button>
+                <button type="button" onclick="sendAiActivity('picture')">🖼️ Describe a picture</button>
+                <button type="button" onclick="sendAiActivity('grammar')">📚 Grammar drill</button>
+                <button type="button" onclick="sendAiActivity('free')">💬 Free chat</button>`;
             input.parentNode.insertBefore(row, input);
+        }
+    }
+    // The admin's floating tools button would sit on top of the mic while the chat is open (see styles.css), so the
+    // chat header carries its own Tools button for the admin.
+    if (currentUser?.isAdmin && !document.getElementById('aiAdminToolsBtn')) {
+        const ctrl = document.querySelector('#aiChatView .ai-chat-topbar > div:last-child');
+        if (ctrl) {
+            const b = document.createElement('button');
+            b.id = 'aiAdminToolsBtn'; b.type = 'button'; b.className = 'admin-btn small'; b.style.fontSize = '12px';
+            b.innerHTML = '<i class="fas fa-tools"></i> Tools';
+            b.title = 'Admin tools';
+            b.addEventListener('click', toggleAdminMenu);
+            ctrl.insertBefore(b, ctrl.firstChild);
         }
     }
     if (!document.getElementById('aiVoiceStatus')) {
@@ -2675,25 +2722,16 @@ function ensureAiExtras() {
     }
 }
 
+// Runs every time the student opens the tab. A chat or recap that is already on screen is left alone,
+// so switching tabs and coming back never throws the conversation away.
 function initAiCompanion() {
     ensureAiExtras();
     if (currentUser?.isAdmin && typeof renderAiAdminBar === 'function') renderAiAdminBar();
-    aiConversationHistory = [];
+    const recapShowing = !document.getElementById('aiRecapView').classList.contains('hidden');
+    if (currentAiMode || recapShowing) return;
     studentInsightCache = null;
-    currentAiMode = null;
-    currentAiContext = null;
-    // Show mode selector
-    document.getElementById('aiModeSelector').classList.remove('hidden');
-    document.getElementById('aiScenarioPicker').classList.add('hidden');
-    document.getElementById('aiGrammarPicker').classList.add('hidden');
-    document.getElementById('aiChatView').classList.add('hidden');
-    document.getElementById('aiRecapView').classList.add('hidden');
-    practiceResetSession();
-    practiceRenderPlanCard();
+    startAiChat();
 }
-
-
-
 
 // ============================================================
 // VOICE CONVERSATION — hands-free speaking practice (Web Speech API)

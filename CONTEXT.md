@@ -56,7 +56,14 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - Settings (reset courses, save Anthropic API key)
 
 ## AI Companion + Speaking Practice (Spanish students)
-- Modes: **My Practice Plan** (personalised, see below), Free Conversation, Roleplay Scenario, Picture Description, Grammar Focus
+- **No activity menu** (changed 2026-10-26): opening the Speaking & Writing Practice tab goes straight into the chat (`initAiCompanion` → `startAiChat`): the
+  student's personalised practice plan if they have one (mode `plan`), otherwise free conversation (mode `free`). A chat that is already open is left alone
+  when the student switches tabs and comes back. Roleplay / picture description / grammar drills are no longer separate screens: the AI switches activity
+  when asked (`PRACTICE_ACTIVITIES_RULE` in practice.js) and the chip row under the chat (🎯 My plan [only with a plan] · 🎭 Roleplay · 🖼️ Describe a
+  picture · 📚 Grammar drill · 💬 Free chat) just sends a message (`sendAiActivity`, recorded like a help request: not graded). "End session" → recap (or a
+  short "Session ended" card) → "Practice again" starts a fresh chat. Admin: the preview sign-in bar comes first; the chat starts after sign-in, and
+  choosing "Practise as <student>" restarts it with that student's plan. While the chat is open the admin's floating tools button (bottom-left, it sat on
+  the mic) is hidden and a Tools button appears in the chat header instead (`body.ai-chat-live`).
 - Calls Anthropic API via a Supabase Edge Function `ai-companion` (key stored server-side as the
   `ANTHROPIC_API_KEY` secret, never sent to the browser). The function verifies the caller's Supabase
   JWT via `/auth/v1/user` before proxying to Anthropic — see `supabase/functions/ai-companion/index.ts`.

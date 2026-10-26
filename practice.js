@@ -202,6 +202,9 @@ Ejemplo de respuesta ideal:
 Estudiante: "Ayer yo fue al supermercado"
 Tú: "¡Bien! [✓ 'fui' para yo — 'fue' es para él/ella] ¿Y qué compraste allí?"`;
 
+// There is no activity menu: the student asks for a different kind of practice in the chat and the AI switches.
+const PRACTICE_ACTIVITIES_RULE = `ACTIVIDADES (el estudiante puede cambiar de actividad en cualquier momento): aparte del plan de práctica y la conversación libre, puedes hacer (a) un ROLEPLAY en una situación real (café, aeropuerto, supermercado, médico, hotel, conocer a alguien nuevo…): tú interpretas a la otra persona y te quedas en el personaje; (b) DESCRIPCIÓN DE UNA IMAGEN: describes con palabras una escena cotidiana vívida del mundo hispano y el estudiante la describe con sus propias palabras; (c) un EJERCICIO DE GRAMÁTICA sobre un tema (ser y estar, presente, artículos, números y hora, pretérito, gustar…): preguntas cortas, como un juego. Si el estudiante pide una de estas actividades, o volver a su plan o a la conversación libre, cambia enseguida y empieza con una primera frase en español, sin pedir permiso. Si falta un dato (qué situación, qué tema), ofrece 2 o 3 opciones en una sola frase. Los mensajes en los que el estudiante solo pide cambiar de actividad no se corrigen. Mantén todas las reglas anteriores en cualquier actividad.`;
+
 // Added when the student's latest message came from the microphone (hands-free conversation mode).
 const PRACTICE_VOICE_RULE = `16. El último mensaje del estudiante viene del reconocimiento de voz, no está escrito: puede faltar puntuación, tildes y mayúsculas, y alguna palabra puede estar mal reconocida. NUNCA corrijas puntuación, tildes ni ortografía en un mensaje de voz; corrige solo errores claros de gramática o vocabulario. Si una palabra no tiene sentido y suena parecida a otra, pregunta "¿Quisiste decir…?" en vez de corregir. Esto es una conversación hablada: responde con 1 o 2 frases cortas y termina con una pregunta.`;
 
@@ -468,7 +471,9 @@ function buildAISystemPrompt(mode, context, insight, opts) {
 ${modeInstructions[mode] || modeInstructions.free}
 ${plan ? '\n' + plan + '\n' : ''}${legacyWeaknesses}
 
-${PRACTICE_BASE_RULES(levelLine)}${opts && opts.voice ? '\n' + PRACTICE_VOICE_RULE : ''}`;
+${PRACTICE_BASE_RULES(levelLine)}
+
+${PRACTICE_ACTIVITIES_RULE}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}`;
 }
 
 function practiceMarkVoice() { practiceVoiceFlag = true; }
@@ -597,9 +602,7 @@ function practiceRenderRecap(report) {
 // From the recap: straight into another session (the plan if there is one, otherwise free conversation).
 async function practiceStartAnother() {
     leaveAiChat();
-    await practiceLoadContext(true);
-    const hasPlan = practicePickTargets(practiceCtx.focus, practiceCtx.sessions).length > 0;
-    startAiMode(hasPlan ? 'plan' : 'free');
+    await startAiChat();
 }
 
 // Called by endAiSession(). Returns true if it took over the screen with a recap.
@@ -626,26 +629,6 @@ function practiceResetSession() {
     practiceVoiceFlag = false;
     const wrap = document.getElementById('aiTargetChips');
     if (wrap) { wrap.classList.add('hidden'); wrap.innerHTML = ''; }
-}
-
-// Shows/hides the "My Practice Plan" card on the mode selector.
-async function practiceRenderPlanCard() {
-    const card = document.getElementById('aiPlanCard');
-    if (!card) return;
-    await practiceLoadContext(true);
-    const ctx = practiceCtx; // the newest committed load, even if a newer one overtook this call
-    const targets = practicePickTargets(ctx.focus, ctx.sessions);
-    if (!targets.length) { card.classList.add('hidden'); return; }
-    document.getElementById('aiPlanSummary').textContent = targets.map(t => practiceClip(t.area, 50)).join(' · ');
-    const last = (ctx.sessions || []).find(s => (s.student_turns || 0) >= PRACTICE_MIN_TURNS_FOR_REPORT);
-    const lastEl = document.getElementById('aiPlanLast');
-    if (last) {
-        const days = Math.floor((Date.now() - Date.parse(last.started_at)) / 86400000);
-        lastEl.textContent = days <= 0 ? 'Last practice: today' : `Last practice: ${days} day${days === 1 ? '' : 's'} ago`;
-    } else {
-        lastEl.textContent = '';
-    }
-    card.classList.remove('hidden');
 }
 
 // ============================================================
@@ -716,7 +699,7 @@ async function practiceAdminSignIn(e) {
     if (data && data.access_token) {
         _accessToken = data.access_token;   // memory only: not saved, not used for the admin's own data
         await renderAiAdminBar();
-        practiceRenderPlanCard();
+        startAiChat();
     } else {
         msg.style.color = '#b45309';
         msg.textContent = 'Could not sign in: ' + ((data && (data.error_description || data.msg || data.message)) || 'check the email and password.');
@@ -727,14 +710,15 @@ function practiceAdminSignOut() {
     _accessToken = null;
     practiceAdminPreview = null;
     practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
+    leaveAiChat();
     renderAiAdminBar();
-    practiceRenderPlanCard();
 }
 
 async function practiceAdminChooseStudent(uid, name) {
     practiceAdminPreview = uid ? { uid, name } : null;
     practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
-    await practiceRenderPlanCard();
+    leaveAiChat();      // a different student's plan: start over with it
+    await startAiChat();
 }
 
 // ============================================================
