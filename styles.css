@@ -3257,3 +3257,48 @@ body.ai-chat-open .floating-book-btn { display: none; }
 /* ---- AI chat: activity chips, and the admin tools button (it floats bottom-left, exactly where the mic is) ---- */
 .ai-chip-sep { flex: none; align-self: center; width: 1px; height: 18px; background: #d5deea; margin: 0 2px; }
 body.ai-chat-live #adminFloatingBar > button { display: none !important; }
+
+/* ---- Admin: student switcher, "viewing as" bar, collapsible student list ---- */
+.admin-student-switch select {
+    font-family: inherit; font-size: 13px; padding: 6px 10px; max-width: 200px;
+    border: 1px solid var(--border-color); border-radius: var(--radius-md);
+    background: var(--bg-primary); color: var(--text-primary); cursor: pointer;
+}
+.student-view-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9000;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 8px 16px; background: #334155; color: #fff; font-size: 13px;
+}
+.student-view-bar .sv-label { flex: 1 1 auto; min-width: 0; }
+.student-view-bar .sv-nav, .student-view-bar .sv-actions { display: flex; align-items: center; gap: 6px; }
+.student-view-bar button, .student-view-bar select {
+    font-family: inherit; font-size: 13px; color: #fff; cursor: pointer;
+    background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 6px; padding: 4px 12px;
+}
+.student-view-bar select { max-width: 170px; padding: 4px 8px; }
+.student-view-bar select option { color: #111; }
+.student-view-bar #svPrev, .student-view-bar #svNext { font-size: 16px; line-height: 1; padding: 3px 11px; }
+
+details.admin-student-card {
+    background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); margin-bottom: 8px;
+}
+details.admin-student-card > summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+}
+details.admin-student-card > summary::-webkit-details-marker { display: none; }
+details.admin-student-card > summary::before { content: '▸'; color: var(--text-light); font-size: 12px; }
+details.admin-student-card[open] > summary::before { content: '▾'; }
+details.admin-student-card[open] > summary { border-bottom: 1px solid var(--border-light); }
+details.admin-student-card .stu-name { font-weight: 600; flex: 0 1 auto; }
+details.admin-student-card .stu-meta { flex: 1 1 auto; min-width: 0; font-size: 12px; color: var(--text-secondary); }
+details.admin-student-card .stu-warn { color: #b45309; }
+details.admin-student-card .stu-viewas { flex: none; }
+details.admin-student-card .stu-body { padding: 14px 16px 16px; }
+@media (max-width: 760px) {
+    .admin-student-switch { width: 100%; }
+    .admin-student-switch select { width: 100%; max-width: none; }
+    .student-view-bar { padding: 8px 12px; }
+    .student-view-bar .sv-label { flex-basis: 100%; }
+    details.admin-student-card > summary { flex-wrap: wrap; }
+    details.admin-student-card .stu-meta { flex-basis: 100%; order: 3; }
+}

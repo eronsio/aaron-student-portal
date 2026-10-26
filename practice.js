@@ -425,6 +425,7 @@ async function practiceLoadContext(force) {
 
 // The Speaking Practice tab only appears for Spanish students Aaron has switched on.
 async function practiceMaybeShowTab() {
+    if (currentUser.isPreview) return;   // the admin looking at a student's page: the AI is previewed from the admin's own AI tab
     if (!practiceActive() || currentUser.type !== 'spanish') return;
     await practiceLoadContext(true);
     if (practiceCtx.profile && practiceCtx.profile.enabled) aiCompanionTab.style.display = '';
@@ -687,6 +688,36 @@ async function renderAiAdminBar() {
     document.getElementById('aiAdminSignOut').addEventListener('click', practiceAdminSignOut);
 }
 
+// The admin's preview login is remembered like any "Remember me": only a renewable token for the admin's own student
+// account is kept in this browser (localStorage 'adminPreviewSession'), never the password. It is used only to reach the AI.
+const PRACTICE_ADMIN_SESSION = 'adminPreviewSession';
+
+function practiceAdminStoredToken() {
+    try { return (JSON.parse(localStorage.getItem(PRACTICE_ADMIN_SESSION) || 'null') || {}).refresh_token || ''; } catch (e) { return ''; }
+}
+
+// Signs the preview back in from the remembered token. Returns true when _accessToken is usable afterwards.
+async function practiceAdminRestore(force) {
+    if (!(currentUser && currentUser.isAdmin)) return false;
+    if (_accessToken && !force) return true;
+    const refresh = practiceAdminStoredToken();
+    if (!refresh) return false;
+    try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST', headers: _headers(), body: JSON.stringify({ refresh_token: refresh })
+        });
+        if (r.status >= 500) return false;
+        const data = await r.json();
+        if (data && data.access_token) {
+            _accessToken = data.access_token;
+            try { localStorage.setItem(PRACTICE_ADMIN_SESSION, JSON.stringify({ refresh_token: data.refresh_token || refresh })); } catch (e) {}
+            return true;
+        }
+        localStorage.removeItem(PRACTICE_ADMIN_SESSION);   // the server refused it: ask for the password again
+    } catch (e) { /* offline: keep the token for next time */ }
+    return false;
+}
+
 async function practiceAdminSignIn(e) {
     if (e && e.preventDefault) e.preventDefault();
     const email = document.getElementById('aiAdminEmail').value.trim();
@@ -697,7 +728,8 @@ async function practiceAdminSignIn(e) {
     try { data = await sbSignIn(email, password); } catch (err) { data = null; }
     document.getElementById('aiAdminPassword').value = '';
     if (data && data.access_token) {
-        _accessToken = data.access_token;   // memory only: not saved, not used for the admin's own data
+        _accessToken = data.access_token;   // used only to reach the AI, never for the admin's own data
+        try { localStorage.setItem(PRACTICE_ADMIN_SESSION, JSON.stringify({ refresh_token: data.refresh_token || '' })); } catch (err) {}
         await renderAiAdminBar();
         startAiChat();
     } else {
@@ -708,6 +740,7 @@ async function practiceAdminSignIn(e) {
 
 function practiceAdminSignOut() {
     _accessToken = null;
+    try { localStorage.removeItem(PRACTICE_ADMIN_SESSION); } catch (e) {}
     practiceAdminPreview = null;
     practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
     leaveAiChat();

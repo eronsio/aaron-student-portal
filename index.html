@@ -38,20 +38,20 @@
             </div>
 
             <!-- Sign In Form -->
-            <div id="loginForm">
+            <form id="loginForm" autocomplete="on">
                 <p class="form-subtitle">Welcome back! Sign in to continue.</p>
                 <div class="form-group">
                     <label for="loginEmail">Email</label>
-                    <input type="email" id="loginEmail" required placeholder="you@example.com" autocomplete="email">
+                    <input type="email" id="loginEmail" name="email" required placeholder="you@example.com" autocomplete="username">
                 </div>
                 <div class="form-group">
                     <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" required placeholder="Your password">
+                    <input type="password" id="loginPassword" name="password" required placeholder="Your password" autocomplete="current-password">
                 </div>
                 <div id="loginError" class="form-error hidden"></div>
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
                     <div style="display:flex;align-items:center;gap:8px;">
-                        <input type="checkbox" id="rememberMe" style="width:16px;height:16px;cursor:pointer;">
+                        <input type="checkbox" id="rememberMe" checked style="width:16px;height:16px;cursor:pointer;">
                         <label for="rememberMe" style="font-size:13px;color:var(--text-secondary);cursor:pointer;">Remember me</label>
                     </div>
                     <a href="#" id="forgotPasswordLink" style="font-size:13px;color:var(--accent-color);text-decoration:none;"
@@ -59,7 +59,7 @@
                         Forgot password?
                     </a>
                 </div>
-                <button type="button" class="login-btn" onclick="handleLogin(event)">
+                <button type="submit" class="login-btn">
                     <i class="fas fa-sign-in-alt"></i> Sign In
                 </button>
                 <p style="text-align:center;margin-top:16px;font-size:12px;">
@@ -68,7 +68,7 @@
                         Admin access
                     </a>
                 </p>
-            </div>
+            </form>
 
             <!-- Forgot Password Form (hidden) -->
             <div id="forgotPasswordForm" class="hidden">
@@ -117,14 +117,15 @@
             </div>
 
             <!-- Admin Code Form (hidden) -->
-            <div id="adminForm" class="hidden">
+            <form id="adminForm" class="hidden" autocomplete="on">
                 <p class="form-subtitle">Enter your admin code to manage courses and students.</p>
                 <div class="form-group">
                     <label for="adminCode">Admin Code</label>
-                    <input type="password" id="adminCode" required placeholder="Enter admin code" autocomplete="off">
+                    <input type="text" name="username" value="aaron-admin" autocomplete="username" readonly tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+                    <input type="password" id="adminCode" name="password" required placeholder="Enter admin code" autocomplete="current-password">
                 </div>
                 <div id="adminError" class="form-error hidden"></div>
-                <button type="button" class="login-btn" onclick="handleAdminLogin(event)">
+                <button type="submit" class="login-btn">
                     <i class="fas fa-cog"></i> Open Course Manager
                 </button>
                 <p style="text-align:center;margin-top:16px;font-size:12px;">
@@ -133,7 +134,7 @@
                         ← Back to Sign In
                     </a>
                 </p>
-            </div>
+            </form>
 
             <!-- Create Account Form -->
             <div id="signupForm" class="hidden">

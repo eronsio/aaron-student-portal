@@ -65,8 +65,12 @@ async function sbSetNewPassword(recoveryToken, newPassword) {
     return r.json();
 }
 
+let _lastRefreshAt = 0;   // when the stored session was last refreshed (ms)
+
 function sbSaveSession(data, rememberMe = true) {
     _accessToken = data.access_token;
+    _lastRefreshAt = Date.now();
+    requestPersistentStorage();
     const sessionData = JSON.stringify({
         access_token: data.access_token,
         refresh_token: data.refresh_token || null,
@@ -89,12 +93,15 @@ function sbLoadSession() {
     return null;
 }
 
+// Returns the new session, { rejected: true } when the server says this login is over, or { offline: true }
+// when it could not be reached (a bad connection must never log anybody out).
 async function sbRefreshSession(refreshToken) {
     try {
         const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
             method: 'POST', headers: _headers(),
             body: JSON.stringify({ refresh_token: refreshToken })
         });
+        if (r.status >= 500) return { offline: true };
         const data = await r.json();
         if (data.access_token) {
             // Preserve remember-me preference
@@ -102,9 +109,26 @@ async function sbRefreshSession(refreshToken) {
             sbSaveSession(data, inLocal);
             return data;
         }
-    } catch(e) {}
-    return null;
+        return { rejected: true };
+    } catch(e) {
+        return { offline: true };
+    }
 }
+
+// Ask the browser not to throw the saved login away when it tidies up storage.
+function requestPersistentStorage() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+}
+
+// The login token lasts about an hour: renew it while the app stays open, and when the phone/tab wakes up.
+async function ensureFreshSession() {
+    if (!currentUser || currentUser.isAdmin || currentUser.isPreview) return;
+    if (Date.now() - _lastRefreshAt < 40 * 60 * 1000) return;
+    const s = sbLoadSession();
+    if (s && s.refresh_token) await sbRefreshSession(s.refresh_token);
+}
+setInterval(ensureFreshSession, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureFreshSession(); });
 
 // --- Database ---
 async function sbGetProfile(userId) {
@@ -1141,10 +1165,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Try to refresh the token first (avoids expired token errors)
         if (session.refresh_token) {
             const refreshed = await sbRefreshSession(session.refresh_token);
-            if (refreshed) {
+            if (refreshed.access_token) {
                 await loadUserFromSession(refreshed);
                 return;
             }
+            if (refreshed.offline) {
+                // Can't reach the server right now: keep the saved login and let them retry.
+                showLoginModal();
+                setTimeout(() => showError('loginError', "Can't reach the server right now. Check your connection and reload — you are still signed in."), 100);
+                return;
+            }
+            // rejected: this login has really expired
+            await sbSignOut();
+            showLoginModal();
+            return;
         }
         await loadUserFromSession(session);
     } else {
@@ -1183,6 +1217,12 @@ async function loadUserFromSession(session) {
         showMainApp();
     } catch(err) {
         console.error('loadUserFromSession error:', err);
+        if (err instanceof TypeError) {
+            // A network failure, not a bad login: keep the saved session so the next reload signs straight in.
+            showLoginModal();
+            setTimeout(() => showError('loginError', "Can't reach the server right now. Check your connection and reload — you are still signed in."), 100);
+            return;
+        }
         await sbSignOut();
         showLoginModal();
         setTimeout(() => showError('loginError', 'Could not load your profile. Please try again.'), 100);
@@ -1195,14 +1235,10 @@ function setupEventListeners() {
     signupForm.addEventListener('submit', handleSignup);
     logoutBtn.addEventListener('click', handleLogout);
 
-    // Enter key triggers login/signup
-    ['loginEmail','loginPassword'].forEach(id => {
-        document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(e); });
-    });
+    // Enter key triggers signup (the sign-in and admin boxes are real <form>s, so the browser submits them itself)
     ['signupName','signupEmail','signupPassword'].forEach(id => {
         document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') handleSignup(e); });
     });
-    document.getElementById('adminCode').addEventListener('keydown', e => { if (e.key === 'Enter') handleAdminLogin(e); });
 
     // Toggle between Sign In and Create Account
     toggleLoginBtn.addEventListener('click', () => {
@@ -1439,6 +1475,94 @@ function adminPortalChoice() {
     try { return localStorage.getItem(ADMIN_PORTAL_KEY) === 'music' ? 'music' : 'spanish'; } catch (e) { return 'spanish'; }
 }
 
+// ---- Admin: look through students' pages in place ----
+// The admin picks a student (header dropdown, Students panel, or the ‹ › arrows) and sees the portal exactly as that
+// student does, in this tab. "Back to admin" returns. Nothing here changes anything for the student.
+let adminReturnUser = null;   // the admin, while viewing as a student
+
+async function adminStudentOptions(type) {
+    if (!Object.keys(_studentCache || {}).length) {
+        const profiles = await sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET });
+        if (Array.isArray(profiles)) { _studentCache = {}; profiles.forEach(p => { _studentCache[p.id] = p; }); }
+    }
+    const want = type || activePortal();
+    return Object.values(_studentCache || {})
+        .filter(p => p.name && (p.type || 'spanish') === want)
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+async function renderAdminStudentSwitch() {
+    let box = document.getElementById('adminStudentSwitch');
+    if (!currentUser?.isAdmin) { if (box) box.remove(); return; }
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'adminStudentSwitch';
+        box.className = 'admin-student-switch';
+        const userInfo = document.querySelector('#mainApp .header-top .user-info');
+        userInfo.parentNode.insertBefore(box, userInfo);
+    }
+    const students = await adminStudentOptions();
+    box.innerHTML = `<select id="adminStuSelect" aria-label="View the portal as a student">
+        <option value="">👤 View as student…</option>
+        ${students.map(s => `<option value="${escapeHtml(String(s.id))}">${escapeHtml(String(s.name))}</option>`).join('')}
+    </select>`;
+    box.querySelector('select').addEventListener('change', e => { if (e.target.value) enterStudentView(e.target.value); });
+}
+
+async function enterStudentView(id) {
+    const s = _studentCache && _studentCache[id];
+    if (!s) { alert('Student data not found. Reload the Students panel and try again.'); return; }
+    if (!adminReturnUser && currentUser?.isAdmin) adminReturnUser = currentUser;
+    if (!adminReturnUser) return;
+    leaveAiChat();   // the admin's own AI chat must not carry over to the student's page
+    document.getElementById('adminStudentsOverlay')?.classList.add('hidden');
+    currentUser = { id: s.id, name: s.name || 'Student', type: s.type || 'spanish', driveFolder: s.drive_folder || '', thisWeek: s.this_week || '', isPreview: true };
+    await showMainApp();
+    renderStudentViewBar();
+}
+
+function exitStudentView() {
+    if (!adminReturnUser) return;
+    currentUser = adminReturnUser;
+    adminReturnUser = null;
+    document.getElementById('studentViewBar')?.remove();
+    document.body.style.paddingTop = '';
+    leaveAiChat();
+    showMainApp();
+}
+
+async function renderStudentViewBar() {
+    if (!adminReturnUser || !currentUser?.isPreview) return;
+    let bar = document.getElementById('studentViewBar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'studentViewBar';
+        bar.className = 'student-view-bar';
+        document.body.appendChild(bar);
+    }
+    const list = await adminStudentOptions(currentUser.type || 'spanish');
+    const idx = list.findIndex(p => String(p.id) === String(currentUser.id));
+    bar.innerHTML = `<span class="sv-label">👁 Viewing as <b>${escapeHtml(String(currentUser.name))}</b></span>
+        <span class="sv-nav">
+            <button type="button" id="svPrev" title="Previous student" aria-label="Previous student">‹</button>
+            <select id="svSelect" aria-label="Student">${list.map(p => `<option value="${escapeHtml(String(p.id))}" ${String(p.id) === String(currentUser.id) ? 'selected' : ''}>${escapeHtml(String(p.name))}</option>`).join('')}</select>
+            <button type="button" id="svNext" title="Next student" aria-label="Next student">›</button>
+        </span>
+        <span class="sv-actions">
+            <button type="button" id="svEdit">Edit profile</button>
+            <button type="button" id="svBack">Back to admin</button>
+        </span>`;
+    const step = (d) => { if (list.length) enterStudentView(list[(idx + d + list.length) % list.length].id); };
+    document.getElementById('svPrev').addEventListener('click', () => step(-1));
+    document.getElementById('svNext').addEventListener('click', () => step(1));
+    document.getElementById('svSelect').addEventListener('change', e => enterStudentView(e.target.value));
+    document.getElementById('svEdit').addEventListener('click', () => loadAdminStudentsOverlay(currentUser.id));
+    document.getElementById('svBack').addEventListener('click', exitStudentView);
+    const fit = () => { const b = document.getElementById('studentViewBar'); if (b) document.body.style.paddingTop = b.offsetHeight + 'px'; };
+    fit();
+    if (!renderStudentViewBar.resizeHooked) { renderStudentViewBar.resizeHooked = true; window.addEventListener('resize', fit); }
+}
+
 function newAdminUser() {
     return { id: 'admin', name: 'Aaron', type: adminPortalChoice(), isAdmin: true, driveFolder: '' };
 }
@@ -1494,6 +1618,7 @@ function handleAdminLogin(e) {
         loginModal.classList.add('hidden');
         document.body.style.overflow = 'auto';
         localStorage.setItem('adminLoggedIn', 'true');
+        requestPersistentStorage();
         currentUser = newAdminUser();
         showMainApp();
     } else {
@@ -1543,6 +1668,10 @@ async function handleSignup(e) {
 async function handleLogout() {
     await sbSignOut();
     localStorage.removeItem('adminLoggedIn');
+    try { localStorage.removeItem('adminPreviewSession'); } catch (e) {}
+    adminReturnUser = null;
+    document.getElementById('studentViewBar')?.remove();
+    document.body.style.paddingTop = '';
     currentUser = null;
     isEditMode = false;
     document.body.classList.remove('admin-edit-mode');
@@ -1595,6 +1724,7 @@ async function showMainApp() {
     document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
     document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
     renderAdminPortalSwitch();
+    renderAdminStudentSwitch();
     applyAdminPortalTools();
 
     // AI companion is hidden by default; it appears per student once Aaron enables Speaking Practice for them.
@@ -2428,6 +2558,7 @@ async function saveConversationTurn(role, content) {
 
 const AI_COMPANION_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-companion`;
 
+let aiAuthRetried = false;
 async function callAnthropicAPI(messages, systemPrompt) {
     if (!_accessToken) {
         return '⚠️ Necesitas iniciar sesión como estudiante para usar el compañero de práctica.';
@@ -2441,6 +2572,10 @@ async function callAnthropicAPI(messages, systemPrompt) {
             body: JSON.stringify({ messages: messages.slice(-20), systemPrompt }),
             signal: controller.signal
         });
+        if (r.status === 401 && currentUser?.isAdmin && !aiAuthRetried && typeof practiceAdminRestore === 'function' && await practiceAdminRestore(true)) {
+            aiAuthRetried = true;   // the remembered preview login had expired: renewed it, so try this message once more
+            try { return await callAnthropicAPI(messages, systemPrompt); } finally { aiAuthRetried = false; }
+        }
         const data = await r.json();
         if (!r.ok || data.error) return `⚠️ Error: ${data.error || 'No se pudo conectar con el compañero de práctica.'}`;
         return data.text || '...';
@@ -2724,8 +2859,10 @@ function ensureAiExtras() {
 
 // Runs every time the student opens the tab. A chat or recap that is already on screen is left alone,
 // so switching tabs and coming back never throws the conversation away.
-function initAiCompanion() {
+async function initAiCompanion() {
     ensureAiExtras();
+    // The admin's preview login is remembered: restore it before drawing the bar, so there is nothing to type.
+    if (currentUser?.isAdmin && !_accessToken && typeof practiceAdminRestore === 'function') await practiceAdminRestore();
     if (currentUser?.isAdmin && typeof renderAiAdminBar === 'function') renderAiAdminBar();
     const recapShowing = !document.getElementById('aiRecapView').classList.contains('hidden');
     if (currentAiMode || recapShowing) return;
@@ -4060,8 +4197,15 @@ async function loadAdminStudents() {
             const phoneVal = (student.phone || '').replace(/"/g, '&quot;');
 
             return `
-            <div class="admin-course-card" data-name="${escapeHtml(String(student.name || '').toLowerCase())}" style="margin-bottom:16px;padding:16px;">
-                <h4 style="margin-bottom:2px;">${escapeHtml(String(student.name || 'Unknown'))}</h4>
+            <details class="admin-student-card" id="stu_${escapeHtml(String(student.id))}" data-name="${escapeHtml(String(student.name || '').toLowerCase())}">
+                <summary>
+                    <span class="stu-name">${escapeHtml(String(student.name || 'Unknown'))}</span>
+                    <span class="stu-meta">${student.type === 'music' ? '🎵 Music' : '🗣️ Spanish'} · ${driveLinkFor(student.drive_folder)
+                        ? `<a href="${escapeHtml(driveLinkFor(student.drive_folder))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">notes ↗</a>`
+                        : '<span class="stu-warn">no notes link</span>'}${student.email ? '' : ' · <span class="stu-warn">no email</span>'}</span>
+                    <button type="button" class="admin-btn small stu-viewas" onclick="event.preventDefault();event.stopPropagation();enterStudentView('${escapeHtml(String(student.id))}')"><i class="fas fa-eye"></i> View as</button>
+                </summary>
+                <div class="stu-body">
                 <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">joined ${new Date(student.created_at).toLocaleDateString()}</p>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -4104,14 +4248,15 @@ async function loadAdminStudents() {
                     <button class="admin-btn small" onclick="notifyStudentByEmail('${student.id}')" style="background:#f0fdf4;border-color:#86efac;color:#166534;"><i class="fas fa-envelope"></i> Notify via Email</button>
                 </div>
                 ${hasInsight ? `<p style="font-size:12px;color:var(--text-secondary);margin-top:10px;">${preview} (${date})</p>` : ''}
-            </div>`;
+                </div>
+            </details>`;
         }).join('');
         if (portalProfiles.length > 6) {
             container.insertAdjacentHTML('afterbegin', `<input type="search" id="adminStudentSearch" placeholder="Search ${portalProfiles.length} students…" autocomplete="off"
                 style="width:100%;margin-bottom:16px;padding:10px 14px;font-size:14px;font-family:inherit;border:1px solid var(--border-color);border-radius:var(--radius-md);background:#fff;">`);
             document.getElementById('adminStudentSearch').addEventListener('input', e => {
                 const q = e.target.value.trim().toLowerCase();
-                container.querySelectorAll('.admin-course-card[data-name]').forEach(c => { c.style.display = !q || c.dataset.name.includes(q) ? '' : 'none'; });
+                container.querySelectorAll('.admin-student-card[data-name]').forEach(c => { c.style.display = !q || c.dataset.name.includes(q) ? '' : 'none'; });
             });
         }
     } catch(e) {
@@ -4266,9 +4411,12 @@ async function resetCoursesToDefaults() {
     showImportSuccess('Reset complete — reload the page to see the defaults.');
 }
 
-function loadAdminStudentsOverlay() {
+// focusId (optional): open that student's card and scroll to it.
+async function loadAdminStudentsOverlay(focusId) {
     document.getElementById('adminStudentsOverlay').classList.remove('hidden');
-    loadAdminStudents();
+    await loadAdminStudents();
+    const card = focusId && document.getElementById('stu_' + focusId);
+    if (card) { card.open = true; card.scrollIntoView({ block: 'start' }); }
 }
 
 function openLessonPrep() {
@@ -4487,19 +4635,9 @@ function openSettingsOverlay() {
     document.getElementById('adminSettingsOverlay').classList.remove('hidden');
 }
 
+// "Preview" now opens the student's page in this same tab (see enterStudentView), no new window.
 function previewAsSpecificStudent(studentId) {
-    const s = _studentCache[studentId];
-    if (!s) { alert('Student data not found. Reload the Students panel and try again.'); return; }
-    // Store in sessionStorage so the new tab can read it
-    sessionStorage.setItem('adminPreviewStudent', JSON.stringify({
-        id: s.id,
-        name: s.name || 'Student',
-        type: s.type || 'spanish',
-        driveFolder: s.drive_folder || '',
-        thisWeek: s.this_week || '',
-        isPreview: true
-    }));
-    window.open(window.location.href.split('?')[0] + '?preview=1', '_blank');
+    enterStudentView(studentId);
 }
 
 // Generic subject preview — doesn't need a real registered student, just

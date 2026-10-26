@@ -23,9 +23,19 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 
 ## Auth flow
 - Students sign up with email/password (Supabase Auth) → email confirmation → profile created in `profiles`
-- Session stored in localStorage (remember me) or sessionStorage
-- Token refresh handled on page load via `sbRefreshSession`
-- Admin login: code `ADMIN-AARON` entered at the login screen (no Supabase auth, just localStorage flag)
+- Session stored in localStorage (remember me, **ticked by default** since 2026-10-26) or sessionStorage; `navigator.storage.persist()` is requested at login
+- Token refresh: on page load via `sbRefreshSession`, then every ~40 min while open and when the tab/phone wakes (`ensureFreshSession`). `sbRefreshSession`
+  returns the new session, `{rejected:true}` (server says the login is over → sign out) or `{offline:true}` (no connection → KEEP the saved session and show
+  "can't reach the server"; a network failure must never log anyone out). `loadUserFromSession` likewise keeps the session on a `TypeError` (network) failure.
+- The sign-in and admin-code boxes are real `<form>`s (username/current-password autocomplete, a visually hidden username on the admin one) so browsers and
+  password managers can save and fill them; Enter submits the form (no extra keydown handlers).
+- Admin login: code `ADMIN-AARON` entered at the login screen (no Supabase auth, just a localStorage flag `adminLoggedIn`, restored on every load)
+- Admin AI preview login is remembered too: a refresh token for the admin's own student account in localStorage `adminPreviewSession` (never the password),
+  restored by `practiceAdminRestore()` and renewed once automatically if the AI proxy answers 401. It is cleared by "Sign out of preview" and Logout.
+- Admin "View as student" (`enterStudentView`/`exitStudentView`/`renderStudentViewBar` in script.js): header dropdown, "View as" in the Students panel, and a
+  bar with ‹ › arrows, a picker, "Edit profile" (opens the Students panel on that card) and "Back to admin". It swaps `currentUser` for a `isPreview` copy
+  of the student in the same tab (the admin is kept in `adminReturnUser`); the student's AI tab is hidden in this view. The Students panel lists students as
+  collapsed `<details>` rows (notes link / missing-email warnings at a glance) that expand to the edit form.
 - Admin secret for RPC calls: `AARON-ADMIN-2025`
 
 ## Key JS architecture
