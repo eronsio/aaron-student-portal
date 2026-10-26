@@ -29,7 +29,7 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   "can't reach the server"; a network failure must never log anyone out). `loadUserFromSession` likewise keeps the session on a `TypeError` (network) failure.
 - The sign-in and admin-code boxes are real `<form>`s (username/current-password autocomplete, a visually hidden username on the admin one) so browsers and
   password managers can save and fill them; Enter submits the form (no extra keydown handlers).
-- Admin login: code `ADMIN-AARON` entered at the login screen (no Supabase auth, just a localStorage flag `adminLoggedIn`, restored on every load)
+- Admin login: the admin signs in with their own account on the normal Sign In form (see the admin-access note below); the old shared admin code no longer exists
 - Admin AI preview login is remembered too: a refresh token for the admin's own student account in localStorage `adminPreviewSession` (never the password),
   restored by `practiceAdminRestore()` and renewed once automatically if the AI proxy answers 401. It is cleared by "Sign out of preview" and Logout.
 - Admin "View as student" (`enterStudentView`/`exitStudentView`/`renderStudentViewBar` in script.js): header dropdown, "View as" in the Students panel, and a
@@ -166,8 +166,7 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
 ## Important constants in script.js
 | Constant | Value | Purpose |
 |---|---|---|
-| `ADMIN_CODE` | `ADMIN-AARON` | Admin login code |
-| `ADMIN_SECRET` | `AARON-ADMIN-2025` | RPC auth secret |
+| `ADMIN_SECRET` | `''` (empty) | Admin RPCs are authorised by the signed-in admin's token; the parameter is only kept because the SQL functions declare it |
 | `SESSION_STORE` | `aaron_portal_session` | localStorage key for session |
 
 ## Working with this codebase
