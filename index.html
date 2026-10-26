@@ -225,28 +225,38 @@
 
                         <!-- Chat (the tab opens straight into this) -->
                         <div id="aiChatView" class="hidden">
-                            <div class="ai-chat-topbar">
-                                <div id="aiModeLabel" class="ai-mode-label"></div>
-                                <div style="display:flex;gap:8px;align-items:center;">
-                                    <button id="ttsToggleBtn" onclick="toggleTTS()" class="admin-btn small" style="font-size:12px;">
-                                        <i class="fas fa-volume-up"></i> Voice on
-                                    </button>
-                                    <button class="back-btn" onclick="endAiSession()" style="margin:0;">
-                                        <i class="fas fa-times"></i> End session
-                                    </button>
+                            <div class="ai-shell">
+                                <div class="ai-header">
+                                    <div class="ai-header-main">
+                                        <span class="ai-header-mark" aria-hidden="true"><i class="fas fa-comments"></i></span>
+                                        <div class="ai-header-text">
+                                            <div id="aiModeLabel" class="ai-title"></div>
+                                            <div id="aiTargetChips" class="ai-target-chips hidden"></div>
+                                        </div>
+                                    </div>
+                                    <div class="ai-header-actions">
+                                        <button id="ttsToggleBtn" type="button" onclick="toggleTTS()" class="ai-icon-btn" title="Read the replies aloud" aria-label="Read the replies aloud" aria-pressed="true">
+                                            <i class="fas fa-volume-up"></i>
+                                        </button>
+                                        <button type="button" class="ai-end-btn" onclick="endAiSession()" title="End this practice session">
+                                            <i class="fas fa-flag-checkered"></i><span>End session</span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div id="aiTargetChips" class="ai-target-chips hidden"></div>
-                            <div class="ai-chat-container">
-                                <div class="ai-chat-messages" id="aiChatMessages"></div>
-                                <div class="ai-chat-input-container">
-                                    <button id="aiRecordBtn" class="record-btn" title="Hold to record voice message">
-                                        <i class="fas fa-microphone"></i>
-                                    </button>
-                                    <input type="text" id="aiMessageInput" placeholder="Escribe en español..." />
-                                    <button id="aiSendMessage">
-                                        <i class="fas fa-paper-plane"></i>
-                                    </button>
+                                <div class="ai-chat-messages" id="aiChatMessages" role="log" aria-live="polite"></div>
+                                <div class="ai-footer">
+                                    <div class="ai-chat-input-container ai-composer">
+                                        <button id="aiActivityBtn" type="button" class="ai-icon-btn ai-plus-btn" title="Switch activity" aria-label="Switch activity" aria-haspopup="true" aria-expanded="false">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                        <textarea id="aiMessageInput" rows="1" placeholder="Escribe en español…" autocomplete="off" aria-label="Your message"></textarea>
+                                        <button id="aiRecordBtn" type="button" class="record-btn ai-mic-btn" title="Tap and just talk" aria-label="Start a voice conversation">
+                                            <i class="fas fa-microphone"></i>
+                                        </button>
+                                        <button id="aiSendMessage" type="button" class="ai-send-btn" title="Send" aria-label="Send" disabled>
+                                            <i class="fas fa-arrow-up"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

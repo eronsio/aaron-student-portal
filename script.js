@@ -1272,9 +1272,11 @@ function setupEventListeners() {
     });
 
     aiSendBtn.addEventListener('click', sendAiMessage);
-    aiMessageInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendAiMessage();
+    // Enter sends, Shift+Enter makes a new line; the box grows with the text.
+    aiMessageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendAiMessage(); }
     });
+    aiMessageInput.addEventListener('input', aiAutosize);
 
     // Voice conversation: tap the mic and talk; it sends by itself and the reply is read aloud
     if (convoSupported()) {
@@ -2332,7 +2334,7 @@ function fillTtsVoiceSelect() {
         .filter(v => /^es/i.test(v.lang))
         .sort((a, b) => ttsVoiceScore(b, 'es-ES') - ttsVoiceScore(a, 'es-ES'));
     const saved = ttsSavedVoiceName();
-    sel.innerHTML = '<option value="">Voice: automatic</option>' + spanish
+    sel.innerHTML = '<option value="">Automatic</option>' + spanish
         .map(v => `<option value="${escapeHtml(v.voiceURI)}">${escapeHtml(v.name)} (${escapeHtml(v.lang)})</option>`).join('');
     sel.value = spanish.some(v => v.voiceURI === saved) ? saved : '';
 }
@@ -2348,11 +2350,16 @@ function chooseTtsVoice(uri) {
 // "Slow" is a learner aid: the AI's Spanish is read at a gentler pace. Remembered per browser.
 let ttsSlow = (() => { try { return localStorage.getItem('aiTtsSlow') === '1'; } catch (e) { return false; } })();
 
-function toggleSlowTTS() {
-    ttsSlow = !ttsSlow;
+function toggleSlowTTS() { setSlowTTS(!ttsSlow); }
+
+function setSlowTTS(slow) {
+    ttsSlow = !!slow;
     try { localStorage.setItem('aiTtsSlow', ttsSlow ? '1' : '0'); } catch (e) {}
-    const btn = document.getElementById('ttsSlowBtn');
-    if (btn) { btn.classList.toggle('active', ttsSlow); btn.setAttribute('aria-pressed', ttsSlow ? 'true' : 'false'); }
+    document.querySelectorAll('#aiPaceSeg button').forEach(b => {
+        const on = (b.dataset.pace === 'slow') === ttsSlow;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
 }
 
 // Turns a chat reply into what should be said aloud: no markup, no [teacher notes], no emoji or symbols
@@ -2496,10 +2503,10 @@ function toggleTTS() {
     ttsEnabled = !ttsEnabled;
     const btn = document.getElementById('ttsToggleBtn');
     if (btn) {
-        btn.innerHTML = ttsEnabled
-            ? '<i class="fas fa-volume-up"></i> Voice on'
-            : '<i class="fas fa-volume-mute"></i> Voice off';
-        btn.style.opacity = ttsEnabled ? '1' : '0.5';
+        btn.innerHTML = ttsEnabled ? '<i class="fas fa-volume-up"></i>' : '<i class="fas fa-volume-xmark"></i>';
+        btn.classList.toggle('is-off', !ttsEnabled);
+        btn.setAttribute('aria-pressed', ttsEnabled ? 'true' : 'false');
+        btn.title = btn.ariaLabel = ttsEnabled ? 'Replies are read aloud (tap to mute)' : 'Replies are muted (tap to read aloud)';
     }
     if (!ttsEnabled) stopSpeaking();
 }
@@ -2560,7 +2567,7 @@ async function callAnthropicAPI(messages, systemPrompt) {
     }
 }
 
-const AI_CHAT_LABEL = '🗣️ Práctica de español';
+const AI_CHAT_LABEL = 'Práctica de español';
 
 const MODE_OPENING = {
     plan: null, // AI generates this, aimed at today's first target
@@ -2583,7 +2590,7 @@ async function startAiMode(mode, context) {
     syncAiChatClass();
     document.getElementById('aiModeLabel').textContent = AI_CHAT_LABEL;
     document.getElementById('aiChatMessages').innerHTML = '';
-    appendAiMessage('bot', '<em style="color:var(--text-secondary)">Iniciando sesión...</em>');
+    appendAiMessage('bot', '<span class="ai-starting"><span class="typing-indicator"><span></span><span></span><span></span></span><em>Preparing your session…</em></span>');
     refreshAiActivityChips();
 
     studentInsightCache = await loadStudentInsight();
@@ -2658,7 +2665,7 @@ function appendAiMessage(type, html, raw) {
     const el = document.createElement('div');
     el.className = `ai-message ai-${type}`;
     if (type === 'bot') {
-        el.innerHTML = `<div class="ai-avatar"><i class="fas fa-robot"></i></div><div class="ai-bubble"><p>${html}</p></div>`;
+        el.innerHTML = `<span class="ai-avatar" aria-hidden="true"><i class="fas fa-comments"></i></span><div class="ai-bubble"><p>${html}</p></div>`;
         if (typeof raw === 'string' && raw && (window.speechSynthesis || window.Audio)) {
             const b = document.createElement('button');
             b.type = 'button'; b.className = 'ai-replay'; b.title = 'Listen again'; b.setAttribute('aria-label', 'Listen again');
@@ -2667,11 +2674,31 @@ function appendAiMessage(type, html, raw) {
             el.querySelector('.ai-bubble').appendChild(b);
         }
     } else {
-        el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div><div class="ai-avatar user-avatar"><i class="fas fa-user"></i></div>`;
+        el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div>`;
     }
-    document.getElementById('aiChatMessages').appendChild(el);
-    document.getElementById('aiChatMessages').scrollTop = 99999;
+    const box = document.getElementById('aiChatMessages');
+    // Stay glued to the bottom only if the student was already reading the latest message.
+    const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
+    box.appendChild(el);
+    if (nearEnd || type === 'user') aiScrollToEnd(box);
     return el;
+}
+
+function aiScrollToEnd(box, instant) {
+    box = box || document.getElementById('aiChatMessages');
+    if (!box) return;
+    if (instant || window.matchMedia('(prefers-reduced-motion: reduce)').matches) box.scrollTop = box.scrollHeight;
+    else box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+}
+
+// The message box grows with what is typed (up to a limit), and Send is only live when there is something to send.
+function aiAutosize() {
+    const el = document.getElementById('aiMessageInput');
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+    const send = document.getElementById('aiSendMessage');
+    if (send) send.disabled = aiBusy || !el.value.trim();
 }
 
 let aiBusy = false; // one question at a time, so replies can't arrive out of order
@@ -2704,6 +2731,7 @@ const AI_ACTIVITY_MESSAGES = {
     free: "Let's just chat freely."
 };
 function sendAiActivity(kind) {
+    aiClosePopovers();
     const message = AI_ACTIVITY_MESSAGES[kind];
     if (message) submitAiMessage(message, { help: true });
 }
@@ -2722,7 +2750,7 @@ async function submitAiMessage(message, opts) {
     let spoken = null, reply = '', failed = false;
     try {
         appendAiMessage('user', escapeHtml(message));
-        if (!opts.help) aiMessageInput.value = '';
+        if (!opts.help) { aiMessageInput.value = ''; aiAutosize(); }
 
         // Typing indicator
         const typing = appendAiMessage('bot', '<span class="typing-indicator"><span></span><span></span><span></span></span>');
@@ -2755,97 +2783,118 @@ async function submitAiMessage(message, opts) {
 
 function setAiBusyUI(busy) {
     document.querySelectorAll('#aiQuickReplies button').forEach(b => { b.disabled = busy; });
-    if (aiSendBtn) aiSendBtn.disabled = busy;
+    document.querySelector('#aiChatView .ai-composer')?.classList.toggle('is-busy', busy);
+    aiAutosize();   // also decides whether Send is enabled
 }
 
-// Adds the "slow" switch and the help buttons to the chat. Built here (once) so they need no markup of their own.
+// Builds the pieces of the chat that need no markup of their own (settings menu, help chips, activity menu, voice panel).
+// Idempotent: safe to call every time the tab opens.
 function ensureAiExtras() {
-    if (!document.getElementById('ttsSlowBtn')) {
-        const voiceBtn = document.getElementById('ttsToggleBtn');
-        if (voiceBtn) {
-            const b = document.createElement('button');
-            b.id = 'ttsSlowBtn'; b.type = 'button'; b.className = 'admin-btn small'; b.style.fontSize = '12px';
-            b.innerHTML = '🐢 Slow';
-            b.title = 'Read the replies more slowly';
-            b.setAttribute('aria-pressed', ttsSlow ? 'true' : 'false');
-            b.classList.toggle('active', ttsSlow);
-            b.addEventListener('click', toggleSlowTTS);
-            voiceBtn.parentNode.insertBefore(b, voiceBtn);
-        }
+    const footer = document.querySelector('#aiChatView .ai-footer');
+    const composer = document.querySelector('#aiChatView .ai-chat-input-container');
+    const actions = document.querySelector('#aiChatView .ai-header-actions');
+
+    // Voice settings (reading voice + pace) live behind one button in the header instead of loose controls.
+    if (actions && !document.getElementById('aiSettingsBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'aiSettingsBtn'; btn.type = 'button'; btn.className = 'ai-icon-btn';
+        btn.title = 'Voice settings'; btn.setAttribute('aria-label', 'Voice settings');
+        btn.setAttribute('aria-haspopup', 'true'); btn.setAttribute('aria-expanded', 'false');
+        btn.innerHTML = '<i class="fas fa-sliders"></i>';
+        const menu = document.createElement('div');
+        menu.id = 'aiSettingsMenu'; menu.className = 'ai-popover ai-popover-down hidden';
+        menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', 'Voice settings');
+        menu.innerHTML = `<div class="ai-pop-title">Voice</div>
+            <div class="ai-pop-row"><label for="ttsVoiceSelect">Reading voice</label>${window.speechSynthesis
+                ? '<select id="ttsVoiceSelect" class="tts-voice-select"></select>' : '<em>Not available here</em>'}</div>
+            <div class="ai-pop-row"><span>Pace</span>
+                <div class="ai-seg" id="aiPaceSeg" role="group" aria-label="Reading pace">
+                    <button type="button" data-pace="normal">Normal</button><button type="button" data-pace="slow">Slow</button>
+                </div></div>`;
+        actions.insertBefore(btn, document.getElementById('ttsToggleBtn'));
+        actions.appendChild(menu);
+        btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiSettingsMenu', btn); });
+        menu.querySelectorAll('#aiPaceSeg button').forEach(b => b.addEventListener('click', () => setSlowTTS(b.dataset.pace === 'slow')));
+        const sel = menu.querySelector('#ttsVoiceSelect');
+        if (sel) { sel.addEventListener('change', () => chooseTtsVoice(sel.value)); fillTtsVoiceSelect(); }
+        setSlowTTS(ttsSlow);
     }
-    if (!document.getElementById('ttsVoiceSelect') && window.speechSynthesis) {
-        const slowBtn = document.getElementById('ttsSlowBtn');
-        if (slowBtn) {
-            const sel = document.createElement('select');
-            sel.id = 'ttsVoiceSelect'; sel.className = 'tts-voice-select';
-            sel.title = 'Pick the voice that reads the replies aloud';
-            sel.setAttribute('aria-label', 'Reading voice');
-            sel.addEventListener('change', () => chooseTtsVoice(sel.value));
-            slowBtn.parentNode.insertBefore(sel, slowBtn);
-            fillTtsVoiceSelect();
-        }
+    // The admin's floating tools button would sit on top of the composer while the chat is open (see styles.css), so the
+    // chat header carries its own Tools button for the admin.
+    if (actions && currentUser?.isAdmin && !document.getElementById('aiAdminToolsBtn')) {
+        const b = document.createElement('button');
+        b.id = 'aiAdminToolsBtn'; b.type = 'button'; b.className = 'ai-icon-btn ai-tools-btn';
+        b.title = 'Admin tools'; b.setAttribute('aria-label', 'Admin tools');
+        b.innerHTML = '<i class="fas fa-tools"></i>';
+        b.addEventListener('click', toggleAdminMenu);
+        actions.insertBefore(b, actions.firstChild);
+    }
+    if (!footer || !composer) return;
+
+    // Footer, top to bottom: voice status line, voice call panel, help chips, composer.
+    if (!document.getElementById('aiVoiceStatus')) {
+        const bar = document.createElement('div');
+        bar.id = 'aiVoiceStatus'; bar.className = 'ai-voice-status hidden';
+        bar.setAttribute('role', 'status'); bar.setAttribute('aria-live', 'polite');
+        bar.innerHTML = '<i class="fas fa-circle"></i><span></span>';
+        footer.insertBefore(bar, composer);
     }
     if (!document.getElementById('aiQuickReplies')) {
-        const input = document.querySelector('#aiChatView .ai-chat-input-container');
-        if (input) {
-            const row = document.createElement('div');
-            row.id = 'aiQuickReplies'; row.className = 'ai-quick-replies';
-            row.innerHTML = `<button type="button" onclick="sendAiHelp('hint')">💡 Hint</button>
-                <button type="button" onclick="sendAiHelp('explain')">💬 Explain in English</button>
-                <button type="button" onclick="sendAiHelp('simpler')">🐢 Say it simpler</button>
-                <span class="ai-chip-sep" aria-hidden="true"></span>
-                <button type="button" id="aiChipPlan" class="hidden" onclick="sendAiActivity('plan')">🎯 My plan</button>
-                <button type="button" onclick="sendAiActivity('roleplay')">🎭 Roleplay</button>
-                <button type="button" onclick="sendAiActivity('picture')">🖼️ Describe a picture</button>
-                <button type="button" onclick="sendAiActivity('grammar')">📚 Grammar drill</button>
-                <button type="button" onclick="sendAiActivity('free')">💬 Free chat</button>`;
-            input.parentNode.insertBefore(row, input);
-        }
-    }
-    // The admin's floating tools button would sit on top of the mic while the chat is open (see styles.css), so the
-    // chat header carries its own Tools button for the admin.
-    if (currentUser?.isAdmin && !document.getElementById('aiAdminToolsBtn')) {
-        const ctrl = document.querySelector('#aiChatView .ai-chat-topbar > div:last-child');
-        if (ctrl) {
-            const b = document.createElement('button');
-            b.id = 'aiAdminToolsBtn'; b.type = 'button'; b.className = 'admin-btn small'; b.style.fontSize = '12px';
-            b.innerHTML = '<i class="fas fa-tools"></i> Tools';
-            b.title = 'Admin tools';
-            b.addEventListener('click', toggleAdminMenu);
-            ctrl.insertBefore(b, ctrl.firstChild);
-        }
+        const row = document.createElement('div');
+        row.id = 'aiQuickReplies'; row.className = 'ai-quick-replies';
+        row.innerHTML = `<button type="button" onclick="sendAiHelp('hint')"><i class="fas fa-lightbulb"></i>Hint</button>
+            <button type="button" onclick="sendAiHelp('explain')"><i class="fas fa-language"></i>Explain in English</button>
+            <button type="button" onclick="sendAiHelp('simpler')"><i class="fas fa-feather"></i>Say it simpler</button>`;
+        footer.insertBefore(row, composer);
     }
     if (!document.getElementById('aiVoicePanel')) {
-        const input = document.querySelector('#aiChatView .ai-chat-input-container');
-        if (input) {
-            const panel = document.createElement('div');
-            panel.id = 'aiVoicePanel';
-            panel.className = 'ai-voice-panel hidden';
-            panel.innerHTML = `<button type="button" id="aiVoiceOrb" class="voice-orb" aria-label="Voice conversation: tap while it speaks to answer now"><i class="fas fa-microphone"></i></button>
-                <div class="voice-text"><div id="aiVoiceState" class="voice-state" role="status" aria-live="polite"></div><div id="aiVoiceHeard" class="voice-heard"></div></div>
-                <div class="voice-actions">
-                    <button type="button" id="aiVoiceType" title="Stop talking and type instead"><i class="fas fa-keyboard"></i> Type</button>
-                    <button type="button" id="aiVoiceEnd" title="End the voice conversation"><i class="fas fa-times"></i> End</button>
-                </div>`;
-            input.parentNode.insertBefore(panel, input);
-            document.getElementById('aiVoiceOrb').addEventListener('click', () => { if (convo.state === 'speaking') convoNext(); });
-            document.getElementById('aiVoiceEnd').addEventListener('click', convoStop);
-            document.getElementById('aiVoiceType').addEventListener('click', () => { convoStop(); aiMessageInput.focus(); });
-        }
+        const panel = document.createElement('div');
+        panel.id = 'aiVoicePanel'; panel.className = 'ai-voice-panel hidden';
+        panel.innerHTML = `<button type="button" id="aiVoiceOrb" class="voice-orb" aria-label="Voice conversation: tap while it speaks to answer now"><i class="fas fa-microphone"></i></button>
+            <div class="voice-text"><div id="aiVoiceState" class="voice-state" role="status" aria-live="polite"></div><div id="aiVoiceHeard" class="voice-heard"></div></div>
+            <div class="voice-actions">
+                <button type="button" id="aiVoiceType" title="Stop talking and type instead"><i class="fas fa-keyboard"></i><span>Type</span></button>
+                <button type="button" id="aiVoiceEnd" class="is-end" title="End the voice conversation"><i class="fas fa-phone-slash"></i><span>End</span></button>
+            </div>`;
+        footer.insertBefore(panel, composer);
+        document.getElementById('aiVoiceOrb').addEventListener('click', () => { if (convo.state === 'speaking') convoNext(); });
+        document.getElementById('aiVoiceEnd').addEventListener('click', convoStop);
+        document.getElementById('aiVoiceType').addEventListener('click', () => { convoStop(); aiMessageInput.focus(); });
     }
-    if (!document.getElementById('aiVoiceStatus')) {
-        const anchor = document.getElementById('aiQuickReplies') || document.querySelector('#aiChatView .ai-chat-input-container');
-        if (anchor) {
-            const bar = document.createElement('div');
-            bar.id = 'aiVoiceStatus';
-            bar.className = 'ai-voice-status hidden';
-            bar.setAttribute('role', 'status');
-            bar.setAttribute('aria-live', 'polite');
-            bar.innerHTML = '<i class="fas fa-circle"></i><span></span>';
-            anchor.parentNode.insertBefore(bar, anchor);
-        }
+    // "+" opens the activity menu (the AI switches activity when asked; see PRACTICE_ACTIVITIES_RULE in practice.js).
+    if (!document.getElementById('aiActivityMenu')) {
+        const menu = document.createElement('div');
+        menu.id = 'aiActivityMenu'; menu.className = 'ai-popover ai-popover-up hidden'; menu.setAttribute('role', 'menu');
+        const item = (id, kind, icon, title, sub, hidden) => `<button type="button" role="menuitem" class="ai-pop-item${hidden ? ' hidden' : ''}"${id ? ` id="${id}"` : ''} onclick="sendAiActivity('${kind}')"><i class="fas ${icon}"></i><span><b>${title}</b><small>${sub}</small></span></button>`;
+        menu.innerHTML = `<div class="ai-pop-title">Switch activity</div>`
+            + item('aiChipPlan', 'plan', 'fa-bullseye', 'My practice plan', 'Work on what you are focusing on', true)
+            + item('', 'roleplay', 'fa-masks-theater', 'Roleplay', 'Practise a real situation: café, airport…')
+            + item('', 'picture', 'fa-image', 'Describe a picture', 'Describe a scene in your own words')
+            + item('', 'grammar', 'fa-spell-check', 'Grammar drill', 'Short, game-like exercises')
+            + item('', 'free', 'fa-comments', 'Free chat', 'Talk about anything you like');
+        footer.appendChild(menu);
+        const btn = document.getElementById('aiActivityBtn');
+        if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', btn); });
     }
 }
+
+// Small popover menus (voice settings, activities): one open at a time, closed by a click elsewhere or Escape.
+function aiTogglePopover(id, trigger) {
+    const menu = document.getElementById(id);
+    if (!menu) return;
+    const willOpen = menu.classList.contains('hidden');
+    aiClosePopovers();
+    if (willOpen) {
+        menu.classList.remove('hidden');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    }
+}
+function aiClosePopovers() {
+    document.querySelectorAll('.ai-popover').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('#aiChatView [aria-haspopup="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('.ai-popover')) aiClosePopovers(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') aiClosePopovers(); });
 
 // Runs every time the student opens the tab. A chat or recap that is already on screen is left alone,
 // so switching tabs and coming back never throws the conversation away.
