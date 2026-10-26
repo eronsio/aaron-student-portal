@@ -179,7 +179,6 @@ let recognition = null;
 // ADMIN CODE — Change this to whatever you want
 // Enter this code at the login screen to open the Course Manager
 // ============================================================
-const ADMIN_CODE = 'ADMIN-AARON';
 
 // ============================================================
 // COURSES DATABASE
@@ -1049,7 +1048,7 @@ const verbConjugations = [
 // ============================================================
 // DOM ELEMENTS — grabbed inside DOMContentLoaded to ensure they exist
 // ============================================================
-let loginModal, mainApp, loginForm, adminForm, welcomeMessage, logoutBtn,
+let loginModal, mainApp, loginForm, welcomeMessage, logoutBtn,
     portalTitle, tabBtns, tabPanes, messageInput, sendMessageBtn, chatMessages,
     aiCompanionTab, aiMessageInput, aiSendBtn, aiChatMessages, signupForm,
     toggleLoginBtn, toggleSignupBtn, aiRecordBtn, signupFields, signupSuccess, goToLoginBtn;
@@ -1062,7 +1061,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     loginModal     = document.getElementById('loginModal');
     mainApp        = document.getElementById('mainApp');
     loginForm      = document.getElementById('loginForm');
-    adminForm      = document.getElementById('adminForm');
     welcomeMessage = document.getElementById('welcomeMessage');
     logoutBtn      = document.getElementById('logoutBtn');
     portalTitle    = document.getElementById('portalTitle');
@@ -1111,12 +1109,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Restore admin session across refreshes
-    if (localStorage.getItem('adminLoggedIn')) {
-        currentUser = newAdminUser();
-        showMainApp();
-        return;
-    }
+    // The old shared-code admin login is gone: an admin signs in with their own account like everyone else.
+    // Forget the flag it used to leave behind.
+    try { localStorage.removeItem('adminLoggedIn'); } catch (e) {}
 
     // Handle redirect from a Supabase auth email link.
     // Supabase puts tokens in the URL hash: #access_token=...&type=signup|recovery
@@ -1241,7 +1236,6 @@ async function loadUserFromSession(session) {
 
 function setupEventListeners() {
     loginForm.addEventListener('submit', handleLogin);
-    adminForm.addEventListener('submit', handleAdminLogin);
     signupForm.addEventListener('submit', handleSignup);
     logoutBtn.addEventListener('click', handleLogout);
 
@@ -1256,27 +1250,11 @@ function setupEventListeners() {
     });
     toggleSignupBtn.addEventListener('click', () => {
         loginForm.classList.add('hidden');
-        adminForm.classList.add('hidden');
         signupForm.classList.remove('hidden');
         toggleSignupBtn.classList.add('active');
         toggleLoginBtn.classList.remove('active');
         signupFields.classList.remove('hidden');
         signupSuccess.classList.add('hidden');
-    });
-
-    // Admin link
-    document.getElementById('adminLoginLink').addEventListener('click', (e) => {
-        e.preventDefault();
-        loginForm.classList.add('hidden');
-        signupForm.classList.add('hidden');
-        adminForm.classList.remove('hidden');
-        document.getElementById('mainToggle').style.display = 'none';
-        document.getElementById('adminCode').focus();
-    });
-
-    document.getElementById('backToLoginLink').addEventListener('click', (e) => {
-        e.preventDefault();
-        showLoginFormView();
     });
 
     // Tab switching
@@ -1320,7 +1298,6 @@ function setupEventListeners() {
 function showLoginFormView() {
     loginForm.classList.remove('hidden');
     signupForm.classList.add('hidden');
-    adminForm.classList.add('hidden');
     toggleLoginBtn.classList.add('active');
     toggleSignupBtn.classList.remove('active');
     document.getElementById('mainToggle').style.display = '';
@@ -1333,7 +1310,7 @@ function showError(elementId, message) {
 }
 
 function clearErrors() {
-    ['loginError', 'signupError', 'adminError', 'forgotPasswordError', 'setNewPasswordError'].forEach(id => {
+    ['loginError', 'signupError', 'forgotPasswordError', 'setNewPasswordError'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
     });
@@ -1377,7 +1354,6 @@ function showForgotPasswordForm() {
     document.getElementById('mainToggle').style.display = 'none';
     document.getElementById('loginForm').classList.add('hidden');
     document.getElementById('signupForm').classList.add('hidden');
-    document.getElementById('adminForm').classList.add('hidden');
     document.getElementById('forgotPasswordForm').classList.remove('hidden');
     document.getElementById('forgotPasswordFields').classList.remove('hidden');
     document.getElementById('forgotPasswordSuccess').classList.add('hidden');
@@ -1618,22 +1594,6 @@ function applyAdminPortalTools() {
     const musicPortal = activePortal() === 'music';
     document.querySelectorAll('#adminMenuDropdown button[onclick*="openPracticeOverlay"], #adminMenuDropdown button[onclick*="openLessonPrep"]')
         .forEach(b => { b.style.display = (currentUser?.isAdmin && musicPortal) ? 'none' : ''; });
-}
-
-function handleAdminLogin(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    clearErrors();
-    const code = document.getElementById('adminCode').value.trim();
-    if (code === ADMIN_CODE) {
-        loginModal.classList.add('hidden');
-        document.body.style.overflow = 'auto';
-        localStorage.setItem('adminLoggedIn', 'true');
-        requestPersistentStorage();
-        currentUser = newAdminUser();
-        showMainApp();
-    } else {
-        showError('adminError', 'Incorrect admin code.');
-    }
 }
 
 async function handleSignup(e) {
@@ -2279,7 +2239,9 @@ function simulateResponse() {
 // AI COMPANION — Immersive Spanish Practice
 // ============================================================
 
-const ADMIN_SECRET = 'AARON-ADMIN-2025';
+// Admin functions no longer take a shared secret: the database checks the signed-in admin's own login (supabase/admin_auth.sql).
+// The parameter still exists in those functions, so an empty value is passed.
+const ADMIN_SECRET = '';
 let aiConversationHistory = [];
 let studentInsightCache = null;
 let currentAiMode = null;

@@ -36,13 +36,13 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   bar with ‹ › arrows, a picker, "Edit profile" (opens the Students panel on that card) and "Back to admin". It swaps `currentUser` for a `isPreview` copy
   of the student in the same tab (the admin is kept in `adminReturnUser`); the student's AI tab is hidden in this view. The Students panel lists students as
   collapsed `<details>` rows (notes link / missing-email warnings at a glance) that expand to the edit form.
-- **Admin access is moving from a shared secret to a real login** (2026-10-26). `supabase/admin_auth.sql` (step 1) adds `app_admins` (Aaron's account),
-  `admin_ok(secret)` (true for a signed-in admin or the automation secret kept in the database) and `am_i_admin()`, and rewrites all 18 `admin_*` functions to
-  call `admin_ok()`; it also fixes the old bug where sending `null` as the secret got through. The portal asks `am_i_admin()` after every login and, for an admin,
-  sends the admin's own token with admin RPCs (`sbRpc`). The fixed secret still works until `supabase/admin_rotate_automation_secret.sql` (step 2) replaces it with a
-  random one that lives only in the database and in the local hourly-sync task. Step 3 (after Aaron confirms admin works by login): remove `ADMIN_CODE`, the admin-code
-  form and the `adminLoggedIn` flag from the portal, and send an empty `ADMIN_SECRET`. **Status: portal side shipped; the database migration is waiting for Aaron's go-ahead.**
-- Admin secret for RPC calls: still written in script.js until step 3 — do not rely on it for anything private
+- **Admin access is a real login, not a shared secret** (2026-10-26). `supabase/admin_auth.sql` (APPLIED to the live database) adds `app_admins` (Aaron's account),
+  `admin_ok(secret)` (true for a signed-in admin or the automation secret kept in the database — never for null/empty) and `am_i_admin()`, and rewrote all 18
+  `admin_*` functions to call `admin_ok()` (this also fixed the old bug where a null secret got through). The portal asks `am_i_admin()` after every login; an admin
+  gets the admin UI, and `sbRpc` sends the admin's own token with admin RPCs (an empty `ADMIN_SECRET` is passed because the functions still declare the parameter).
+  There is no admin-code login any more (`ADMIN_CODE`, the admin form and the `adminLoggedIn` flag were removed). The only remaining secret is the database-held
+  automation secret used by the hourly sync script (`admin_config`; rotate with `supabase/admin_rotate_automation_secret.sql`, then update the local scheduled task —
+  never put it in the repo or the website). **Status: the old, leaked automation secret is still the live one until that rotation is run.**
 
 ## Key JS architecture
 - No build step, no framework — vanilla JS

@@ -28,11 +28,11 @@
             <!-- Toggle between sign in and create account -->
             <div class="login-toggle" id="mainToggle">
                 <button class="toggle-btn active" id="toggleLogin"
-                    onclick="document.getElementById('loginForm').classList.remove('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('adminForm').classList.add('hidden'); document.getElementById('mainToggle').style.display=''; this.classList.add('active'); document.getElementById('toggleSignup').classList.remove('active');">
+                    onclick="document.getElementById('loginForm').classList.remove('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('mainToggle').style.display=''; this.classList.add('active'); document.getElementById('toggleSignup').classList.remove('active');">
                     Sign In
                 </button>
                 <button class="toggle-btn" id="toggleSignup"
-                    onclick="document.getElementById('signupForm').classList.remove('hidden'); document.getElementById('loginForm').classList.add('hidden'); document.getElementById('adminForm').classList.add('hidden'); document.getElementById('signupFields').classList.remove('hidden'); document.getElementById('signupSuccess').classList.add('hidden'); this.classList.add('active'); document.getElementById('toggleLogin').classList.remove('active');">
+                    onclick="document.getElementById('signupForm').classList.remove('hidden'); document.getElementById('loginForm').classList.add('hidden'); document.getElementById('signupFields').classList.remove('hidden'); document.getElementById('signupSuccess').classList.add('hidden'); this.classList.add('active'); document.getElementById('toggleLogin').classList.remove('active');">
                     Create Account
                 </button>
             </div>
@@ -62,12 +62,6 @@
                 <button type="submit" class="login-btn">
                     <i class="fas fa-sign-in-alt"></i> Sign In
                 </button>
-                <p style="text-align:center;margin-top:16px;font-size:12px;">
-                    <a href="#" id="adminLoginLink" style="color:var(--text-light);text-decoration:none;"
-                        onclick="event.preventDefault(); document.getElementById('loginForm').classList.add('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('adminForm').classList.remove('hidden'); document.getElementById('mainToggle').style.display='none'; document.getElementById('adminCode').focus();">
-                        Admin access
-                    </a>
-                </p>
             </form>
 
             <!-- Forgot Password Form (hidden) -->
@@ -115,26 +109,6 @@
                     <i class="fas fa-key"></i> Set New Password
                 </button>
             </div>
-
-            <!-- Admin Code Form (hidden) -->
-            <form id="adminForm" class="hidden" autocomplete="on">
-                <p class="form-subtitle">Enter your admin code to manage courses and students.</p>
-                <div class="form-group">
-                    <label for="adminCode">Admin Code</label>
-                    <input type="text" name="username" value="aaron-admin" autocomplete="username" readonly tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
-                    <input type="password" id="adminCode" name="password" required placeholder="Enter admin code" autocomplete="current-password">
-                </div>
-                <div id="adminError" class="form-error hidden"></div>
-                <button type="submit" class="login-btn">
-                    <i class="fas fa-cog"></i> Open Course Manager
-                </button>
-                <p style="text-align:center;margin-top:16px;font-size:12px;">
-                    <a href="#" id="backToLoginLink" style="color:var(--text-light);text-decoration:none;"
-                        onclick="event.preventDefault(); document.getElementById('loginForm').classList.remove('hidden'); document.getElementById('adminForm').classList.add('hidden'); document.getElementById('signupForm').classList.add('hidden'); document.getElementById('mainToggle').style.display=''; document.getElementById('toggleLogin').classList.add('active'); document.getElementById('toggleSignup').classList.remove('active');">
-                        ← Back to Sign In
-                    </a>
-                </p>
-            </form>
 
             <!-- Create Account Form -->
             <div id="signupForm" class="hidden">
