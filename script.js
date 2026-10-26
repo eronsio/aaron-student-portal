@@ -122,7 +122,7 @@ function requestPersistentStorage() {
 
 // The login token lasts about an hour: renew it while the app stays open, and when the phone/tab wakes up.
 async function ensureFreshSession() {
-    if (!currentUser || currentUser.isAdmin || currentUser.isPreview) return;
+    if (!currentUser || currentUser.isPreview) return;   // (the admin has a real login too, renewed the same way)
     if (Date.now() - _lastRefreshAt < 40 * 60 * 1000) return;
     const s = sbLoadSession();
     if (s && s.refresh_token) await sbRefreshSession(s.refresh_token);
@@ -1205,6 +1205,16 @@ async function loadUserFromSession(session) {
 
         if (!profile) {
             throw new Error('Could not load or create profile.');
+        }
+
+        // Is this login one of the admins? (asked of the database with this very token; false for students, and
+        // false until supabase/admin_auth.sql has been run, so nothing changes for anyone before then)
+        let adminLogin = false;
+        try { adminLogin = (await sbRpc('am_i_admin', {}, session.access_token)) === true; } catch (e) {}
+        if (adminLogin) {
+            currentUser = { ...newAdminUser(), email: session.user.email || '', authed: true };
+            showMainApp();
+            return;
         }
 
         currentUser = {
@@ -4090,16 +4100,27 @@ function deleteLesson(courseId, lessonId) {
 // STUDENTS DASHBOARD
 // ============================================================
 
-async function sbRpc(funcName, params) {
+// Admin functions know who is asking from the signed-in admin's token (see supabase/admin_auth.sql). Everyone else
+// (and the anonymous catalog calls) keeps using the public key. `token` forces a specific token.
+async function sbRpc(funcName, params, token, retried) {
+    const bearer = token || ((currentUser && currentUser.isAdmin && _accessToken) ? _accessToken : SUPABASE_KEY);
     const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${funcName}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + (SUPABASE_KEY)
+            'Authorization': 'Bearer ' + bearer
         },
         body: JSON.stringify(params)
     });
+    // An admin token that expired mid-session: renew it once and repeat the call.
+    if (r.status === 401 && !token && !retried && bearer !== SUPABASE_KEY && currentUser?.isAdmin) {
+        const s = sbLoadSession();
+        if (s && s.refresh_token) {
+            const renewed = await sbRefreshSession(s.refresh_token);
+            if (renewed && renewed.access_token) return sbRpc(funcName, params, undefined, true);
+        }
+    }
     // Void/upsert-style RPCs (e.g. save_courses_admin) succeed with a 204 and no
     // body — r.json() throws on an empty body, so only parse when there's content.
     const text = await r.text();

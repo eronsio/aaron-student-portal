@@ -679,13 +679,13 @@ async function renderAiAdminBar() {
                 <option value="">Nobody in particular (no plan)</option>
                 ${students.map(s => `<option value="${practiceEsc(s.id)}" ${s.id === current ? 'selected' : ''}>${practiceEsc(s.name)}</option>`).join('')}
             </select>
-            <button type="button" class="admin-btn small" id="aiAdminSignOut">Sign out of preview</button>
+            ${currentUser.authed ? '' : '<button type="button" class="admin-btn small" id="aiAdminSignOut">Sign out of preview</button>'}
         </div>`;
     document.getElementById('aiAdminStudent').addEventListener('change', e => {
         const opt = e.target.selectedOptions[0];
         practiceAdminChooseStudent(e.target.value, opt && e.target.value ? opt.textContent : '');
     });
-    document.getElementById('aiAdminSignOut').addEventListener('click', practiceAdminSignOut);
+    document.getElementById('aiAdminSignOut')?.addEventListener('click', practiceAdminSignOut);
 }
 
 // The admin's preview login is remembered like any "Remember me": only a renewable token for the admin's own student
