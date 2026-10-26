@@ -1299,7 +1299,7 @@ function setupEventListeners() {
     });
 
     // Voice conversation: tap the mic and talk; it sends by itself and the reply is read aloud
-    if (speechSupported) {
+    if (convoSupported()) {
         aiRecordBtn.addEventListener('click', convoToggle);
         setConvoState('off');
         // Never keep a microphone open while the page is in the background.
@@ -2853,6 +2853,24 @@ function ensureAiExtras() {
             ctrl.insertBefore(b, ctrl.firstChild);
         }
     }
+    if (!document.getElementById('aiVoicePanel')) {
+        const input = document.querySelector('#aiChatView .ai-chat-input-container');
+        if (input) {
+            const panel = document.createElement('div');
+            panel.id = 'aiVoicePanel';
+            panel.className = 'ai-voice-panel hidden';
+            panel.innerHTML = `<button type="button" id="aiVoiceOrb" class="voice-orb" aria-label="Voice conversation: tap while it speaks to answer now"><i class="fas fa-microphone"></i></button>
+                <div class="voice-text"><div id="aiVoiceState" class="voice-state" role="status" aria-live="polite"></div><div id="aiVoiceHeard" class="voice-heard"></div></div>
+                <div class="voice-actions">
+                    <button type="button" id="aiVoiceType" title="Stop talking and type instead"><i class="fas fa-keyboard"></i> Type</button>
+                    <button type="button" id="aiVoiceEnd" title="End the voice conversation"><i class="fas fa-times"></i> End</button>
+                </div>`;
+            input.parentNode.insertBefore(panel, input);
+            document.getElementById('aiVoiceOrb').addEventListener('click', () => { if (convo.state === 'speaking') convoNext(); });
+            document.getElementById('aiVoiceEnd').addEventListener('click', convoStop);
+            document.getElementById('aiVoiceType').addEventListener('click', () => { convoStop(); aiMessageInput.focus(); });
+        }
+    }
     if (!document.getElementById('aiVoiceStatus')) {
         const anchor = document.getElementById('aiQuickReplies') || document.querySelector('#aiChatView .ai-chat-input-container');
         if (anchor) {
@@ -2881,56 +2899,262 @@ async function initAiCompanion() {
 }
 
 // ============================================================
-// VOICE CONVERSATION — hands-free speaking practice (Web Speech API)
+// VOICE CONVERSATION — hands-free speaking practice
 // ============================================================
-// Tap the mic once and just talk. Speech is transcribed live, sent automatically a moment after the
-// student stops talking, the reply is read aloud, and the mic opens again for the next turn — like a
-// voice call. Tap the mic again to end it. The transcript goes through the same send flow
-// (submitAiMessage) as typed text, flagged as voice so the AI and the teacher's report know.
-const CONVO_SILENCE_MS = 1900;      // pause after the last word that counts as "finished" (learners pause a lot)
-const CONVO_MAX_EMPTY_ROUNDS = 3;   // rounds with no speech before the conversation pauses itself (~25 s)
+// Tap the mic once and just talk, like a voice call: the microphone stays open for the whole conversation, the
+// portal notices when you start and stop talking, the finished sentence is turned into text and sent by itself, the
+// reply is read aloud, and the mic listens again. Tap "End" to stop. While it is on, the text box is replaced by a
+// call panel (nothing is typed into a box). The transcript goes through the same send flow (submitAiMessage) as typing,
+// flagged as voice so the AI and the teacher's report know.
+//
+// Two engines, same behaviour:
+//  * server  (preferred): the microphone is opened ONCE (getUserMedia); speech start/end is detected here by volume;
+//            each finished utterance is sent as a small WAV to the `ai-transcribe` function (ElevenLabs). Works in any
+//            browser with a microphone, Firefox and iPhone included, and never has to "re-open" the mic between turns.
+//  * browser (fallback): the browser's own SpeechRecognition, used when the server one is unavailable.
+const CONVO_SILENCE_MS = 1700;      // quiet after the last word that counts as "finished" (learners pause a lot)
+const CONVO_MAX_EMPTY_ROUNDS = 3;   // browser engine: rounds with no speech before pausing (~25 s)
+const CONVO_IDLE_MS = 25000;        // server engine: no speech at all for this long -> pause
 const CONVO_LABELS = {
     listening: 'Listening… just talk',
     thinking: 'Thinking…',
-    speaking: 'Speaking… tap the mic to answer'
+    speaking: 'Speaking… tap the circle to answer'
 };
-const convo = { on: false, state: 'off', rec: null, timer: null, empties: 0, granted: false };
+const AI_TRANSCRIBE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-transcribe`;
+const convo = { on: false, state: 'off', engine: '', rec: null, timer: null, empties: 0, granted: false, retries: 0, lastRecEnd: 0,
+                ctx: null, stream: null, node: null, src: null, vad: null };
+let sttServerUntil = 0;   // skip the server transcriber until this time (ms) after it failed
+
+function convoSupported() {
+    return !!(speechSupported || (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext)));
+}
+
+function convoServerOk() {
+    return !!(_accessToken && Date.now() >= sttServerUntil && navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+        && (window.AudioContext || window.webkitAudioContext));
+}
 
 // state: 'off' | 'listening' | 'thinking' | 'speaking' | 'paused'. `message` overrides the status text.
 function setConvoState(state, message) {
     convo.state = state;
     const text = message || CONVO_LABELS[state] || (state === 'paused' ? 'Paused — tap the mic to keep talking' : '');
+    const view = document.getElementById('aiChatView');
+    if (view) view.classList.toggle('voice-on', convo.on);
+    // While the conversation is on, the call panel carries the status; the thin bar is only for "paused / why it stopped".
     const bar = document.getElementById('aiVoiceStatus');
     if (bar) {
-        bar.className = 'ai-voice-status state-' + state + (text ? '' : ' hidden');
+        const showBar = !convo.on && !!text && state !== 'off';
+        bar.className = 'ai-voice-status state-' + state + (showBar ? '' : ' hidden');
         const label = bar.querySelector('span');
         if (label) label.textContent = text;
     }
+    const panel = document.getElementById('aiVoicePanel');
+    if (panel) {
+        panel.className = 'ai-voice-panel state-' + state + (convo.on ? '' : ' hidden');
+        const st = document.getElementById('aiVoiceState');
+        if (st) st.textContent = text;
+        if (state !== 'listening') { const h = document.getElementById('aiVoiceHeard'); if (h) h.textContent = ''; }
+    }
     if (aiRecordBtn) {
         aiRecordBtn.classList.toggle('convo-on', convo.on);
-        aiRecordBtn.classList.toggle('recording', convo.on && state === 'listening');
-        aiRecordBtn.innerHTML = convo.on ? '<i class="fas fa-stop"></i>' : '<i class="fas fa-microphone"></i>';
-        aiRecordBtn.title = convo.on ? 'Tap to end the voice conversation' : 'Tap and just talk: it sends by itself';
+        aiRecordBtn.title = 'Tap and just talk: it sends by itself';
     }
-    if (aiMessageInput) aiMessageInput.placeholder = state === 'listening' ? 'Listening…' : 'Escribe en español...';
 }
 
-function convoToggle() {
+function convoSetHeard(text) {
+    const h = document.getElementById('aiVoiceHeard');
+    if (h) h.textContent = text || '';
+}
+
+async function convoToggle() {
     if (convo.on) {
         if (convo.state === 'speaking') convoNext();   // the student wants to answer now: cut the reply short and listen
         else convoStop();
         return;
     }
-    if (!speechSupported || !currentAiMode) return;
+    if (!currentAiMode || !convoSupported()) return;
     convo.on = true;
     convo.empties = 0;
+    convo.retries = 0;
     setTtsEnabled(true);   // a spoken conversation needs the replies read aloud
+    convo.engine = convoServerOk() ? 'server' : 'browser';
+    if (convo.engine === 'server') {
+        setConvoState('thinking', 'Opening the microphone…');
+        const opened = await convoOpenMic();   // inside the tap, so the browser lets the audio start
+        if (!opened) return;
+    }
     convoNext();
 }
 
+// ---- server engine: one open microphone + volume-based speech detection ----
+async function convoOpenMic() {
+    if (convo.stream) return true;
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AC();
+        try { await ctx.resume(); } catch (e) {}
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+        if (!convo.on) { stream.getTracks().forEach(t => t.stop()); try { ctx.close(); } catch (e) {} return false; }   // ended while the permission box was up
+        const src = ctx.createMediaStreamSource(stream);
+        const node = ctx.createScriptProcessor(2048, 1, 1);
+        const mute = ctx.createGain();
+        mute.gain.value = 0;   // the processor must be connected to run; nothing is played back
+        src.connect(node); node.connect(mute); mute.connect(ctx.destination);
+        convo.vad = { rate: ctx.sampleRate, frameMs: 2048 / ctx.sampleRate * 1000, floor: 0.006, loud: 0, speaking: false,
+                      silentMs: 0, speechMs: 0, idleMs: 0, chunks: [], pre: [], ignoreUntil: 0 };
+        node.onaudioprocess = (e) => convoVadFrame(e.inputBuffer.getChannelData(0));
+        convo.ctx = ctx; convo.stream = stream; convo.node = node; convo.src = src;
+        return true;
+    } catch (err) {
+        console.error('Microphone open failed:', err);
+        const name = err && err.name;
+        if (name === 'NotAllowedError' || name === 'SecurityError') {
+            convoStop();
+            alert('Por favor permite el acceso al micrófono.');
+        } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+            convoPause('No microphone found — connect one and tap the mic');
+        } else {
+            convoPause('Could not open the microphone — tap the mic to try again');
+        }
+        return false;
+    }
+}
+
+function convoCloseMic() {
+    try { if (convo.node) { convo.node.onaudioprocess = null; convo.node.disconnect(); } } catch (e) {}
+    try { if (convo.src) convo.src.disconnect(); } catch (e) {}
+    try { if (convo.stream) convo.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    try { if (convo.ctx) convo.ctx.close(); } catch (e) {}
+    convo.node = convo.src = convo.stream = convo.ctx = convo.vad = null;
+}
+
+function convoVadReset() {
+    const v = convo.vad;
+    if (!v) return;
+    v.loud = 0; v.speaking = false; v.silentMs = 0; v.speechMs = 0; v.idleMs = 0; v.chunks = []; v.pre = [];
+}
+
+// One 2048-sample slice of microphone audio.
+function convoVadFrame(buf) {
+    const v = convo.vad;
+    if (!v || !convo.on) return;
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    const orb = document.getElementById('aiVoiceOrb');
+    if (orb) orb.style.setProperty('--level', String(Math.min(1, rms * 9)));
+    // Only listen while it is the student's turn (not while the AI thinks or speaks, and not for the tail of its voice).
+    if (convo.state !== 'listening' || performance.now() < v.ignoreUntil) { v.pre = []; v.loud = 0; return; }
+    const copy = new Float32Array(buf);   // the browser reuses its buffer
+    const threshold = Math.max(0.018, v.floor * 4);
+    if (!v.speaking) {
+        v.pre.push(copy);
+        if (v.pre.length > 10) v.pre.shift();   // ~0.4 s before the first loud frame, so the first word is not clipped
+        if (rms > threshold) {
+            if (++v.loud >= 3) { v.speaking = true; v.chunks = v.pre; v.pre = []; v.silentMs = 0; v.speechMs = v.chunks.length * v.frameMs; v.idleMs = 0; }
+        } else {
+            v.loud = 0;
+            v.floor = v.floor * 0.97 + rms * 0.03;   // learn the room's background level
+            v.idleMs += v.frameMs;
+            if (v.idleMs > CONVO_IDLE_MS) { v.idleMs = 0; setTimeout(() => { if (convo.on && convo.state === 'listening') convoPause('Paused — tap the mic to keep talking'); }, 0); }
+        }
+    } else {
+        v.chunks.push(copy);
+        v.speechMs += v.frameMs;
+        if (rms > threshold * 0.7) v.silentMs = 0; else v.silentMs += v.frameMs;
+        if (v.silentMs >= CONVO_SILENCE_MS || v.speechMs > 45000) convoVadEnd();
+    }
+}
+
+function convoVadEnd() {
+    const v = convo.vad;
+    const chunks = v.chunks, spokenMs = v.speechMs - v.silentMs, rate = v.rate;
+    v.speaking = false; v.chunks = []; v.loud = 0; v.silentMs = 0; v.speechMs = 0;
+    if (spokenMs < 450) return;   // a click or a cough, not a sentence: keep listening
+    setConvoState('thinking', 'Transcribing…');
+    convoTranscribe(convoEncodeWav(chunks, rate, 16000));
+}
+
+// Float32 chunks at `inRate` -> a 16 kHz mono 16-bit WAV (about 32 KB per second).
+function convoEncodeWav(chunks, inRate, outRate) {
+    let total = 0;
+    chunks.forEach(c => { total += c.length; });
+    const ratio = inRate / outRate;
+    const outLen = Math.floor(total / ratio);
+    const pcm = new Int16Array(outLen);
+    let ci = 0, offset = 0;   // read position inside the chunk list
+    const at = (i) => {       // sample i of the concatenation
+        while (ci < chunks.length && i - offset >= chunks[ci].length) { offset += chunks[ci].length; ci++; }
+        return ci < chunks.length ? chunks[ci][i - offset] : 0;
+    };
+    for (let o = 0; o < outLen; o++) {
+        const start = Math.floor(o * ratio), end = Math.max(start + 1, Math.floor((o + 1) * ratio));
+        let acc = 0;
+        for (let i = start; i < end; i++) acc += at(i);   // averaging = a simple low-pass before dropping samples
+        const x = Math.max(-1, Math.min(1, acc / (end - start)));
+        pcm[o] = x < 0 ? x * 0x8000 : x * 0x7fff;
+    }
+    const header = new ArrayBuffer(44), dv = new DataView(header);
+    const str = (off, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(off + i, t.charCodeAt(i)); };
+    str(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+    dv.setUint32(24, outRate, true); dv.setUint32(28, outRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    str(36, 'data'); dv.setUint32(40, pcm.length * 2, true);
+    return new Blob([header, pcm.buffer], { type: 'audio/wav' });
+}
+
+async function convoTranscribe(wav) {
+    let text = '', failure = '';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+        const r = await fetch(`${AI_TRANSCRIBE_FUNCTION_URL}?lang=es`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'audio/wav', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + _accessToken },
+            body: wav,
+            signal: controller.signal
+        });
+        if (r.ok) {
+            text = String((await r.json()).text || '').trim();
+        } else if (r.status === 429) {
+            failure = 'slow';
+        } else {
+            failure = 'down';   // 503 not set up, 502 no permission/upstream error, 401, 413...
+        }
+    } catch (e) {
+        failure = 'down';
+    } finally {
+        clearTimeout(timer);
+    }
+    if (!convo.on) return;
+    if (failure === 'slow') { convoPause('Vas muy rápido — wait a moment, then tap the mic'); return; }
+    if (failure === 'down') { convoFallbackToBrowser(); return; }
+    if (!text) { setConvoState('listening'); convoVadReset(); return; }   // nothing recognised: keep listening
+    convo.empties = 0;
+    practiceMarkVoice();
+    setConvoState('thinking');
+    submitAiMessage(text, { voice: true });
+}
+
+// The server transcriber failed (not set up, no permission, down): use the browser's own recognizer instead.
+function convoFallbackToBrowser() {
+    sttServerUntil = Date.now() + 30 * 60000;
+    convoCloseMic();
+    if (speechSupported) {
+        convo.engine = 'browser';
+        convoListen();
+    } else {
+        convoPause('Voice transcription is unavailable right now — you can type instead');
+    }
+}
+
+// ---- turn handling shared by both engines ----
 // Opens the mic, unless a reply is still being written (submitAiMessage hands control back when it is done).
 function convoNext() {
-    if (!convo.on || convo.rec) return;   // off, or the mic is already open
+    if (!convo.on || convo.rec) return;          // off, or the browser recognizer is already open
+    if (convo.engine === 'server' && convo.state === 'listening') return;   // already listening
     if (aiBusy) { setConvoState('thinking'); return; }
     stopSpeaking();
     convoListen();
@@ -2938,12 +3162,28 @@ function convoNext() {
 
 function convoListen() {
     if (!convo.on) return;
+    if (convo.engine === 'server') {
+        convoVadReset();
+        if (convo.vad) convo.vad.ignoreUntil = performance.now() + 500;   // let the tail of the AI's voice die away first
+        setConvoState('listening');
+        convoSetHeard('');
+    } else {
+        convoListenBrowser();
+    }
+}
+
+// ---- browser engine (fallback) ----
+function convoListenBrowser() {
+    if (!convo.on) return;
+    // Chrome sometimes refuses a new recognition right after the last one ended: leave it a moment.
+    const wait = 700 - (Date.now() - convo.lastRecEnd);
+    if (wait > 50) { setTimeout(convoListenBrowser, wait); return; }
     const rec = new SpeechRecognitionCtor();
     rec.lang = 'es-ES';
     rec.continuous = true;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
-    let finalText = '', interim = '', done = false;
+    let heard = '', done = false;
 
     const finish = () => {
         if (done) return;
@@ -2951,11 +3191,13 @@ function convoListen() {
         clearTimeout(convo.timer); convo.timer = null;
         try { rec.stop(); } catch (e) {}
         if (convo.rec === rec) convo.rec = null;
+        convo.lastRecEnd = Date.now();
         if (!convo.on) return;
-        const text = (finalText + ' ' + interim).replace(/\s+/g, ' ').trim();
+        const text = heard.replace(/\s+/g, ' ').trim();
         if (!text) { convoEmptyRound(); return; }
         convo.empties = 0;
-        aiMessageInput.value = '';
+        convo.retries = 0;
+        convoSetHeard('');
         practiceMarkVoice();
         setConvoState('thinking');
         submitAiMessage(text, { voice: true });
@@ -2964,13 +3206,10 @@ function convoListen() {
     rec.onaudiostart = () => { convo.granted = true; };
     rec.onresult = (event) => {
         convo.granted = true;
-        interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const chunk = event.results[i][0].transcript;
-            if (event.results[i].isFinal) finalText = (finalText + ' ' + chunk).trim();
-            else interim += chunk;
-        }
-        aiMessageInput.value = (finalText + ' ' + interim).trim();   // shows what is being heard
+        convo.retries = 0;
+        // Rebuild the whole sentence from every result so far (never append piece by piece: that is how text doubles up).
+        heard = Array.from(event.results).map(r => r[0].transcript).join(' ');
+        convoSetHeard(heard);   // shown in the call panel, not in the text box
         clearTimeout(convo.timer);
         convo.timer = setTimeout(finish, CONVO_SILENCE_MS);
     };
@@ -2979,17 +3218,18 @@ function convoListen() {
         done = true;
         clearTimeout(convo.timer); convo.timer = null;
         if (convo.rec === rec) convo.rec = null;
+        convo.lastRecEnd = Date.now();
         if (!convo.on) return;
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-            if (convo.granted) {
-                // Mic was working: the browser refused a restart that wasn't triggered by a tap (iPhone does this).
-                convoPause('Tap the mic to keep talking');
-            } else {
-                convoStop();
-                alert('Por favor permite el acceso al micrófono.');
-            }
+            if (convo.granted) convoPause('Tap the mic to keep talking');
+            else { convoStop(); alert('Por favor permite el acceso al micrófono.'); }
+        } else if (event.error === 'audio-capture' && convo.retries < 3) {
+            // Usually a hiccup while the browser lets go of the microphone: try again shortly, a few times.
+            convo.retries++;
+            setConvoState('listening');
+            setTimeout(convoListenBrowser, 600 * convo.retries);
         } else if (event.error === 'audio-capture') {
-            convoPause('No microphone found');
+            convoPause("Can't reach the microphone — check that no other app is using it, then tap the mic");
         } else {
             convoPause('Voice input lost its connection — tap the mic to try again');
         }
@@ -2997,7 +3237,8 @@ function convoListen() {
     rec.onend = () => {
         if (done || convo.rec !== rec) return;   // finished, errored, or replaced already
         // The browser closed the round by itself (silence, or its time limit).
-        if ((finalText + interim).trim()) finish();
+        convo.lastRecEnd = Date.now();
+        if (heard.trim()) finish();
         else { done = true; clearTimeout(convo.timer); convo.timer = null; convo.rec = null; convoEmptyRound(); }
     };
 
@@ -3005,23 +3246,27 @@ function convoListen() {
     try {
         rec.start();
         setConvoState('listening');
+        convoSetHeard('');
     } catch (err) {
         console.error('SpeechRecognition start failed:', err);
         convo.rec = null;
-        convoPause('Could not start the microphone — tap the mic to try again');
+        convo.lastRecEnd = Date.now();
+        if (convo.retries < 3) { convo.retries++; setTimeout(convoListenBrowser, 600 * convo.retries); }
+        else convoPause('Could not start the microphone — tap the mic to try again');
     }
 }
 
 function convoEmptyRound() {
     convo.empties++;
     if (convo.empties >= CONVO_MAX_EMPTY_ROUNDS) { convoPause('Paused — tap the mic to keep talking'); return; }
-    convoListen();   // keep the mic open for the student's next try
+    convoListenBrowser();   // keep the mic open for the student's next try
 }
 
 // Stops listening without sending anything (a typed message is about to go out instead).
 function convoDetach() {
     clearTimeout(convo.timer); convo.timer = null;
-    if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} }
+    if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} convo.lastRecEnd = Date.now(); }
+    convoVadReset();
     setConvoState('thinking');
 }
 
@@ -3033,7 +3278,7 @@ async function convoResume(spoken, replyLength) {
     const cap = Math.min(45000, 4000 + replyLength * 110);
     await Promise.race([spoken, new Promise(resolve => setTimeout(resolve, cap))]);
     if (!convo.on) return;
-    setTimeout(() => { if (convo.on && !aiBusy) convoNext(); }, 350);
+    setTimeout(() => { if (convo.on && !aiBusy) convoNext(); }, 450);
 }
 
 // The conversation stops but the status line stays, saying why and how to carry on.
@@ -3045,8 +3290,10 @@ function convoPause(message) {
 function convoStop() {
     convo.on = false;
     clearTimeout(convo.timer); convo.timer = null;
-    if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} }
+    if (convo.rec) { const rec = convo.rec; convo.rec = null; try { rec.abort(); } catch (e) {} convo.lastRecEnd = Date.now(); }
+    convoCloseMic();
     stopSpeaking();
+    convoSetHeard('');
     setConvoState('off');
 }
 

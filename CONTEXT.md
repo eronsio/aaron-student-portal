@@ -88,18 +88,21 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   at 3500. (A live comparison showed Haiku praising "Me gustan correr y nadar"; Sonnet corrects it.)
   Per-student rate limit (best-effort, in the function instance's memory): chat 30/min + 600/day, reports 10/hour; over the limit
   the function answers 429 with a Spanish "Vas muy rápido…" message.
-- **Voice conversation** (script.js "VOICE CONVERSATION" section, uses the browser's `SpeechRecognition`; free, client-side): the student taps the
-  mic once and just talks — speech is transcribed live into the box, **sent automatically** ~1.9 s after they stop (`CONVO_SILENCE_MS`), the reply is
-  read aloud, and the mic opens again, like a voice call. Tap the mic while the AI is talking = cut it off and answer; tap while listening = end.
-  State machine in `convo` (`listening`/`thinking`/`speaking`/`paused`); `speakText()` returns a promise that resolves when playback ends, which is
-  what reopens the mic (with a length-based timeout so a browser that never reports the end can't hang it). Turns arrive via `submitAiMessage(text, {voice:true})`;
-  those turns get `PRACTICE_VOICE_RULE` (practice.js: speech-to-text may lack accents/punctuation — never correct those; ask "¿Quisiste decir…?";
-  1–2 short sentences) and are flagged `voice` in the saved transcript. It pauses itself after ~25 s of silence, on any error, when the page is hidden,
-  on tab switch or when leaving the chat. On iPhone the browser may refuse the automatic re-open (needs a tap) → it pauses with "Tap the mic to keep
-  talking". Browsers without `SpeechRecognition` (Firefox) get the mic disabled with a tooltip — typing always works.
-- Phone layout (`@media (max-width: 640px)` at the end of styles.css): while the chat is open the page header and tab stack are hidden, the topbar
-  wraps (mode + End session / voice controls), the message box height follows the screen (`100dvh`), the quick replies scroll sideways and the input is 16px
-  (stops iPhone zoom-on-focus).
+- **Voice conversation** (script.js "VOICE CONVERSATION" section): the student taps the mic once and just talks, like a voice call. While it is on, a **call panel**
+  (orb that swells with their voice, state text, live caption, Type / End buttons) replaces the text box — nothing is typed into a box. Each finished sentence is
+  sent by itself (`submitAiMessage(text, {voice:true})`), the reply is read aloud, and the mic listens again. Tap the circle while the AI talks = cut it off and
+  answer; Type = stop and type; End = stop. Two engines with the same behaviour:
+  * **server** (preferred, `convoServerOk()`): the microphone is opened ONCE for the whole conversation (`getUserMedia` + a ScriptProcessor), speech start/end is
+    found by volume (adaptive noise floor, ~0.4 s pre-roll so the first word isn't clipped, ends after `CONVO_SILENCE_MS` of quiet), each utterance is encoded as a
+    16 kHz mono WAV and POSTed to the **`ai-transcribe`** Edge Function (ElevenLabs Scribe, secret `ELEVENLABS_API_KEY` which needs **Speech to Text access**; optional
+    `ELEVENLABS_STT_MODEL`, default `scribe_v2`; 30/min + 800/day per student). Works in Firefox and on iPhone (no SpeechRecognition needed) and never has to
+    re-open the mic between turns (the old browser recognizer failed with "no microphone found" after the first reply).
+  * **browser** (fallback): the browser's `SpeechRecognition`. Used when `ai-transcribe` fails (503 not set up / 502 no permission / network): `convoFallbackToBrowser()`
+    switches over for 30 min (`sttServerUntil`). It rebuilds the sentence from all results each time (no doubled text), shows it in the panel, waits ≥0.7 s between
+    recognizers and retries `audio-capture` up to 3 times before giving up.
+  The conversation pauses itself after ~25 s of silence, on errors, when the page is hidden, on tab switch or when leaving the chat. `speakText()` returns a promise that
+  resolves when playback ends (that is what reopens the mic; a length-based timeout stops a browser that never reports the end from hanging it). Voice turns get
+  `PRACTICE_VOICE_RULE` (practice.js) and are flagged `voice` in the saved transcript. Mic permission refused → alert; no device → "No microphone found".
 - Reading replies aloud: **natural voice** from the `ai-speak` Edge Function (ElevenLabs behind the same student-JWT check and a per-student rate
   limit; secrets `ELEVENLABS_API_KEY`, optional `ELEVENLABS_VOICE_ID` / `ELEVENLABS_MODEL`; clips are cached client-side per text+pace), with the
   browser's `speechSynthesis` as the automatic fallback whenever the function is missing/unconfigured (503/404 backs off 30 min), errors, times out
