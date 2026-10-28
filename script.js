@@ -2145,6 +2145,11 @@ function showTab(tabName) {
 
     if (activeBtn) activeBtn.classList.add('active');
     if (activePane) activePane.classList.add('active');
+    // On a phone the tab row scrolls sideways: bring the chosen tab into view.
+    const tabRow = activeBtn && activeBtn.parentElement;
+    if (tabRow && tabRow.scrollWidth > tabRow.clientWidth) {
+        tabRow.scrollTo({ left: activeBtn.offsetLeft - (tabRow.clientWidth - activeBtn.offsetWidth) / 2, behavior: 'smooth' });
+    }
     if (tabName !== 'ai-companion' && typeof convo !== 'undefined' && convo.on) convoStop();
     syncAiChatClass();
 
@@ -2671,7 +2676,7 @@ function appendAiMessage(type, html, raw) {
             b.type = 'button'; b.className = 'ai-replay'; b.title = 'Listen again'; b.setAttribute('aria-label', 'Listen again');
             b.innerHTML = '<i class="fas fa-volume-up"></i>';
             b.addEventListener('click', () => speakText(raw, { force: true }));
-            el.querySelector('.ai-bubble').appendChild(b);
+            el.querySelector('.ai-bubble p').appendChild(b);   // sits at the end of the last line, so it takes no space of its own
         }
     } else {
         el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div>`;

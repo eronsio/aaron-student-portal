@@ -72,14 +72,17 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 - Settings (reset courses, save Anthropic API key)
 
 ## AI Companion + Speaking Practice (Spanish students)
-- **Chat UI v2** (2026-10-26, styles.css "AI PRACTICE CHAT — v2" at the end of the file, scoped under `#ai-companion` with CSS variables `--ai-*`): one `.ai-shell` card =
-  `.ai-header` (title, "Practising today" chips, ⚙ voice settings popover [reading voice + normal/slow pace], speaker mute, End session; admin also gets a Tools button) /
-  `#aiChatMessages` (grey canvas; bot = white bubble with avatar, user = dark bubble, corrections are a sand "Correction" card, replay button, typing dots, "Preparing your
-  session…" while it loads; smooth scroll only when the student is already at the bottom) / `.ai-footer` (voice status line, help chips Hint · Explain in English · Say it
-  simpler, the voice call panel, and the composer: ＋ activity menu, auto-growing `<textarea>` — Enter sends, Shift+Enter = new line, Send is disabled until there is
-  text — mic, send). Popovers (`.ai-popover`) close on outside click/Escape. Built by `ensureAiExtras()`; the static markup is in index.html. Don't use `<header>`/`<footer>` tags
-  inside it (the site's global `footer { margin-top: 48px }` leaked in). On phones the page header is hidden, the tab bar becomes one scrollable row and the shell fills the screen
-  (`100dvh`); "End session" shortens to "End". Everything respects `prefers-reduced-motion`.
+- **Chat UI v3** (2026-10-28, styles.css "AI PRACTICE CHAT — v3", scoped under `#ai-companion` with CSS variables `--ai-*`; replaced the card-style v2 after Aaron called it "gimmicky"):
+  the design rule is quiet/editorial: a plain white page (`body.ai-chat-live`), ONE centred reading column (`--ai-gutter` pads header, messages and footer to 720px), hairlines instead of
+  boxes/shadows, one ink colour + one blue accent. `.ai-header` = title (+ "Practising today" chips) and ghost icon buttons (⚙ voice settings popover, speaker mute, End session; admin also gets a
+  Tools button); `#aiChatMessages` = tutor text is PLAIN TEXT (no bubble, no avatar), student = soft grey bubble, corrections = a quiet inset with a blue "Correction" label, the "listen again"
+  speaker is inline at the end of the last line and only shows on hover (always faint on touch), typing dots, "Preparing your session…" while it loads, smooth scroll only when already at the bottom,
+  a short fade under the header; `.ai-footer` = help words (Hint · Explain in English · Say it simpler: plain hairline pills, hidden while recording), the voice call panel / record bar and
+  the composer (a floating rounded bar: ＋ activity menu, auto-growing `<textarea>` — Enter sends, Shift+Enter = new line, Send disabled until there is text — mic, send). Popovers
+  (`.ai-popover`) close on outside click/Escape. Built by `ensureAiExtras()`; static markup in index.html. Don't use `<header>`/`<footer>` tags inside it (global `footer { margin-top: 48px }`
+  leaked in). Phones: the portal header is hidden, the shell fills the screen (`100dvh`, or `--vvh` while the iPhone keyboard is open), "End session" shortens to "End". Respects `prefers-reduced-motion`.
+  The portal's tab row (`.tab-nav`/`.tab-btn`, top of styles.css) is now a quiet underline row for EVERY tab (the old per-tab pastel tints are gone); on a phone it scrolls sideways and `showTab` scrolls
+  the chosen tab into view.
 - **No activity menu** (changed 2026-10-26): opening the Speaking & Writing Practice tab goes straight into the chat (`initAiCompanion` → `startAiChat`): the
   student's personalised practice plan if they have one (mode `plan`), otherwise free conversation (mode `free`). A chat that is already open is left alone
   when the student switches tabs and comes back. Roleplay / picture description / grammar drills are no longer separate screens: the AI switches activity
