@@ -2136,6 +2136,12 @@ function syncAiChatClass() {
     document.body.classList.toggle('ai-chat-live', chatLive);
 }
 
+// The practice tab's long name does not fit a phone's tab row: keep both and let the stylesheet pick.
+(function () {
+    const b = document.getElementById('aiCompanionTab');
+    if (b && !b.querySelector('.tab-long')) b.innerHTML = '<i class="fas fa-robot"></i><span class="tab-long">Speaking &amp; Writing Practice</span><span class="tab-short">Practice</span>';
+})();
+
 function showTab(tabName) {
     tabBtns.forEach(btn => btn.classList.remove('active'));
     tabPanes.forEach(pane => pane.classList.remove('active'));
@@ -2831,23 +2837,14 @@ function ensureAiExtras() {
         const diag = menu.querySelector('#aiDiagBtn');
         if (diag) diag.addEventListener('click', () => convoCopyDiagnostics(diag));
     }
-    // The admin's floating tools button would sit on top of the composer while the chat is open (see styles.css), so the
-    // chat header carries its own Tools button for the admin.
-    if (actions && currentUser?.isAdmin && !document.getElementById('aiAdminToolsBtn')) {
-        const b = document.createElement('button');
-        b.id = 'aiAdminToolsBtn'; b.type = 'button'; b.className = 'ai-icon-btn ai-tools-btn';
-        b.title = 'Admin tools'; b.setAttribute('aria-label', 'Admin tools');
-        b.innerHTML = '<i class="fas fa-tools"></i>';
-        b.addEventListener('click', toggleAdminMenu);
-        actions.insertBefore(b, actions.firstChild);
-    }
-    // Admin: the "practise as <student>" card is floating and closed by default, opened from this eye button.
+    // Admin: ONE header button opens a floating card ("practise as <student>" + the admin menu). The floating tools button
+    // would sit on top of the composer while the chat is open (see styles.css), so the admin menu is reached from here.
     if (actions && currentUser?.isAdmin && !document.getElementById('aiAdminPreviewBtn')) {
         const b = document.createElement('button');
         b.id = 'aiAdminPreviewBtn'; b.type = 'button'; b.className = 'ai-icon-btn';
-        b.title = 'Admin preview: practise as a student'; b.setAttribute('aria-label', 'Admin preview: practise as a student');
+        b.title = 'Admin: practise as a student, admin menu'; b.setAttribute('aria-label', 'Admin: practise as a student, admin menu');
         b.setAttribute('aria-expanded', 'false');
-        b.innerHTML = '<i class="fas fa-eye"></i>';
+        b.innerHTML = '<i class="fas fa-user-gear"></i>';
         b.addEventListener('click', (e) => { e.stopPropagation(); aiClosePopovers(); practiceAdminBarToggle(); });
         actions.insertBefore(b, actions.firstChild);
     }

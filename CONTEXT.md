@@ -82,9 +82,9 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   (`.ai-popover`) close on outside click/Escape. Built by `ensureAiExtras()`; static markup in index.html. Don't use `<header>`/`<footer>` tags inside it (global `footer { margin-top: 48px }`
   leaked in). Phones: the portal header is hidden, the shell fills the screen (`100dvh`, or `--vvh` while the iPhone keyboard is open), "End session" shortens to "End". Respects `prefers-reduced-motion`.
   The portal's tab row (`.tab-nav`/`.tab-btn`, top of styles.css) is now a quiet underline row for EVERY tab (the old per-tab pastel tints are gone); on a phone it scrolls sideways and `showTab` scrolls
-  the chosen tab into view.
+  the chosen tab into view. On phones the tabs are text-only and the practice tab reads "Practice" (`.tab-long`/`.tab-short`, set up at the top of showTab in script.js) so all four fit without scrolling; the chat messages sit against the composer (`.ai-chat-messages > :first-child { margin-top: auto }`).
 - **Admin preview card** (2026-10-28): signed-in admin sees the chat exactly as a student does. The "Admin preview — Practise as …" bar (`#aiAdminBar`, practice.js `renderAiAdminBar`) is
-  `.is-floating` while the chat is live: hidden by default, opened by the eye button in the chat header (`#aiAdminPreviewBtn`, `practiceAdminBarToggle`), closed by ✕ / outside tap / Escape / picking a student.
+  `.is-floating` while the chat is live: hidden by default, opened by the ONE admin button in the chat header (`#aiAdminPreviewBtn`, `practiceAdminBarToggle`; the card also holds an "Admin menu" button that opens the old tools dropdown), closed by ✕ / outside tap / Escape / picking a student.
   Signed out, or on the recap screen, it is the normal inline bar (the sign-in form must be visible).
 - **No activity menu** (changed 2026-10-26): opening the Speaking & Writing Practice tab goes straight into the chat (`initAiCompanion` → `startAiChat`): the
   student's personalised practice plan if they have one (mode `plan`), otherwise free conversation (mode `free`). A chat that is already open is left alone

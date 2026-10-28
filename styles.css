@@ -419,6 +419,7 @@ main {
     transition: color 0.15s ease, border-color 0.15s ease;
 }
 .tab-btn i { font-size: 13px; opacity: 0.65; }
+.tab-btn .tab-short { display: none; }
 .tab-btn:hover { color: var(--text-primary); }
 .tab-btn.active { color: var(--text-primary); border-bottom-color: var(--text-primary); }
 .tab-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; border-radius: 6px; }
@@ -1029,6 +1030,9 @@ footer p {
         gap: 22px;
         margin-bottom: 20px;
     }
+    .tab-btn i { display: none; }
+    .tab-btn .tab-long { display: none; }
+    .tab-btn .tab-short { display: inline; }
 
     .welcome-card,
     .tab-content {
@@ -3284,6 +3288,7 @@ body.ai-chat-live #ai-companion #aiAdminBar.is-floating {
 }
 body.ai-chat-live #ai-companion #aiAdminBar.is-floating.open { display: block; animation: aiPop 0.14s ease-out both; }
 #ai-companion .ai-admin-bar { position: relative; }
+#ai-companion .ai-admin-row-menu { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ai-line-soft); }
 #ai-companion .ai-admin-close { display: none; position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--ai-muted); font-size: 14px; cursor: pointer; }
 #ai-companion .ai-admin-close:hover { background: var(--ai-wash); color: var(--ai-ink); }
 body.ai-chat-live #ai-companion #aiAdminBar.is-floating .ai-admin-close { display: block; }
@@ -3314,6 +3319,8 @@ body.ai-chat-live #ai-companion #aiAdminBar.is-floating .ai-admin-close { displa
     #ai-companion .ai-chips-label { display: none; }
     #ai-companion .ai-target-chips { display: none; }
     #ai-companion .ai-chat-messages { padding: 16px 0 12px; gap: 24px; }
+    /* a chat on a phone sits against the message box (like a messaging app), not against the top with a void in between */
+    #ai-companion .ai-chat-messages > :first-child { margin-top: auto; }
     #ai-companion .ai-message.ai-user { max-width: 88%; }
     #ai-companion .ai-footer { padding: 4px 0 calc(10px + env(safe-area-inset-bottom, 0px)); }
     #ai-companion .ai-popover { width: auto; }

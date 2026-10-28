@@ -687,13 +687,15 @@ async function renderAiAdminBar() {
                 ${students.map(s => `<option value="${practiceEsc(s.id)}" ${s.id === current ? 'selected' : ''}>${practiceEsc(s.name)}</option>`).join('')}
             </select>
             ${currentUser.authed ? '' : '<button type="button" class="admin-btn small" id="aiAdminSignOut">Sign out of preview</button>'}
-        </div>`;
+        </div>
+        <div class="ai-admin-row ai-admin-row-menu"><button type="button" class="admin-btn small" id="aiAdminMenuLink"><i class="fas fa-tools"></i> Admin menu</button></div>`;
     document.getElementById('aiAdminStudent').addEventListener('change', e => {
         const opt = e.target.selectedOptions[0];
         practiceAdminChooseStudent(e.target.value, opt && e.target.value ? opt.textContent : '');
     });
     document.getElementById('aiAdminSignOut')?.addEventListener('click', practiceAdminSignOut);
     document.getElementById('aiAdminClose')?.addEventListener('click', () => practiceAdminBarToggle(false));
+    document.getElementById('aiAdminMenuLink')?.addEventListener('click', () => { practiceAdminBarToggle(false); toggleAdminMenu(); });
 }
 
 // Opens/closes the floating admin card, placed under the eye button in the chat header.
