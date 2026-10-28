@@ -3037,7 +3037,7 @@ details.admin-student-card .stu-body { padding: 14px 16px 16px; }
 }
 /* The practice tab is a normal tab: same header, same tab row, same card as the others. Its content fills what is left of the
    screen (header and tab row keep their height; the card takes the rest and the messages scroll inside it). */
-body.on-ai-tab #mainApp:not(.hidden) { display: flex; flex-direction: column; height: var(--vvh, 100dvh); overflow: hidden; }
+body.on-ai-tab #mainApp:not(.hidden) { position: fixed; top: var(--vvtop, 0px); left: 0; right: 0; display: flex; flex-direction: column; height: var(--vvh, 100dvh); overflow: hidden; }
 body.on-ai-tab #mainApp > header { flex: none; position: static; }
 body.on-ai-tab #mainApp > main.container { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 20px; }
 body.on-ai-tab .tab-nav { flex: none; }
@@ -3323,8 +3323,8 @@ body.on-ai-tab .floating-book-btn { display: none; }
 @media (max-width: 640px) {
     #ai-companion { --ai-gutter: 0px; }   /* the page margin already lines the chat up with the tabs */
     body.on-ai-tab #mainApp > main.container { padding-bottom: 0; }
-    /* keyboard open (iPhone): the chat gets the whole visible area */
-    body.kb-open.on-ai-tab #mainApp > header, body.kb-open.on-ai-tab .tab-nav { display: none; }
+    /* keyboard open (iPhone): the app is already pinned to the visible area; the home-indicator space is not needed */
+    body.kb-open #ai-companion .ai-footer { padding-bottom: 10px; }
     #ai-companion .ai-header { padding: 10px 0 6px; }
     #ai-companion .ai-header-actions { gap: 0; }
     #ai-companion .ai-icon-btn { width: 36px; height: 36px; }

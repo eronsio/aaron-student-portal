@@ -2967,19 +2967,23 @@ function aiClosePopovers() {
     document.querySelectorAll('#aiChatView [aria-haspopup="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
 }
 document.addEventListener('click', (e) => { if (!e.target.closest('.ai-popover')) aiClosePopovers(); });
-// On iPhones the keyboard covers the bottom of the page without resizing it, hiding the message box. The visual viewport knows
-// what is really visible: the chat is sized to it (--vvh) and the page is kept from sliding up.
+// On iPhones the keyboard covers the bottom of the page without resizing it, hiding the message box, and iOS pans the visual
+// viewport to reveal the focused field. The visual viewport knows what is really visible: on the practice tab the whole app is
+// pinned to it (--vvtop / --vvh, see styles.css "on-ai-tab"), so the message box always sits right above the keyboard.
+// Nothing here scrolls the page: fighting iOS's own scrolling is what makes the field jump or lose focus.
 (function () {
     const vv = window.visualViewport;
     if (!vv) return;
     const sync = () => {
-        document.documentElement.style.setProperty('--vvh', vv.height + 'px');
+        const root = document.documentElement.style;
+        root.setProperty('--vvh', vv.height + 'px');
+        root.setProperty('--vvtop', vv.offsetTop + 'px');
         const keyboard = window.innerHeight - vv.height > 140;
+        const was = document.body.classList.contains('kb-open');
         document.body.classList.toggle('kb-open', keyboard);
-        if (keyboard && document.body.classList.contains('ai-chat-live')) {
-            window.scrollTo(0, 0);
+        if (keyboard !== was && document.body.classList.contains('on-ai-tab')) {
             const box = document.getElementById('aiChatMessages');
-            if (box) setTimeout(() => aiScrollToEnd(box, true), 60);
+            if (box) setTimeout(() => aiScrollToEnd(box, true), 80);
         }
     };
     vv.addEventListener('resize', sync);
@@ -3538,6 +3542,7 @@ function convoStop() {
 // transcribed, shown in the chat as your message and answered (and read aloud) like any other message. Nothing is guessed about when you
 // have stopped talking, so there is nothing to glitch; it behaves the same on every phone. The hands-free conversation above is an
 // opt-in beta (⚙ → Hands-free) for people who want it.
+const NOTE_START_MS = 12000;   // longest wait for the microphone / transcriber check before a voice note gives up
 const NOTE_MAX_MS = 60000;           // a voice note ends and sends itself after a minute
 const NOTE_MIN_MS = 600;             // shorter than this is a mis-tap
 const NOTE_KEEP_MIC_MS = 45000;      // the microphone stays open this long after a note (no permission box between notes), then is released
@@ -3632,8 +3637,16 @@ async function noteStart() {
     note.chunks = []; note.heard = ''; note.peak = 0;
     let engine = 'browser';
     if (convoServerOk()) {
-        const [opened, serverUp] = await Promise.all([noteOpenMic(), convoProbeServer()]);
+        // A permission box that is dismissed (not answered) can leave getUserMedia waiting forever, which would leave the
+        // recording bar up in place of the message box: give up after a while and hand the message box back.
+        const gaveUp = Symbol('timeout');
+        const result = await Promise.race([
+            Promise.all([noteOpenMic(), convoProbeServer()]),
+            new Promise(resolve => setTimeout(() => resolve(gaveUp), NOTE_START_MS))
+        ]);
         if (note.state !== 'starting') return;   // cancelled while the permission box was up
+        if (result === gaveUp) { noteCloseMic(); noteSetState('idle'); noteToast('The microphone did not start. You can type instead.'); return; }
+        const [opened, serverUp] = result;
         if (!opened) { noteSetState('idle'); return; }
         if (serverUp) engine = 'server';
         else noteCloseMic();   // the transcriber is not available: use the browser recognizer instead
