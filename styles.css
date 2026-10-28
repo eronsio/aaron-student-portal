@@ -3232,6 +3232,29 @@ body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0;
 #ai-companion .voice-engine { margin-top: 5px; font-size: 11.5px; color: var(--ai-muted); }
 #ai-companion .ai-voice-panel.state-listening .voice-orb { cursor: pointer; }
 
+/* ---- voice note: record bar (replaces the composer while recording) ---- */
+#aiChatView.note-on .ai-chat-input-container { display: none; }
+#ai-companion .ai-note-panel {
+    display: flex; align-items: center; gap: 6px; padding: 6px; border: 1px solid #dde2e9; border-radius: 24px; background: #fff;
+}
+#ai-companion .ai-note-panel .ai-icon-btn { width: 40px; height: 40px; border-radius: 50%; }
+#ai-companion .note-mid { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 0 6px; }
+#ai-companion .note-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #c2736c; animation: noteDot 1.2s ease-in-out infinite; }
+@keyframes noteDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.8); } }
+#ai-companion .note-time { min-width: 36px; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ai-ink); }
+#ai-companion .note-bars { flex: 1; max-width: 130px; height: 28px; display: flex; align-items: center; gap: 3px; }
+#ai-companion .note-bars i { flex: 1; min-width: 3px; max-width: 5px; border-radius: 3px; background: #b9c3d2; height: calc(5px + var(--level, 0) * var(--k, 1) * 22px); transition: height 0.08s linear; }
+#ai-companion .note-bars i:nth-child(1) { --k: 0.5; } #ai-companion .note-bars i:nth-child(2) { --k: 0.8; }
+#ai-companion .note-bars i:nth-child(3) { --k: 1.1; } #ai-companion .note-bars i:nth-child(4) { --k: 1; }
+#ai-companion .note-bars i:nth-child(5) { --k: 0.9; } #ai-companion .note-bars i:nth-child(6) { --k: 0.7; } #ai-companion .note-bars i:nth-child(7) { --k: 0.45; }
+#ai-companion .note-label { font-size: 14px; color: var(--ai-muted); }
+#ai-companion .ai-note-panel:not(.state-recording) .note-time, #ai-companion .ai-note-panel:not(.state-recording) .note-bars { display: none; }
+#ai-companion .ai-note-panel:not(.state-recording) .note-dot { animation: none; background: #aab4c3; }
+#ai-companion .ai-voice-tag { margin-right: 7px; font-size: 11px; opacity: 0.75; }
+#ai-companion .ai-pop-check { cursor: pointer; }
+#ai-companion .ai-pop-check em { font-style: normal; font-size: 12px; color: var(--ai-muted); }
+#ai-companion .ai-pop-check input { width: 18px; height: 18px; accent-color: var(--ai-accent); }
+
 /* ---- small popovers: voice settings (header) and activities (+) ---- */
 #ai-companion .ai-popover {
     position: absolute; z-index: 30; width: 300px; max-width: calc(100vw - 32px); padding: 8px;
@@ -3285,7 +3308,10 @@ body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0;
     body.ai-chat-open .tab-nav::-webkit-scrollbar { display: none; }
     body.ai-chat-open .tab-btn { flex: none; white-space: nowrap; border-radius: 99px; padding: 8px 14px; }
     body.ai-chat-open main.container { padding: 8px; }
-    #ai-companion .ai-shell { height: calc(100dvh - 76px); min-height: 440px; border-radius: 18px; }
+    #ai-companion .ai-shell { height: calc(var(--vvh, 100dvh) - 76px); min-height: 360px; border-radius: 18px; }
+    /* keyboard open (iPhone): the chat shrinks to what is visible and the tab row steps aside */
+    body.kb-open.ai-chat-open .tab-nav { display: none; }
+    body.kb-open.ai-chat-open #ai-companion .ai-shell { height: calc(var(--vvh, 100dvh) - 18px); }
     #ai-companion .ai-header { padding: 10px 12px; }
     #ai-companion .ai-header-mark { width: 34px; height: 34px; border-radius: 11px; }
     #ai-companion .ai-header-actions { gap: 2px; }

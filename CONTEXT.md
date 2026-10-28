@@ -96,7 +96,14 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   at 3500. (A live comparison showed Haiku praising "Me gustan correr y nadar"; Sonnet corrects it.)
   Per-student rate limit (best-effort, in the function instance's memory): chat 30/min + 600/day, reports 10/hour; over the limit
   the function answers 429 with a Spanish "Vas muy rápido…" message.
-- **Voice conversation** (script.js "VOICE CONVERSATION" section): the student taps the mic once and just talks, like a voice call. While it is on, a **call panel**
+- **Voice notes (the default mic, 2026-10-28)**: tap the mic → the composer is replaced by a recording bar (✕ cancel, red dot + timer + level bars, Send); tap Send (or the
+  mic again) and the note is transcribed and sent automatically (`submitAiMessage(text, {voice:true})`, bubble gets a mic tag), the reply is read aloud and the mic does NOT
+  start listening again. Code: `note` state object, `micPress`, `noteStart`/`noteSend`/`noteAbort`/`noteOpenMic`/`noteCloseMic` (script.js, just above the hands-free
+  section). Notes under `NOTE_MIN_MS` (600 ms) are refused with a toast, notes stop at `NOTE_MAX_MS` (60 s). The mic stays open 45 s after a note so the next one starts
+  instantly, then is released (also on backgrounding / leaving the chat). Same two engines as below (server `ai-transcribe` preferred, browser recognizer fallback).
+  The **hands-free conversation** described next is now an opt-in beta (⚙ → "Hands-free conversation (beta)", `noteHandsFree()`): with it on, the mic button runs `convoToggle`.
+- iPhone keyboard: a `visualViewport` listener sets `--vvh` and `body.kb-open`, so the chat shrinks to the visible area instead of being pushed off-screen.
+- **Voice conversation** (script.js "VOICE CONVERSATION" section, hands-free beta): the student taps the mic once and just talks, like a voice call. While it is on, a **call panel**
   (orb that swells with their voice, state text, live caption, Type / End buttons) replaces the text box — nothing is typed into a box. Each finished sentence is
   sent by itself (`submitAiMessage(text, {voice:true})`), the reply is read aloud, and the mic listens again. Tap the circle while the AI talks = cut it off and
   answer; Type = stop and type; End = stop. Two engines with the same behaviour:

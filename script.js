@@ -1280,10 +1280,10 @@ function setupEventListeners() {
 
     // Voice conversation: tap the mic and talk; it sends by itself and the reply is read aloud
     if (convoSupported()) {
-        aiRecordBtn.addEventListener('click', convoToggle);
+        aiRecordBtn.addEventListener('click', micPress);
         setConvoState('off');
         // Never keep a microphone open while the page is in the background.
-        document.addEventListener('visibilitychange', () => { if (document.hidden && convo.on) convoStop(); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) { if (convo.on) convoStop(); else noteAbort(); noteCloseMic(); } });
     } else {
         aiRecordBtn.disabled = true;
         aiRecordBtn.title = 'La entrada de voz no está disponible en este navegador. Prueba Chrome, Edge o Safari — o simplemente escribe.';
@@ -2749,7 +2749,7 @@ async function submitAiMessage(message, opts) {
     if (convo.on) convoDetach();   // a typed message went out while the mic was open: the reply decides what happens next
     let spoken = null, reply = '', failed = false;
     try {
-        appendAiMessage('user', escapeHtml(message));
+        appendAiMessage('user', (opts.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '') + escapeHtml(message));
         if (!opts.help) { aiMessageInput.value = ''; aiAutosize(); }
 
         // Typing indicator
@@ -2811,6 +2811,7 @@ function ensureAiExtras() {
                 <div class="ai-seg" id="aiPaceSeg" role="group" aria-label="Reading pace">
                     <button type="button" data-pace="normal">Normal</button><button type="button" data-pace="slow">Slow</button>
                 </div></div>
+            <label class="ai-pop-row ai-pop-check"><span>Hands-free conversation <em>(beta)</em></span><input type="checkbox" id="aiHandsFree"></label>
             <div class="ai-pop-row"><span>Microphone problems?</span><button type="button" id="aiDiagBtn" class="ai-pop-link">Copy diagnostics</button></div>
             <pre id="aiDiagBox" class="ai-diag hidden"></pre>`;
         actions.insertBefore(btn, document.getElementById('ttsToggleBtn'));
@@ -2820,6 +2821,8 @@ function ensureAiExtras() {
         const sel = menu.querySelector('#ttsVoiceSelect');
         if (sel) { sel.addEventListener('change', () => chooseTtsVoice(sel.value)); fillTtsVoiceSelect(); }
         setSlowTTS(ttsSlow);
+        const hf = menu.querySelector('#aiHandsFree');
+        if (hf) { hf.checked = noteHandsFree(); hf.addEventListener('change', () => { try { localStorage.setItem('aiHandsFree', hf.checked ? '1' : '0'); } catch (e) {} if (!hf.checked && convo.on) convoStop(); }); }
         const diag = menu.querySelector('#aiDiagBtn');
         if (diag) diag.addEventListener('click', () => convoCopyDiagnostics(diag));
     }
@@ -2842,6 +2845,17 @@ function ensureAiExtras() {
         bar.setAttribute('role', 'status'); bar.setAttribute('aria-live', 'polite');
         bar.innerHTML = '<i class="fas fa-circle"></i><span></span>';
         footer.insertBefore(bar, composer);
+    }
+    if (!document.getElementById('aiNotePanel')) {
+        const panel = document.createElement('div');
+        panel.id = 'aiNotePanel'; panel.className = 'ai-note-panel hidden';
+        panel.innerHTML = `<button type="button" id="aiNoteCancel" class="ai-icon-btn" title="Cancel this voice note" aria-label="Cancel this voice note"><i class="fas fa-xmark"></i></button>
+            <div class="note-mid" role="status" aria-live="polite"><span class="note-dot" aria-hidden="true"></span><span id="aiNoteTime" class="note-time">0:00</span>
+                <span class="note-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="aiNoteLabel" class="note-label"></span></div>
+            <button type="button" id="aiNoteSend" class="ai-send-btn" title="Send this voice note" aria-label="Send this voice note"><i class="fas fa-arrow-up"></i></button>`;
+        footer.insertBefore(panel, composer);
+        document.getElementById('aiNoteCancel').addEventListener('click', noteAbort);
+        document.getElementById('aiNoteSend').addEventListener('click', noteSend);
     }
     if (!document.getElementById('aiQuickReplies')) {
         const row = document.createElement('div');
@@ -2900,6 +2914,25 @@ function aiClosePopovers() {
     document.querySelectorAll('#aiChatView [aria-haspopup="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
 }
 document.addEventListener('click', (e) => { if (!e.target.closest('.ai-popover')) aiClosePopovers(); });
+// On iPhones the keyboard covers the bottom of the page without resizing it, hiding the message box. The visual viewport knows
+// what is really visible: the chat is sized to it (--vvh) and the page is kept from sliding up.
+(function () {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+        document.documentElement.style.setProperty('--vvh', vv.height + 'px');
+        const keyboard = window.innerHeight - vv.height > 140;
+        document.body.classList.toggle('kb-open', keyboard);
+        if (keyboard && document.body.classList.contains('ai-chat-live')) {
+            window.scrollTo(0, 0);
+            const box = document.getElementById('aiChatMessages');
+            if (box) setTimeout(() => aiScrollToEnd(box, true), 60);
+        }
+    };
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    sync();
+})();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') aiClosePopovers(); });
 
 // Runs every time the student opens the tab. A chat or recap that is already on screen is left alone,
@@ -3244,8 +3277,8 @@ function convoEncodeWav(chunks, inRate, outRate) {
     return new Blob([header, pcm.buffer], { type: 'audio/wav' });
 }
 
-async function convoTranscribe(wav) {
-    let text = '', failure = '';
+// Sends one finished recording to the transcriber. Returns { text } or { failure: 'slow' | 'down' }.
+async function transcribeWav(wav) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
@@ -3255,18 +3288,17 @@ async function convoTranscribe(wav) {
             body: wav,
             signal: controller.signal
         });
-        if (r.ok) {
-            text = String((await r.json()).text || '').trim();
-        } else if (r.status === 429) {
-            failure = 'slow';
-        } else {
-            failure = 'down';   // 503 not set up, 502 no permission/upstream error, 401, 413...
-        }
+        if (r.ok) return { text: String((await r.json()).text || '').trim() };
+        return { failure: r.status === 429 ? 'slow' : 'down' };   // 503 not set up, 502 no permission/upstream error, 401, 413...
     } catch (e) {
-        failure = 'down';
+        return { failure: 'down' };
     } finally {
         clearTimeout(timer);
     }
+}
+
+async function convoTranscribe(wav) {
+    const { text = '', failure = '' } = await transcribeWav(wav);
     if (!convo.on) return;
     convoLog(`transcribe: ${failure || 'ok'} → "${text.slice(0, 60)}"`);
     if (failure === 'slow') { convoPause('Vas muy rápido — wait a moment, then tap the mic'); return; }
@@ -3432,6 +3464,7 @@ function convoPause(message) {
 }
 
 function convoStop() {
+    noteAbort();
     if (convo.on) convoLog('conversation stopped');
     convo.on = false;
     clearTimeout(convo.timer); convo.timer = null;
@@ -3443,6 +3476,185 @@ function convoStop() {
     const engineLabel = document.getElementById('aiVoiceEngine');
     if (engineLabel) engineLabel.textContent = '';
     setConvoState('off');
+}
+
+// ============================================================
+// VOICE NOTES — tap to record, tap to send (the default microphone behaviour)
+// ============================================================
+// The microphone button records a voice note: tap to start, tap Send (or the arrow) to finish, ✕ to throw it away. The recording is
+// transcribed, shown in the chat as your message and answered (and read aloud) like any other message. Nothing is guessed about when you
+// have stopped talking, so there is nothing to glitch; it behaves the same on every phone. The hands-free conversation above is an
+// opt-in beta (⚙ → Hands-free) for people who want it.
+const NOTE_MAX_MS = 60000;           // a voice note ends and sends itself after a minute
+const NOTE_MIN_MS = 600;             // shorter than this is a mis-tap
+const NOTE_KEEP_MIC_MS = 45000;      // the microphone stays open this long after a note (no permission box between notes), then is released
+const note = { state: 'idle', engine: '', ctx: null, stream: null, node: null, src: null, chunks: [], rate: 44100,
+               startedAt: 0, tick: null, idle: null, rec: null, heard: '', peak: 0 };
+
+function noteHandsFree() { try { return localStorage.getItem('aiHandsFree') === '1'; } catch (e) { return false; } }
+
+// The mic button: a voice note by default; the hands-free conversation when that beta is switched on.
+function micPress() {
+    if (convo.on || noteHandsFree()) { convoToggle(); return; }
+    if (note.state === 'recording') noteSend();
+    else if (note.state === 'idle') noteStart();
+}
+
+function noteSetState(state) {
+    note.state = state;
+    const view = document.getElementById('aiChatView');
+    if (view) view.classList.toggle('note-on', state !== 'idle');
+    const panel = document.getElementById('aiNotePanel');
+    if (panel) {
+        panel.className = 'ai-note-panel state-' + state + (state === 'idle' ? ' hidden' : '');
+        const label = document.getElementById('aiNoteLabel');
+        if (label) label.textContent = state === 'starting' ? 'Getting ready…' : state === 'transcribing' ? 'Transcribing…' : '';
+        const send = document.getElementById('aiNoteSend');
+        if (send) send.disabled = state !== 'recording';
+    }
+}
+
+// A short message above the composer (e.g. "Too short"), gone after a few seconds.
+let noteToastTimer = null;
+function noteToast(message) {
+    const bar = document.getElementById('aiVoiceStatus');
+    if (!bar) return;
+    bar.className = 'ai-voice-status state-paused';
+    const label = bar.querySelector('span');
+    if (label) label.textContent = message;
+    clearTimeout(noteToastTimer);
+    noteToastTimer = setTimeout(() => { if (!convo.on) bar.classList.add('hidden'); }, 5000);
+}
+
+async function noteOpenMic() {
+    clearTimeout(note.idle);
+    if (note.stream) return true;
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AC();
+        try { await ctx.resume(); } catch (e) {}
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        const src = ctx.createMediaStreamSource(stream);
+        const node = ctx.createScriptProcessor(2048, 1, 1);
+        const mute = ctx.createGain();
+        mute.gain.value = 0;   // the processor must be connected to run; nothing is played back
+        src.connect(node); node.connect(mute); mute.connect(ctx.destination);
+        node.onaudioprocess = (e) => noteFrame(e.inputBuffer.getChannelData(0));
+        Object.assign(note, { ctx, stream, node, src, rate: ctx.sampleRate });
+        return true;
+    } catch (err) {
+        console.error('Microphone open failed:', err);
+        const name = err && err.name;
+        if (name === 'NotAllowedError' || name === 'SecurityError') alert('Por favor permite el acceso al micrófono.');
+        else if (name === 'NotFoundError' || name === 'OverconstrainedError') noteToast('No microphone found. Connect one and try again.');
+        else noteToast('Could not open the microphone. Try again.');
+        return false;
+    }
+}
+
+function noteCloseMic() {
+    clearTimeout(note.idle);
+    try { if (note.node) { note.node.onaudioprocess = null; note.node.disconnect(); } } catch (e) {}
+    try { if (note.src) note.src.disconnect(); } catch (e) {}
+    try { if (note.stream) note.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    try { if (note.ctx) note.ctx.close(); } catch (e) {}
+    note.node = note.src = note.stream = note.ctx = null;
+}
+
+// One 2048-sample slice of microphone audio: drives the level bars and, while recording, is kept.
+function noteFrame(buf) {
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const level = Math.min(1, Math.sqrt(sum / buf.length) * 9);
+    const panel = document.getElementById('aiNotePanel');
+    if (panel && note.state === 'recording') panel.style.setProperty('--level', String(level));
+    if (note.state === 'recording' && note.engine === 'server') note.chunks.push(new Float32Array(buf));
+}
+
+async function noteStart() {
+    if (!currentAiMode || !convoSupported() || note.state !== 'idle') return;
+    if (aiBusy) { noteToast('One moment, I am still answering.'); return; }
+    stopSpeaking();   // don't record the AI's own voice
+    noteSetState('starting');
+    note.chunks = []; note.heard = ''; note.peak = 0;
+    let engine = 'browser';
+    if (convoServerOk()) {
+        const [opened, serverUp] = await Promise.all([noteOpenMic(), convoProbeServer()]);
+        if (note.state !== 'starting') return;   // cancelled while the permission box was up
+        if (!opened) { noteSetState('idle'); return; }
+        if (serverUp) engine = 'server';
+        else noteCloseMic();   // the transcriber is not available: use the browser recognizer instead
+    }
+    if (engine === 'browser' && !speechSupported) {
+        noteSetState('idle');
+        noteToast('Voice is unavailable on this device right now. You can type instead.');
+        return;
+    }
+    note.engine = engine;
+    note.startedAt = Date.now();
+    if (engine === 'browser') noteStartBrowser();
+    noteSetState('recording');
+    const time = document.getElementById('aiNoteTime');
+    if (time) time.textContent = '0:00';
+    clearInterval(note.tick);
+    note.tick = setInterval(() => {
+        const ms = Date.now() - note.startedAt;
+        const t = document.getElementById('aiNoteTime');
+        if (t) t.textContent = Math.floor(ms / 60000) + ':' + String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+        if (ms >= NOTE_MAX_MS) noteSend();
+    }, 250);
+}
+
+// Browser-recognizer fallback: the words are collected while recording and used when the note is sent.
+function noteStartBrowser() {
+    const rec = new SpeechRecognitionCtor();
+    rec.lang = 'es-ES'; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = (event) => { note.heard = Array.from(event.results).map(r => r[0].transcript).join(' '); };
+    rec.onerror = (event) => {
+        if (event.error === 'no-speech' || event.error === 'aborted') return;
+        if (note.state === 'recording' && (event.error === 'not-allowed' || event.error === 'service-not-allowed')) { noteAbort(); alert('Por favor permite el acceso al micrófono.'); }
+        else if (note.state === 'recording') { noteAbort(); noteToast("The microphone stopped working. Try again."); }
+    };
+    rec.onend = () => { if (note.rec === rec && note.state === 'recording') { try { rec.start(); } catch (e) {} } };   // Chrome ends it after a pause: keep it going
+    note.rec = rec;
+    try { rec.start(); } catch (e) { console.error(e); }
+}
+
+async function noteSend() {
+    if (note.state !== 'recording') return;
+    clearInterval(note.tick);
+    const ms = Date.now() - note.startedAt;
+    if (ms < NOTE_MIN_MS) { noteAbort(); noteToast('That was very short. Hold on a little longer, then send.'); return; }
+    noteSetState('transcribing');
+    let text = '', failure = '';
+    if (note.engine === 'server') {
+        const wav = convoEncodeWav(note.chunks, note.rate, 16000);
+        note.chunks = [];
+        ({ text = '', failure = '' } = await transcribeWav(wav));
+    } else {
+        const rec = note.rec; note.rec = null;
+        try { rec.stop(); } catch (e) {}
+        await new Promise(r => setTimeout(r, 700));   // let the last words arrive
+        text = note.heard.replace(/\s+/g, ' ').trim();
+    }
+    if (note.state !== 'transcribing') return;   // cancelled meanwhile
+    noteSetState('idle');
+    note.idle = setTimeout(noteCloseMic, NOTE_KEEP_MIC_MS);
+    if (failure === 'slow') { noteToast('Vas muy rápido. Wait a moment, then try again.'); return; }
+    if (failure === 'down') { sttServerUntil = Date.now() + 30 * 60000; noteToast("Couldn't transcribe that. Try once more, or type instead."); return; }
+    if (!text) { noteToast("I didn't catch that. Try again a little louder."); return; }
+    practiceMarkVoice();
+    submitAiMessage(text, { voice: true });
+}
+
+// Throw the recording away (✕, leaving the chat, the app going to the background…).
+function noteAbort() {
+    clearInterval(note.tick);
+    if (note.rec) { const rec = note.rec; note.rec = null; try { rec.abort(); } catch (e) {} }
+    note.chunks = [];
+    if (note.state !== 'idle') noteSetState('idle');
+    clearTimeout(note.idle);
+    note.idle = setTimeout(noteCloseMic, NOTE_KEEP_MIC_MS);
 }
 
 // ============================================================
