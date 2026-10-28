@@ -3364,3 +3364,10 @@ body.on-ai-tab .floating-book-btn { display: none; }
 .update-banner button { flex: none; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border: 0; border-radius: 10px; padding: 7px 14px; }
 .update-banner .update-now { background: #fff; color: #1f2937; }
 .update-banner .update-later { background: transparent; color: #cbd5e1; padding: 7px 8px; }
+
+/* iPhones zoom the whole page when a field under 16px gets focus: sign-in, sign-up and the Your Space message box were 14px */
+@media (max-width: 768px) {
+    .form-group input,
+    .form-group select,
+    #messageInput { font-size: 16px; }
+}
