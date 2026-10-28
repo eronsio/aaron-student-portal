@@ -3276,6 +3276,17 @@ body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0;
 
 /* ---- admin preview bar (above the chat) ---- */
 #ai-companion .ai-admin-bar { background: #f6f8fb; border: 1px solid var(--ai-line); border-radius: 16px; padding: 14px 18px; margin-bottom: 14px; }
+/* while the chat is on screen the admin card floats (opened from the eye button in the header) so the chat looks like the student's */
+body.ai-chat-live #ai-companion #aiAdminBar.is-floating {
+    display: none; position: fixed; z-index: 60; width: min(400px, calc(100vw - 24px)); margin: 0; padding: 14px 18px 16px;
+    background: #fff; border: 1px solid var(--ai-line); border-radius: 16px;
+    box-shadow: 0 22px 44px -14px rgba(16, 24, 40, 0.26), 0 2px 8px rgba(16, 24, 40, 0.06);
+}
+body.ai-chat-live #ai-companion #aiAdminBar.is-floating.open { display: block; animation: aiPop 0.14s ease-out both; }
+#ai-companion .ai-admin-bar { position: relative; }
+#ai-companion .ai-admin-close { display: none; position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--ai-muted); font-size: 14px; cursor: pointer; }
+#ai-companion .ai-admin-close:hover { background: var(--ai-wash); color: var(--ai-ink); }
+body.ai-chat-live #ai-companion #aiAdminBar.is-floating .ai-admin-close { display: block; }
 
 /* ---- recap / session ended ---- */
 #ai-companion .ai-recap-card { max-width: 660px; margin: 8px auto 0; padding: 30px 32px; border: 1px solid var(--ai-line); border-radius: 22px; box-shadow: none; background: #fff; }

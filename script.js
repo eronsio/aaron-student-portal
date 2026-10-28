@@ -2841,6 +2841,16 @@ function ensureAiExtras() {
         b.addEventListener('click', toggleAdminMenu);
         actions.insertBefore(b, actions.firstChild);
     }
+    // Admin: the "practise as <student>" card is floating and closed by default, opened from this eye button.
+    if (actions && currentUser?.isAdmin && !document.getElementById('aiAdminPreviewBtn')) {
+        const b = document.createElement('button');
+        b.id = 'aiAdminPreviewBtn'; b.type = 'button'; b.className = 'ai-icon-btn';
+        b.title = 'Admin preview: practise as a student'; b.setAttribute('aria-label', 'Admin preview: practise as a student');
+        b.setAttribute('aria-expanded', 'false');
+        b.innerHTML = '<i class="fas fa-eye"></i>';
+        b.addEventListener('click', (e) => { e.stopPropagation(); aiClosePopovers(); practiceAdminBarToggle(); });
+        actions.insertBefore(b, actions.firstChild);
+    }
     if (!footer || !composer) return;
 
     // Footer, top to bottom: voice status line, voice call panel, help chips, composer.

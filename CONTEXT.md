@@ -83,6 +83,9 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   leaked in). Phones: the portal header is hidden, the shell fills the screen (`100dvh`, or `--vvh` while the iPhone keyboard is open), "End session" shortens to "End". Respects `prefers-reduced-motion`.
   The portal's tab row (`.tab-nav`/`.tab-btn`, top of styles.css) is now a quiet underline row for EVERY tab (the old per-tab pastel tints are gone); on a phone it scrolls sideways and `showTab` scrolls
   the chosen tab into view.
+- **Admin preview card** (2026-10-28): signed-in admin sees the chat exactly as a student does. The "Admin preview — Practise as …" bar (`#aiAdminBar`, practice.js `renderAiAdminBar`) is
+  `.is-floating` while the chat is live: hidden by default, opened by the eye button in the chat header (`#aiAdminPreviewBtn`, `practiceAdminBarToggle`), closed by ✕ / outside tap / Escape / picking a student.
+  Signed out, or on the recap screen, it is the normal inline bar (the sign-in form must be visible).
 - **No activity menu** (changed 2026-10-26): opening the Speaking & Writing Practice tab goes straight into the chat (`initAiCompanion` → `startAiChat`): the
   student's personalised practice plan if they have one (mode `plan`), otherwise free conversation (mode `free`). A chat that is already open is left alone
   when the student switches tabs and comes back. Roleplay / picture description / grammar drills are no longer separate screens: the AI switches activity

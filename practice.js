@@ -49,7 +49,9 @@ function practiceFormatReply(text) {
         // [✓ corrected sentence — reason] becomes a highlighted callout; any other [note] a quieter one.
         .replace(/\[([^\]\n]{1,400})\]/g, (m, inner) => /^\s*✓/.test(inner)
             ? `<span class="ai-fix">${inner.replace(/^\s*✓\s*/, '')}</span>`
-            : `<span class="ai-note">${inner}</span>`);
+            : `<span class="ai-note">${inner}</span>`)
+        // the model sometimes closes the bracket and then adds a full stop: "[✓ …]. Yo no…" would show a stray dot
+        .replace(/(<span class="ai-fix">[\s\S]*?<\/span>)\s*[.,;]+\s*/g, '$1 ');
 }
 
 function practiceSlug(text) {
@@ -659,6 +661,7 @@ async function renderAiAdminBar() {
         host.insertBefore(bar, host.firstChild);
     }
     if (!_accessToken) {
+        bar.classList.remove('is-floating', 'open');   // no chat yet: the sign-in form is shown in the page
         bar.innerHTML = `<div class="ai-admin-title">👁 Admin preview</div>
             <p>This is the tool your students use. To chat with the AI, sign in with <b>your own student account</b> — it is only used to reach the AI, and nothing from this preview is saved.</p>
             <form id="aiAdminLoginForm" class="ai-admin-login" autocomplete="on">
@@ -672,7 +675,11 @@ async function renderAiAdminBar() {
     }
     const students = await practiceAdminStudents();
     const current = practiceAdminPreview ? practiceAdminPreview.uid : '';
-    bar.innerHTML = `<div class="ai-admin-title">👁 Admin preview <span class="ai-admin-sub">— nothing is saved</span></div>
+    // Signed in: while the chat is on screen the bar becomes a floating card (opened from the eye button in the chat header), so the
+    // chat looks exactly as a student sees it. Outside the chat (recap screen) it stays a normal bar.
+    bar.classList.add('is-floating');
+    bar.innerHTML = `<button type="button" class="ai-admin-close" id="aiAdminClose" aria-label="Close">✕</button>
+        <div class="ai-admin-title">👁 Admin preview <span class="ai-admin-sub">— nothing is saved</span></div>
         <div class="ai-admin-row">
             <label for="aiAdminStudent">Practise as</label>
             <select id="aiAdminStudent">
@@ -686,6 +693,31 @@ async function renderAiAdminBar() {
         practiceAdminChooseStudent(e.target.value, opt && e.target.value ? opt.textContent : '');
     });
     document.getElementById('aiAdminSignOut')?.addEventListener('click', practiceAdminSignOut);
+    document.getElementById('aiAdminClose')?.addEventListener('click', () => practiceAdminBarToggle(false));
+}
+
+// Opens/closes the floating admin card, placed under the eye button in the chat header.
+function practiceAdminBarToggle(force) {
+    const bar = document.getElementById('aiAdminBar');
+    if (!bar || !bar.classList.contains('is-floating')) return;
+    const open = typeof force === 'boolean' ? force : !bar.classList.contains('open');
+    bar.classList.toggle('open', open);
+    const btn = document.getElementById('aiAdminPreviewBtn');
+    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && btn) {
+        const r = btn.getBoundingClientRect();
+        bar.style.top = Math.round(r.bottom + 8) + 'px';
+        // line up with the button's right edge, but never hang off the left edge of a narrow phone screen
+        const right = Math.min(window.innerWidth - r.right, window.innerWidth - bar.offsetWidth - 12);
+        bar.style.right = Math.max(12, Math.round(right)) + 'px';
+    }
+}
+if (typeof document !== 'undefined') {   // (practice.js is also loaded by the Node tests)
+    document.addEventListener('click', (e) => {
+        const bar = document.getElementById('aiAdminBar');
+        if (bar && bar.classList.contains('open') && !e.target.closest('#aiAdminBar') && !e.target.closest('#aiAdminPreviewBtn')) practiceAdminBarToggle(false);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') practiceAdminBarToggle(false); });
 }
 
 // The admin's preview login is remembered like any "Remember me": only a renewable token for the admin's own student
@@ -748,6 +780,7 @@ function practiceAdminSignOut() {
 }
 
 async function practiceAdminChooseStudent(uid, name) {
+    practiceAdminBarToggle(false);
     practiceAdminPreview = uid ? { uid, name } : null;
     practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
     leaveAiChat();      // a different student's plan: start over with it
