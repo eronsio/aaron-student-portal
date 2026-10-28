@@ -1010,11 +1010,23 @@ footer p {
         margin: 16px;
     }
     
+    /* one slim row: title on the left, (admin gear +) Logout on the right */
     .header-top {
-        flex-direction: column;
-        gap: 16px;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 0;
     }
+    header h1 { font-size: 18px; white-space: nowrap; }
+    .user-info { gap: 6px; }
+    #welcomeMessage { display: none; }
+    .logout-btn { padding: 6px 12px; }
+
+    /* every tab sits directly on the page (no card around a card); the practice tab does the same */
+    body { background-color: var(--bg-primary); }
+    .tab-content { background: transparent; border: 0; padding: 0; }
+    main.container { padding-bottom: 96px; }   /* the floating "Book a lesson" button never hides the last item */
+    body.on-ai-tab .tab-content { background: transparent; }
     
     .main-nav {
         margin: 0 -16px;
@@ -1034,8 +1046,7 @@ footer p {
     .tab-btn .tab-long { display: none; }
     .tab-btn .tab-short { display: inline; }
 
-    .welcome-card,
-    .tab-content {
+    .welcome-card {
         padding: 24px;
     }
     
@@ -2361,6 +2372,7 @@ footer p {
 
 .verb-tense-picker-wrap select {
     flex: 1;
+    min-width: 0;   /* a long option name must not push the box past the card on a phone */
     padding: 10px 14px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -2946,28 +2958,43 @@ body.ai-chat-open .floating-book-btn { display: none; }
 .install-tip button { flex: none; padding: 6px 12px; border: 1px solid #b9c6d8; border-radius: var(--radius-md); background: #fff; color: var(--text-primary); font-size: 13px; cursor: pointer; }
 
 /* ---- The admin's floating tools button sits exactly where the composer is: while the chat is live it moves into the chat header ---- */
-body.ai-chat-live #adminFloatingBar > button { display: none !important; }
+/* the old floating tools button is gone: everything it did lives in the admin hub (header gear) */
+#adminFloatingBar > button { display: none !important; }
 
-/* ---- Admin: student switcher, "viewing as" bar, collapsible student list ---- */
-.admin-student-switch select {
-    font-family: inherit; font-size: 13px; padding: 6px 10px; max-width: 200px;
-    border: 1px solid var(--border-color); border-radius: var(--radius-md);
-    background: var(--bg-primary); color: var(--text-primary); cursor: pointer;
+/* ---- Admin: collapsible student list (Students panel) ---- */
+/* ============================================================
+   ADMIN HUB (2026-10-28): the admin's controls, out of the page. One gear in the header opens this panel.
+   ============================================================ */
+.admin-gear {
+    position: relative; width: 36px; height: 36px; display: grid; place-items: center; flex: none; cursor: pointer;
+    border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); font-size: 15px;
+    transition: background 0.15s ease, color 0.15s ease;
 }
-.student-view-bar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 9000;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
-    padding: 8px 16px; background: #334155; color: #fff; font-size: 13px;
+.admin-gear:hover, .admin-gear[aria-expanded="true"] { background: var(--bg-tertiary); color: var(--text-primary); }
+.admin-gear.is-viewing::after { content: ""; position: absolute; top: 5px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: #d9a441; border: 2px solid #fff; }
+.admin-hub {
+    position: fixed; z-index: 9500; top: 60px; right: 16px; width: min(400px, calc(100vw - 24px)); max-height: calc(100dvh - 76px); overflow-y: auto;
+    padding: 6px 6px 8px; background: #fff; border: 1px solid var(--border-color); border-radius: 16px;
+    box-shadow: 0 22px 44px -14px rgba(16, 24, 40, 0.26), 0 2px 8px rgba(16, 24, 40, 0.06);
 }
-.student-view-bar .sv-label { flex: 1 1 auto; min-width: 0; }
-.student-view-bar .sv-nav, .student-view-bar .sv-actions { display: flex; align-items: center; gap: 6px; }
-.student-view-bar button, .student-view-bar select {
-    font-family: inherit; font-size: 13px; color: #fff; cursor: pointer;
-    background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.28); border-radius: 6px; padding: 4px 12px;
-}
-.student-view-bar select { max-width: 170px; padding: 4px 8px; }
-.student-view-bar select option { color: #111; }
-.student-view-bar #svPrev, .student-view-bar #svNext { font-size: 16px; line-height: 1; padding: 3px 11px; }
+.admin-hub-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 4px 12px; font-size: 14px; }
+.admin-hub-close { width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); font-size: 14px; cursor: pointer; }
+.admin-hub-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.admin-hub-sec { padding: 10px 12px; }
+.admin-hub-sec + .admin-hub-sec { border-top: 1px solid var(--border-light); }
+.admin-hub-label { margin-bottom: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-secondary); }
+.admin-hub .admin-portal-switch { width: 100%; margin: 0 0 10px; }
+.admin-hub .admin-portal-switch button { flex: 1; }
+.admin-hub .admin-student-switch select, .admin-hub #aiAdminStudent { width: 100%; max-width: none; font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; color: var(--text-primary); }
+.admin-hub .ai-admin-row { display: flex; flex-direction: column; gap: 8px; }
+.admin-hub .ai-admin-sub { margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
+.admin-hub .hub-tools-list { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 0; border: 0; box-shadow: none; background: transparent; margin: 0 -6px; }
+.hub-sv-label { margin-bottom: 10px; font-size: 14px; }
+.hub-sv-nav { display: flex; gap: 6px; margin-bottom: 10px; }
+.hub-sv-nav select { flex: 1; min-width: 0; font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; }
+.hub-sv-nav button { width: 38px; font-size: 18px; line-height: 1; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #fff; cursor: pointer; }
+.hub-sv-actions { display: flex; gap: 8px; }
+.hub-sv-actions .admin-btn { flex: 1; justify-content: center; }
 
 details.admin-student-card {
     background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); margin-bottom: 8px;
@@ -2987,8 +3014,6 @@ details.admin-student-card .stu-body { padding: 14px 16px 16px; }
 @media (max-width: 760px) {
     .admin-student-switch { width: 100%; }
     .admin-student-switch select { width: 100%; max-width: none; }
-    .student-view-bar { padding: 8px 12px; }
-    .student-view-bar .sv-label { flex-basis: 100%; }
     details.admin-student-card > summary { flex-wrap: wrap; }
     details.admin-student-card .stu-meta { flex-basis: 100%; order: 3; }
 }
@@ -3010,22 +3035,30 @@ details.admin-student-card .stu-body { padding: 14px 16px 16px; }
     --ai-user: #2f3b4d;
     --ai-gutter: max(16px, calc((100% - 720px) / 2));   /* keeps header, messages and composer in the same centred column */
 }
-/* the chat is the page: white, no card around it */
-body.ai-chat-live { background: #fff; }
-body.ai-chat-live .tab-nav { margin-bottom: 8px; }
-body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0; }
+/* The practice tab is a normal tab: same header, same tab row, same card as the others. Its content fills what is left of the
+   screen (header and tab row keep their height; the card takes the rest and the messages scroll inside it). */
+body.on-ai-tab #mainApp:not(.hidden) { display: flex; flex-direction: column; height: var(--vvh, 100dvh); overflow: hidden; }
+body.on-ai-tab #mainApp > header { flex: none; position: static; }
+body.on-ai-tab #mainApp > main.container { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-bottom: 20px; }
+body.on-ai-tab .tab-nav { flex: none; }
+body.on-ai-tab .tab-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+body.on-ai-tab #ai-companion.active { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+body.on-ai-tab #ai-companion .ai-companion-section { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+body.on-ai-tab #aiChatView:not(.hidden) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+body.on-ai-tab #aiRecapView:not(.hidden) { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px; }
+body.on-ai-tab #ai-companion .ai-admin-bar { margin: 16px; flex: none; }
+body.on-ai-tab .floating-book-btn { display: none; }
 
 #ai-companion .ai-shell {
-    display: flex; flex-direction: column; position: relative;
-    height: clamp(520px, calc(100dvh - 176px), 920px);
+    display: flex; flex-direction: column; position: relative; flex: 1 1 auto; min-height: 0;
     background: transparent; border: 0; border-radius: 0; box-shadow: none; overflow: visible;
     color: var(--ai-ink);
 }
 
 /* ---- header: a title and three quiet controls ---- */
 #ai-companion .ai-header {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px var(--ai-gutter) 10px; background: transparent; border: 0;
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px var(--ai-gutter) 10px; background: transparent; border: 0;
 }
 #ai-companion .ai-header-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 #ai-companion .ai-header-mark { display: none; }
@@ -3116,7 +3149,7 @@ body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0;
 @keyframes aiDots { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-3px); opacity: 1; } }
 
 /* ---- footer: help words, composer ---- */
-#ai-companion .ai-footer { position: relative; padding: 6px var(--ai-gutter) 18px; background: transparent; border: 0; }
+#ai-companion .ai-footer { position: relative; flex: none; padding: 6px var(--ai-gutter) 18px; background: transparent; border: 0; }
 #ai-companion .ai-quick-replies {
     display: flex; gap: 8px; margin: 0 0 10px; padding: 1px 0; overflow-x: auto; scrollbar-width: none;
 }
@@ -3280,19 +3313,6 @@ body.ai-chat-live .tab-content { background: transparent; border: 0; padding: 0;
 
 /* ---- admin preview bar (above the chat) ---- */
 #ai-companion .ai-admin-bar { background: #f6f8fb; border: 1px solid var(--ai-line); border-radius: 16px; padding: 14px 18px; margin-bottom: 14px; }
-/* while the chat is on screen the admin card floats (opened from the eye button in the header) so the chat looks like the student's */
-body.ai-chat-live #ai-companion #aiAdminBar.is-floating {
-    display: none; position: fixed; z-index: 60; width: min(400px, calc(100vw - 24px)); margin: 0; padding: 14px 18px 16px;
-    background: #fff; border: 1px solid var(--ai-line); border-radius: 16px;
-    box-shadow: 0 22px 44px -14px rgba(16, 24, 40, 0.26), 0 2px 8px rgba(16, 24, 40, 0.06);
-}
-body.ai-chat-live #ai-companion #aiAdminBar.is-floating.open { display: block; animation: aiPop 0.14s ease-out both; }
-#ai-companion .ai-admin-bar { position: relative; }
-#ai-companion .ai-admin-row-menu { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ai-line-soft); }
-#ai-companion .ai-admin-close { display: none; position: absolute; top: 8px; right: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--ai-muted); font-size: 14px; cursor: pointer; }
-#ai-companion .ai-admin-close:hover { background: var(--ai-wash); color: var(--ai-ink); }
-body.ai-chat-live #ai-companion #aiAdminBar.is-floating .ai-admin-close { display: block; }
-
 /* ---- recap / session ended ---- */
 #ai-companion .ai-recap-card { max-width: 660px; margin: 8px auto 0; padding: 30px 32px; border: 1px solid var(--ai-line); border-radius: 22px; box-shadow: none; background: #fff; }
 #ai-companion .ai-recap-title { font-size: 20px; letter-spacing: -0.01em; }
@@ -3301,16 +3321,11 @@ body.ai-chat-live #ai-companion #aiAdminBar.is-floating .ai-admin-close { displa
 
 /* ---- phones ---- */
 @media (max-width: 640px) {
-    #ai-companion { --ai-gutter: 0px; }
-    body.ai-chat-open #mainApp > header { display: none; }
-    body.ai-chat-open main.container { padding: 0 12px; }
-    body.ai-chat-open .tab-nav { gap: 22px; margin-bottom: 0; }
-    body.ai-chat-open .tab-btn { padding: 12px 2px 10px; }
-    /* keyboard open (iPhone): the chat shrinks to what is visible and the tab row steps aside */
-    body.kb-open.ai-chat-open .tab-nav { display: none; }
-    #ai-companion .ai-shell { height: calc(var(--vvh, 100dvh) - 52px); min-height: 360px; }
-    body.kb-open.ai-chat-open #ai-companion .ai-shell { height: calc(var(--vvh, 100dvh) - 6px); }
-    #ai-companion .ai-header { padding: 8px 0 4px; }
+    #ai-companion { --ai-gutter: 0px; }   /* the page margin already lines the chat up with the tabs */
+    body.on-ai-tab #mainApp > main.container { padding-bottom: 0; }
+    /* keyboard open (iPhone): the chat gets the whole visible area */
+    body.kb-open.on-ai-tab #mainApp > header, body.kb-open.on-ai-tab .tab-nav { display: none; }
+    #ai-companion .ai-header { padding: 10px 0 6px; }
     #ai-companion .ai-header-actions { gap: 0; }
     #ai-companion .ai-icon-btn { width: 36px; height: 36px; }
     #ai-companion .ai-end-btn { height: 34px; padding: 0 12px; }
@@ -3318,7 +3333,7 @@ body.ai-chat-live #ai-companion #aiAdminBar.is-floating .ai-admin-close { displa
     #ai-companion .ai-end-btn::after { content: "End"; }
     #ai-companion .ai-chips-label { display: none; }
     #ai-companion .ai-target-chips { display: none; }
-    #ai-companion .ai-chat-messages { padding: 16px 0 12px; gap: 24px; }
+    #ai-companion .ai-chat-messages { padding: 12px 0; gap: 24px; }
     /* a chat on a phone sits against the message box (like a messaging app), not against the top with a void in between */
     #ai-companion .ai-chat-messages > :first-child { margin-top: auto; }
     #ai-companion .ai-message.ai-user { max-width: 88%; }

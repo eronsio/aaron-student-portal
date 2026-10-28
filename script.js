@@ -1486,15 +1486,14 @@ async function renderAdminStudentSwitch() {
         box = document.createElement('div');
         box.id = 'adminStudentSwitch';
         box.className = 'admin-student-switch';
-        const userInfo = document.querySelector('#mainApp .header-top .user-info');
-        userInfo.parentNode.insertBefore(box, userInfo);
+        ensureAdminHub().querySelector('#adminHubView').appendChild(box);
     }
     const students = await adminStudentOptions();
     box.innerHTML = `<select id="adminStuSelect" aria-label="View the portal as a student">
         <option value="">👤 View as student…</option>
         ${students.map(s => `<option value="${escapeHtml(String(s.id))}">${escapeHtml(String(s.name))}</option>`).join('')}
     </select>`;
-    box.querySelector('select').addEventListener('change', e => { if (e.target.value) enterStudentView(e.target.value); });
+    box.querySelector('select').addEventListener('change', e => { if (e.target.value) { closeAdminMenu(); enterStudentView(e.target.value); } });
 }
 
 async function enterStudentView(id) {
@@ -1513,42 +1512,31 @@ function exitStudentView() {
     if (!adminReturnUser) return;
     currentUser = adminReturnUser;
     adminReturnUser = null;
-    document.getElementById('studentViewBar')?.remove();
-    document.body.style.paddingTop = '';
     leaveAiChat();
     showMainApp();
 }
 
 async function renderStudentViewBar() {
     if (!adminReturnUser || !currentUser?.isPreview) return;
-    let bar = document.getElementById('studentViewBar');
-    if (!bar) {
-        bar = document.createElement('div');
-        bar.id = 'studentViewBar';
-        bar.className = 'student-view-bar';
-        document.body.appendChild(bar);
-    }
+    const host = ensureAdminHub().querySelector('#adminHubStudent');
     const list = await adminStudentOptions(currentUser.type || 'spanish');
     const idx = list.findIndex(p => String(p.id) === String(currentUser.id));
-    bar.innerHTML = `<span class="sv-label">👁 Viewing as <b>${escapeHtml(String(currentUser.name))}</b></span>
-        <span class="sv-nav">
+    host.innerHTML = `<div class="hub-sv-label">Viewing as <b>${escapeHtml(String(currentUser.name))}</b></div>
+        <div class="hub-sv-nav">
             <button type="button" id="svPrev" title="Previous student" aria-label="Previous student">‹</button>
             <select id="svSelect" aria-label="Student">${list.map(p => `<option value="${escapeHtml(String(p.id))}" ${String(p.id) === String(currentUser.id) ? 'selected' : ''}>${escapeHtml(String(p.name))}</option>`).join('')}</select>
             <button type="button" id="svNext" title="Next student" aria-label="Next student">›</button>
-        </span>
-        <span class="sv-actions">
-            <button type="button" id="svEdit">Edit profile</button>
-            <button type="button" id="svBack">Back to admin</button>
-        </span>`;
-    const step = (d) => { if (list.length) enterStudentView(list[(idx + d + list.length) % list.length].id); };
+        </div>
+        <div class="hub-sv-actions">
+            <button type="button" id="svEdit" class="admin-btn small">Edit profile</button>
+            <button type="button" id="svBack" class="admin-btn small primary">Back to admin</button>
+        </div>`;
+    const step = (d) => { if (list.length) { closeAdminMenu(); enterStudentView(list[(idx + d + list.length) % list.length].id); } };
     document.getElementById('svPrev').addEventListener('click', () => step(-1));
     document.getElementById('svNext').addEventListener('click', () => step(1));
-    document.getElementById('svSelect').addEventListener('change', e => enterStudentView(e.target.value));
-    document.getElementById('svEdit').addEventListener('click', () => loadAdminStudentsOverlay(currentUser.id));
-    document.getElementById('svBack').addEventListener('click', exitStudentView);
-    const fit = () => { const b = document.getElementById('studentViewBar'); if (b) document.body.style.paddingTop = b.offsetHeight + 'px'; };
-    fit();
-    if (!renderStudentViewBar.resizeHooked) { renderStudentViewBar.resizeHooked = true; window.addEventListener('resize', fit); }
+    document.getElementById('svSelect').addEventListener('change', e => { closeAdminMenu(); enterStudentView(e.target.value); });
+    document.getElementById('svEdit').addEventListener('click', () => { closeAdminMenu(); loadAdminStudentsOverlay(currentUser.id); });
+    document.getElementById('svBack').addEventListener('click', () => { closeAdminMenu(); exitStudentView(); });
 }
 
 function newAdminUser() {
@@ -1568,7 +1556,7 @@ async function switchAdminPortal(portal) {
     await showMainApp();
 }
 
-// The segmented control in the header (admin only). Built here so it needs no markup of its own.
+// The segmented control in the admin hub (admin only). Built here so it needs no markup of its own.
 function renderAdminPortalSwitch() {
     let box = document.getElementById('adminPortalSwitch');
     if (!currentUser?.isAdmin) { if (box) box.remove(); return; }
@@ -1581,8 +1569,7 @@ function renderAdminPortalSwitch() {
         box.innerHTML = `<span class="admin-portal-label">Editing</span>
             <button type="button" role="tab" data-portal="spanish" onclick="switchAdminPortal('spanish')">🗣️ Spanish portal</button>
             <button type="button" role="tab" data-portal="music" onclick="switchAdminPortal('music')">🎵 Music portal</button>`;
-        const userInfo = document.querySelector('#mainApp .header-top .user-info');
-        userInfo.parentNode.insertBefore(box, userInfo);
+        ensureAdminHub().querySelector('#adminHubView').prepend(box);
     }
     box.querySelectorAll('button[data-portal]').forEach(b => {
         const on = b.dataset.portal === activePortal();
@@ -1642,8 +1629,7 @@ async function handleLogout() {
     localStorage.removeItem('adminLoggedIn');
     try { localStorage.removeItem('adminPreviewSession'); } catch (e) {}
     adminReturnUser = null;
-    document.getElementById('studentViewBar')?.remove();
-    document.body.style.paddingTop = '';
+    closeAdminMenu();
     currentUser = null;
     isEditMode = false;
     document.body.classList.remove('admin-edit-mode');
@@ -1695,6 +1681,7 @@ async function showMainApp() {
     document.title = portalTitle.textContent;
     document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
     document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
+    renderAdminHub();
     renderAdminPortalSwitch();
     renderAdminStudentSwitch();
     applyAdminPortalTools();
@@ -2134,6 +2121,8 @@ function syncAiChatClass() {
     // The live chat itself (not the recap): the admin's floating tools button moves into its header instead of covering the mic.
     const chatLive = !!tab && tab.classList.contains('active') && !document.getElementById('aiChatView')?.classList.contains('hidden');
     document.body.classList.toggle('ai-chat-live', chatLive);
+    // The practice tab is a normal tab (same header, same tab row, same card) whose content fills the rest of the screen.
+    document.body.classList.toggle('on-ai-tab', !!tab && tab.classList.contains('active'));
 }
 
 // The practice tab's long name does not fit a phone's tab row: keep both and let the stylesheet pick.
@@ -2277,13 +2266,76 @@ function toggleEditMode() {
     }
 }
 
+// ---- Admin hub ----
+// The admin's controls used to sit in the page itself (portal switch + "view as" box in the header, a dark "viewing as" bar,
+// a floating tools button, the AI preview bar), so the admin never saw what a student sees. Now the header carries one small
+// gear (next to Logout) and everything lives in the panel it opens: view as a student / switch portal, practise as (AI chat),
+// and the old tools list. Closed by default; the page looks like the student's.
+function ensureAdminHub() {
+    let hub = document.getElementById('adminHub');
+    if (hub) return hub;
+    hub = document.createElement('div');
+    hub.id = 'adminHub';
+    hub.className = 'admin-hub hidden';
+    hub.setAttribute('role', 'dialog');
+    hub.setAttribute('aria-label', 'Admin');
+    hub.innerHTML = `<div class="admin-hub-head"><b>Admin</b><button type="button" class="admin-hub-close" aria-label="Close">✕</button></div>
+        <div class="admin-hub-sec" id="adminHubViewSec"><div class="admin-hub-label">View the portal</div><div id="adminHubView"></div></div>
+        <div class="admin-hub-sec hidden" id="adminHubStudentSec"><div id="adminHubStudent"></div></div>
+        <div class="admin-hub-sec hidden" id="adminHubPracticeSec"><div class="admin-hub-label">Practise as (AI chat preview)</div><div id="adminHubPractice"></div></div>
+        <div class="admin-hub-sec" id="adminHubToolsSec"><div class="admin-hub-label">Tools</div><div id="adminHubTools"></div></div>`;
+    document.body.appendChild(hub);
+    hub.querySelector('.admin-hub-close').addEventListener('click', closeAdminMenu);
+    const list = document.getElementById('adminMenuDropdown');
+    if (list) { list.classList.remove('hidden'); list.classList.add('hub-tools-list'); hub.querySelector('#adminHubTools').appendChild(list); }
+    return hub;
+}
+
+// Header gear + hub state. Called whenever the main app is drawn (also while an admin is looking through a student's page).
+function renderAdminHub() {
+    const viewing = !!(adminReturnUser && currentUser?.isPreview);
+    const isAdmin = !!currentUser?.isAdmin || viewing;
+    let gear = document.getElementById('adminGearBtn');
+    if (!isAdmin) { gear?.remove(); document.getElementById('adminHub')?.classList.add('hidden'); return; }
+    const hub = ensureAdminHub();
+    if (!gear) {
+        gear = document.createElement('button');
+        gear.id = 'adminGearBtn'; gear.type = 'button'; gear.className = 'admin-gear';
+        gear.title = 'Admin'; gear.setAttribute('aria-label', 'Admin'); gear.setAttribute('aria-haspopup', 'dialog'); gear.setAttribute('aria-expanded', 'false');
+        gear.innerHTML = '<i class="fas fa-sliders"></i>';
+        gear.addEventListener('click', (e) => { e.stopPropagation(); toggleAdminMenu(); });
+        const userInfo = document.querySelector('#mainApp .header-top .user-info');
+        userInfo.insertBefore(gear, document.getElementById('logoutBtn'));
+    }
+    gear.classList.toggle('is-viewing', viewing);
+    gear.title = viewing ? 'Admin (you are viewing as a student)' : 'Admin';
+    hub.classList.toggle('in-student-view', viewing);
+    document.getElementById('adminHubViewSec').classList.toggle('hidden', viewing);
+    document.getElementById('adminHubStudentSec').classList.toggle('hidden', !viewing);
+    document.getElementById('adminHubToolsSec').classList.toggle('hidden', viewing);
+    if (!viewing && currentUser?.isAdmin && typeof practiceAdminRestore === 'function' && typeof renderAiAdminBar === 'function') {
+        practiceAdminRestore().then(() => renderAiAdminBar());
+    } else {
+        document.getElementById('adminHubPracticeSec').classList.add('hidden');
+    }
+}
+
 function toggleAdminMenu() {
-    document.getElementById('adminMenuDropdown').classList.toggle('hidden');
+    const hub = ensureAdminHub();
+    const open = hub.classList.contains('hidden');
+    hub.classList.toggle('hidden', !open);
+    document.getElementById('adminGearBtn')?.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function closeAdminMenu() {
-    document.getElementById('adminMenuDropdown')?.classList.add('hidden');
+    document.getElementById('adminHub')?.classList.add('hidden');
+    document.getElementById('adminGearBtn')?.setAttribute('aria-expanded', 'false');
 }
+document.addEventListener('click', (e) => {
+    const hub = document.getElementById('adminHub');
+    if (hub && !hub.classList.contains('hidden') && !e.target.closest('#adminHub') && !e.target.closest('#adminGearBtn')) closeAdminMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAdminMenu(); });
 
 let ttsEnabled = true;
 let ttsVoice = null;
@@ -2836,17 +2888,6 @@ function ensureAiExtras() {
         if (hf) { hf.checked = noteHandsFree(); hf.addEventListener('change', () => { try { localStorage.setItem('aiHandsFree', hf.checked ? '1' : '0'); } catch (e) {} if (!hf.checked && convo.on) convoStop(); }); }
         const diag = menu.querySelector('#aiDiagBtn');
         if (diag) diag.addEventListener('click', () => convoCopyDiagnostics(diag));
-    }
-    // Admin: ONE header button opens a floating card ("practise as <student>" + the admin menu). The floating tools button
-    // would sit on top of the composer while the chat is open (see styles.css), so the admin menu is reached from here.
-    if (actions && currentUser?.isAdmin && !document.getElementById('aiAdminPreviewBtn')) {
-        const b = document.createElement('button');
-        b.id = 'aiAdminPreviewBtn'; b.type = 'button'; b.className = 'ai-icon-btn';
-        b.title = 'Admin: practise as a student, admin menu'; b.setAttribute('aria-label', 'Admin: practise as a student, admin menu');
-        b.setAttribute('aria-expanded', 'false');
-        b.innerHTML = '<i class="fas fa-user-gear"></i>';
-        b.addEventListener('click', (e) => { e.stopPropagation(); aiClosePopovers(); practiceAdminBarToggle(); });
-        actions.insertBefore(b, actions.firstChild);
     }
     if (!footer || !composer) return;
 

@@ -660,8 +660,11 @@ async function renderAiAdminBar() {
         bar.className = 'ai-admin-bar';
         host.insertBefore(bar, host.firstChild);
     }
+    const hubSec = document.getElementById('adminHubPracticeSec');
     if (!_accessToken) {
-        bar.classList.remove('is-floating', 'open');   // no chat yet: the sign-in form is shown in the page
+        // No chat yet, so the sign-in form is shown in the page itself.
+        bar.classList.remove('hidden');
+        hubSec?.classList.add('hidden');
         bar.innerHTML = `<div class="ai-admin-title">👁 Admin preview</div>
             <p>This is the tool your students use. To chat with the AI, sign in with <b>your own student account</b> — it is only used to reach the AI, and nothing from this preview is saved.</p>
             <form id="aiAdminLoginForm" class="ai-admin-login" autocomplete="on">
@@ -673,53 +676,31 @@ async function renderAiAdminBar() {
         document.getElementById('aiAdminLoginForm').addEventListener('submit', practiceAdminSignIn);
         return;
     }
+    // Signed in: the chat looks exactly like a student's, and "practise as <student>" lives in the admin hub (header gear).
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    const target = document.getElementById('adminHubPractice');
+    if (!target || activePortalIsMusic()) { hubSec?.classList.add('hidden'); return; }
     const students = await practiceAdminStudents();
     const current = practiceAdminPreview ? practiceAdminPreview.uid : '';
-    // Signed in: while the chat is on screen the bar becomes a floating card (opened from the eye button in the chat header), so the
-    // chat looks exactly as a student sees it. Outside the chat (recap screen) it stays a normal bar.
-    bar.classList.add('is-floating');
-    bar.innerHTML = `<button type="button" class="ai-admin-close" id="aiAdminClose" aria-label="Close">✕</button>
-        <div class="ai-admin-title">👁 Admin preview <span class="ai-admin-sub">— nothing is saved</span></div>
-        <div class="ai-admin-row">
-            <label for="aiAdminStudent">Practise as</label>
-            <select id="aiAdminStudent">
+    target.innerHTML = `<div class="ai-admin-row">
+            <select id="aiAdminStudent" aria-label="Practise as">
                 <option value="">Nobody in particular (no plan)</option>
                 ${students.map(s => `<option value="${practiceEsc(s.id)}" ${s.id === current ? 'selected' : ''}>${practiceEsc(s.name)}</option>`).join('')}
             </select>
             ${currentUser.authed ? '' : '<button type="button" class="admin-btn small" id="aiAdminSignOut">Sign out of preview</button>'}
         </div>
-        <div class="ai-admin-row ai-admin-row-menu"><button type="button" class="admin-btn small" id="aiAdminMenuLink"><i class="fas fa-tools"></i> Admin menu</button></div>`;
+        <p class="ai-admin-sub">Nothing from this preview is saved.</p>`;
+    hubSec?.classList.remove('hidden');
     document.getElementById('aiAdminStudent').addEventListener('change', e => {
         const opt = e.target.selectedOptions[0];
         practiceAdminChooseStudent(e.target.value, opt && e.target.value ? opt.textContent : '');
     });
     document.getElementById('aiAdminSignOut')?.addEventListener('click', practiceAdminSignOut);
-    document.getElementById('aiAdminClose')?.addEventListener('click', () => practiceAdminBarToggle(false));
-    document.getElementById('aiAdminMenuLink')?.addEventListener('click', () => { practiceAdminBarToggle(false); toggleAdminMenu(); });
 }
 
-// Opens/closes the floating admin card, placed under the eye button in the chat header.
-function practiceAdminBarToggle(force) {
-    const bar = document.getElementById('aiAdminBar');
-    if (!bar || !bar.classList.contains('is-floating')) return;
-    const open = typeof force === 'boolean' ? force : !bar.classList.contains('open');
-    bar.classList.toggle('open', open);
-    const btn = document.getElementById('aiAdminPreviewBtn');
-    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open && btn) {
-        const r = btn.getBoundingClientRect();
-        bar.style.top = Math.round(r.bottom + 8) + 'px';
-        // line up with the button's right edge, but never hang off the left edge of a narrow phone screen
-        const right = Math.min(window.innerWidth - r.right, window.innerWidth - bar.offsetWidth - 12);
-        bar.style.right = Math.max(12, Math.round(right)) + 'px';
-    }
-}
-if (typeof document !== 'undefined') {   // (practice.js is also loaded by the Node tests)
-    document.addEventListener('click', (e) => {
-        const bar = document.getElementById('aiAdminBar');
-        if (bar && bar.classList.contains('open') && !e.target.closest('#aiAdminBar') && !e.target.closest('#aiAdminPreviewBtn')) practiceAdminBarToggle(false);
-    });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') practiceAdminBarToggle(false); });
+function activePortalIsMusic() {
+    return typeof activePortal === 'function' && activePortal() === 'music';
 }
 
 // The admin's preview login is remembered like any "Remember me": only a renewable token for the admin's own student
@@ -782,7 +763,8 @@ function practiceAdminSignOut() {
 }
 
 async function practiceAdminChooseStudent(uid, name) {
-    practiceAdminBarToggle(false);
+    if (typeof closeAdminMenu === 'function') closeAdminMenu();
+    if (typeof showTab === 'function') showTab('ai-companion');   // the chat is what the admin picked this for
     practiceAdminPreview = uid ? { uid, name } : null;
     practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] };
     leaveAiChat();      // a different student's plan: start over with it

@@ -74,8 +74,7 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
 ## AI Companion + Speaking Practice (Spanish students)
 - **Chat UI v3** (2026-10-28, styles.css "AI PRACTICE CHAT — v3", scoped under `#ai-companion` with CSS variables `--ai-*`; replaced the card-style v2 after Aaron called it "gimmicky"):
   the design rule is quiet/editorial: a plain white page (`body.ai-chat-live`), ONE centred reading column (`--ai-gutter` pads header, messages and footer to 720px), hairlines instead of
-  boxes/shadows, one ink colour + one blue accent. `.ai-header` = title (+ "Practising today" chips) and ghost icon buttons (⚙ voice settings popover, speaker mute, End session; admin also gets a
-  Tools button); `#aiChatMessages` = tutor text is PLAIN TEXT (no bubble, no avatar), student = soft grey bubble, corrections = a quiet inset with a blue "Correction" label, the "listen again"
+  boxes/shadows, one ink colour + one blue accent. `.ai-header` = title (+ "Practising today" chips) and ghost icon buttons (⚙ voice settings popover, speaker mute, End session); `#aiChatMessages` = tutor text is PLAIN TEXT (no bubble, no avatar), student = soft grey bubble, corrections = a quiet inset with a blue "Correction" label, the "listen again"
   speaker is inline at the end of the last line and only shows on hover (always faint on touch), typing dots, "Preparing your session…" while it loads, smooth scroll only when already at the bottom,
   a short fade under the header; `.ai-footer` = help words (Hint · Explain in English · Say it simpler: plain hairline pills, hidden while recording), the voice call panel / record bar and
   the composer (a floating rounded bar: ＋ activity menu, auto-growing `<textarea>` — Enter sends, Shift+Enter = new line, Send disabled until there is text — mic, send). Popovers
@@ -83,17 +82,22 @@ A student-facing web portal at **aaron-learning.com**, hosted on **Cloudflare Pa
   leaked in). Phones: the portal header is hidden, the shell fills the screen (`100dvh`, or `--vvh` while the iPhone keyboard is open), "End session" shortens to "End". Respects `prefers-reduced-motion`.
   The portal's tab row (`.tab-nav`/`.tab-btn`, top of styles.css) is now a quiet underline row for EVERY tab (the old per-tab pastel tints are gone); on a phone it scrolls sideways and `showTab` scrolls
   the chosen tab into view. On phones the tabs are text-only and the practice tab reads "Practice" (`.tab-long`/`.tab-short`, set up at the top of showTab in script.js) so all four fit without scrolling; the chat messages sit against the composer (`.ai-chat-messages > :first-child { margin-top: auto }`).
-- **Admin preview card** (2026-10-28): signed-in admin sees the chat exactly as a student does. The "Admin preview — Practise as …" bar (`#aiAdminBar`, practice.js `renderAiAdminBar`) is
-  `.is-floating` while the chat is live: hidden by default, opened by the ONE admin button in the chat header (`#aiAdminPreviewBtn`, `practiceAdminBarToggle`; the card also holds an "Admin menu" button that opens the old tools dropdown), closed by ✕ / outside tap / Escape / picking a student.
-  Signed out, or on the recap screen, it is the normal inline bar (the sign-in form must be visible).
+- **One shell for every tab + the admin hub** (2026-10-28; Aaron: "the AI chat switches to a different window entirely… I need to see the UI as my students see it"):
+  the practice tab is a normal tab. Same header, same tab row, same white card (on phones: no card, content sits on the white page for ALL tabs, tabs are text-only and
+  the practice tab reads "Practice", header is one slim row: title + Logout). `body.on-ai-tab` (set in `syncAiChatClass`) turns `#mainApp` into a full-height flex column
+  (`height: var(--vvh, 100dvh)`) so the card takes whatever is left and the messages scroll inside it — no magic heights; while the iPhone keyboard is open (`body.kb-open`) the
+  header and tab row step aside. The admin's controls are NOT in the page any more: the header gets one small gear (`#adminGearBtn`, next to Logout; amber dot while viewing as a
+  student) that opens `#adminHub` (script.js "Admin hub"): View the portal (Spanish/Music switch + "View as student" select), Practise as (AI chat preview, rendered by practice.js
+  `renderAiAdminBar`), Tools (the old `#adminMenuDropdown`, moved into the hub by `ensureAdminHub`), and, while viewing as a student, ‹ student › / Edit profile / Back to admin
+  (`renderStudentViewBar`). The old floating tools button is hidden by CSS, the dark "viewing as" bar is gone. Closed by default; ✕ / outside tap / Escape / picking something closes it.
+  Signed-out admin (no AI preview login) still gets the inline sign-in bar at the top of the practice tab (`#aiAdminBar`).
 - **No activity menu** (changed 2026-10-26): opening the Speaking & Writing Practice tab goes straight into the chat (`initAiCompanion` → `startAiChat`): the
   student's personalised practice plan if they have one (mode `plan`), otherwise free conversation (mode `free`). A chat that is already open is left alone
   when the student switches tabs and comes back. Roleplay / picture description / grammar drills are no longer separate screens: the AI switches activity
   when asked (`PRACTICE_ACTIVITIES_RULE` in practice.js) and the chip row under the chat (🎯 My plan [only with a plan] · 🎭 Roleplay · 🖼️ Describe a
   picture · 📚 Grammar drill · 💬 Free chat) just sends a message (`sendAiActivity`, recorded like a help request: not graded). "End session" → recap (or a
   short "Session ended" card) → "Practice again" starts a fresh chat. Admin: the preview sign-in bar comes first; the chat starts after sign-in, and
-  choosing "Practise as <student>" restarts it with that student's plan. While the chat is open the admin's floating tools button (bottom-left, it sat on
-  the mic) is hidden and a Tools button appears in the chat header instead (`body.ai-chat-live`).
+  choosing "Practise as <student>" restarts it with that student's plan. The admin reaches everything through the header gear / admin hub (see "One shell for every tab").
 - Calls Anthropic API via a Supabase Edge Function `ai-companion` (key stored server-side as the
   `ANTHROPIC_API_KEY` secret, never sent to the browser). The function verifies the caller's Supabase
   JWT via `/auth/v1/user` before proxying to Anthropic — see `supabase/functions/ai-companion/index.ts`.
