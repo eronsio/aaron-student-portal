@@ -217,6 +217,11 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   `aiApplyDockMode` toggles `.dock-voice` / `.voice-ok` on `#aiChatView`. In keyboard mode the composer's own mic slot becomes
   `#aiToVoice` (back to the dock) and `#aiRecordBtn` is hidden; browsers that cannot record always get the text box. The dock hides
   while a note/voice call is on (`.note-on` / `.voice-on`). No hold-to-talk (Loora has it): deliberately not built, iOS press events are risky.
+- **Varied, personal openings (2026-10-29):** no mode has a fixed greeting any more (free chat used to always say the same line). Every session's
+  hidden first message comes from `practiceOpeningStart()` → `practiceOpeningBrief`: day + time of day, one random angle from
+  `PRACTICE_OPENING_ANGLES`, and the student's last 6 openings (`localStorage aiOpenings_<userId>`, saved by `practiceOpeningsRemember`) to avoid.
+  The system prompt gets a "WHAT <NAME> HAS BEEN WORKING ON LATELY" block in every mode: the teacher's this-week note (`currentUser.thisWeek`)
+  plus the last 3 analysed sessions' summaries (`practiceRecentSessionsNote`); plan mode still adds the targets + last-session continuity.
 
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.

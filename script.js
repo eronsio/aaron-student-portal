@@ -2647,7 +2647,7 @@ const AI_CHAT_LABEL = 'Práctica de español';
 
 const MODE_OPENING = {
     plan: null, // AI generates this, aimed at today's first target
-    free: '¡Hola! ¿De qué quieres hablar hoy? Cuéntame algo — ¿qué has hecho esta semana?',
+    free: null,   // AI generates this too (a fixed line made every free chat start the same way)
     picture: null, // AI generates this
     roleplay: null, // AI generates this
     grammar: null  // AI generates this
@@ -2689,13 +2689,15 @@ async function startAiMode(mode, context) {
     } else {
         // Let the AI write the opening
         const systemPrompt = buildAISystemPrompt(mode, context, studentInsightCache);
-        const opening = await callAnthropicAPI([{ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }], systemPrompt);
+        const startMsg = practiceOpeningStart();
+        const opening = await callAnthropicAPI([{ role: 'user', content: startMsg }], systemPrompt);
         if (aiStartSeq !== startToken) return;
         messages.innerHTML = '';
         appendAiMessage('bot', practiceFormatReply(opening), opening.startsWith('⚠️') ? '' : opening);
         speakText(opening);
         // Keep the hidden start prompt in the history so the model still sees its own opening line.
-        aiConversationHistory.push({ role: 'user', content: '[START SESSION - greet the student and set up the activity in Spanish]' }, { role: 'assistant', content: opening });
+        aiConversationHistory.push({ role: 'user', content: startMsg }, { role: 'assistant', content: opening });
+        practiceOpeningsRemember(opening);
         saveConversationTurn('assistant', opening);
         if (!opening.startsWith('⚠️')) practiceRecordTurn('assistant', opening);
     }

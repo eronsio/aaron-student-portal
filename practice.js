@@ -287,6 +287,59 @@ function practiceLastSessionNote(sessions, focus, now) {
     return parts.join(' ');
 }
 
+// A few lines on the last analysed sessions (what was covered), so openings and questions move on instead of repeating.
+function practiceRecentSessionsNote(sessions, n, now) {
+    const nowMs = now == null ? Date.now() : now;
+    const rows = (sessions || []).filter(x => x && x.report && x.report.summary && (x.student_turns || 0) >= PRACTICE_MIN_TURNS_FOR_REPORT)
+        .sort((a, b) => (Date.parse(b.started_at) || 0) - (Date.parse(a.started_at) || 0)).slice(0, n || 3);
+    return rows.map(x => {
+        const days = Math.max(0, Math.floor((nowMs - Date.parse(x.started_at)) / 86400000));
+        return `- ${days === 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago'}: ${practiceClip(x.report.summary, 150)}`;
+    }).join('\n');
+}
+
+// Different ways to begin, so two sessions in a row don't start with the same kind of question.
+const PRACTICE_OPENING_ANGLES = [
+    'start from something specific in their lesson notes, this-week note or last session, as if you remember it',
+    'ask what they did in the last day or two (use whatever tense their target needs)',
+    'give a tiny hypothetical or "would you rather" that makes them use target 1',
+    'set up a small everyday scene (you bump into them somewhere) and ask one question inside it',
+    'ask for an opinion on something concrete: a food, a song, a film, a place',
+    'ask about their plans for the next few days or the weekend',
+    'ask them to explain something they know well (their job, a hobby, a route they take) in simple words'
+];
+
+// The hidden first message of a session. `avoid` = the openings used recently (so the new one is clearly different),
+// `angle` = one of PRACTICE_OPENING_ANGLES (chosen at random by the caller), `now` = a Date.
+function practiceOpeningBrief(opts) {
+    const o = opts || {};
+    const now = o.now || new Date();
+    const day = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()];
+    const h = now.getHours();
+    const part = h < 12 ? 'morning' : h < 19 ? 'afternoon' : 'evening';
+    const lines = ['[START SESSION - greet the student and set up the activity in Spanish]'];
+    lines.push(`(For you only, do not mention this: it is ${day} ${part} where the student is, so greet in a way that fits (not always "¡Hola!").`);
+    if (o.angle) lines.push(`Begin this way: ${o.angle}.`);
+    lines.push('Keep it to one or two short sentences, ending in ONE question.');
+    const avoid = (o.avoid || []).filter(Boolean).slice(0, 6);
+    if (avoid.length) lines.push(`Your recent openings were: ${avoid.map(a => '"' + practiceClip(a, 110) + '"').join(' | ')}. Open with a clearly different greeting AND a different question.`);
+    return lines.join(' ') + ')';
+}
+
+function practiceOpeningKey() { return 'aiOpenings_' + ((typeof currentUser !== 'undefined' && currentUser && currentUser.id) || 'guest'); }
+function practiceOpeningsLoad() {
+    try { const a = JSON.parse(localStorage.getItem(practiceOpeningKey()) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+function practiceOpeningsRemember(text) {
+    const first = String(text || '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+    if (!first || /^⚠/.test(first)) return;
+    try { localStorage.setItem(practiceOpeningKey(), JSON.stringify([practiceClip(first, 160)].concat(practiceOpeningsLoad()).slice(0, 6))); } catch (e) {}
+}
+function practiceOpeningStart(now) {
+    const angle = PRACTICE_OPENING_ANGLES[Math.floor(Math.random() * PRACTICE_OPENING_ANGLES.length)];
+    return practiceOpeningBrief({ now: now || new Date(), angle, avoid: practiceOpeningsLoad() });
+}
+
 function practiceExampleLine(ex) {
     if (!ex || !ex.right) return '';
     return ex.wrong
@@ -632,10 +685,17 @@ function buildAISystemPrompt(mode, context, insight, opts) {
         ? `Nivel del estudiante: ${practiceClip(profile.level, 120)}. Adapta tu vocabulario y gramática a ese nivel.`
         : 'Adapta el nivel: vocabulario sencillo, verbos del presente principalmente.';
 
+    // What this student has actually been doing lately (every mode, so a free chat still starts from their life, not from nothing).
+    const thisWeek = currentUser && currentUser.thisWeek ? practiceClip(currentUser.thisWeek, 500) : '';
+    const recent = practiceRecentSessionsNote(practiceCtx.sessions, 3);
+    const lately = (thisWeek || recent)
+        ? `\nWHAT ${name.toUpperCase()} HAS BEEN WORKING ON LATELY (use it to make questions personal; never read it out, and do not repeat questions from earlier sessions):${thisWeek ? `\nTeacher's note for this week: ${thisWeek}` : ''}${recent ? `\nRecent practice sessions:\n${recent}` : ''}\n`
+        : '';
+
     return `Eres un compañero de práctica de español para ${name}, estudiante de Aaron.
 
 ${modeInstructions[mode] || modeInstructions.free}
-${plan ? '\n' + plan + '\n' : ''}${legacyWeaknesses}
+${plan ? '\n' + plan + '\n' : ''}${lately}${legacyWeaknesses}
 
 ${PRACTICE_BASE_RULES(levelLine)}
 
@@ -1378,6 +1438,7 @@ if (typeof module !== 'undefined' && module.exports) {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
         practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo,
+        practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES
