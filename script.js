@@ -1170,7 +1170,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 setTimeout(() => showError('loginError', "Can't reach the server right now. Check your connection and reload — you are still signed in."), 100);
                 return;
             }
-            // rejected: this login has really expired
+            // rejected: usually this login has really expired. But a refresh code can only be used once, so if another
+            // page/tab (or an earlier load cut short by a reload) renewed it first, the saved session now holds a newer
+            // code: try that before giving up, so an update-reload never signs anybody out.
+            const latest = sbLoadSession();
+            if (latest && latest.refresh_token && latest.refresh_token !== session.refresh_token) {
+                const again = await sbRefreshSession(latest.refresh_token);
+                if (again.access_token) { await loadUserFromSession(again); return; }
+            }
             await sbSignOut();
             showLoginModal();
             return;
@@ -2655,6 +2662,7 @@ async function startAiMode(mode, context) {
     aiLessonLog = [];
     aiCloseSheet();
     aiUpdateProgress();
+    aiRefreshStreak();
 
     // Show the chat straight away; the session itself loads behind a "starting" bubble.
     document.getElementById('aiRecapView').classList.add('hidden');
@@ -2977,6 +2985,61 @@ async function aiOpenWord(span) {
     paint();
 }
 
+// ---- daily streak + progress: stored on this device per student, no setup (the daily goal is fixed in practice.js) ----
+function aiProgressKey() { return 'aiProgress_' + ((currentUser && currentUser.id) || 'guest'); }
+function aiProgressLoad() {
+    try { return practiceProgressNormalize(JSON.parse(localStorage.getItem(aiProgressKey()) || 'null')); } catch (e) { return practiceProgressNormalize(null); }
+}
+function aiStreakNow() { return practiceStreakInfo(aiProgressLoad(), practiceDayKey()); }
+function aiRecordProgress(text) {
+    const words = String(text || '').split(/\s+/).filter(Boolean).length;
+    const was = aiStreakNow().doneToday;
+    try { localStorage.setItem(aiProgressKey(), JSON.stringify(practiceProgressAdd(aiProgressLoad(), practiceDayKey(), words))); } catch (e) {}
+    aiRefreshStreak(!was && aiStreakNow().doneToday);
+}
+// The little flame in the chat header: the streak count; lit once today's goal is done. `bump` = just reached it.
+function aiRefreshStreak(bump) {
+    const btn = document.getElementById('aiStreakBtn');
+    const info = aiStreakNow();
+    if (btn) {
+        btn.querySelector('span').textContent = String(info.current);
+        btn.classList.toggle('is-lit', info.doneToday);
+        btn.title = info.doneToday ? `${info.current}-day streak — today's goal is done` : `${info.current}-day streak — ${info.goal - info.todayM} more message${info.goal - info.todayM === 1 ? '' : 's'} today keeps it going`;
+        if (bump) { btn.classList.remove('is-bump'); void btn.offsetWidth; btn.classList.add('is-bump'); }
+    }
+    const sub = document.getElementById('aiProgressSub');
+    if (sub) sub.textContent = info.current ? `${info.current}-day streak` : 'Your practice';
+}
+
+function aiOpenProgress() {
+    aiClosePopovers();
+    const sheet = aiSheetShell('My progress', false);
+    if (!sheet) return;
+    const i = aiStreakNow();
+    const left = i.goal - i.todayM;
+    const pct = Math.min(100, Math.round(100 * i.todayM / i.goal));
+    const savedWords = aiWordsLoad().length;
+    sheet.querySelector('.ai-sheet-body').innerHTML = `<div class="ai-pr-hero">
+            <div class="ai-pr-flame${i.doneToday ? ' is-lit' : ''}"><i class="fas fa-fire"></i></div>
+            <div class="ai-pr-num">${i.current}</div>
+            <div class="ai-pr-label">day streak</div>
+        </div>
+        <div class="ai-pr-week" aria-label="The last 7 days">${i.week.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.today ? ' is-today' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div>
+        <div class="ai-pr-goal">
+            <div class="ai-pr-goal-top"><span>Today</span><b>${Math.min(i.todayM, i.goal)} / ${i.goal} messages</b></div>
+            <div class="ai-pr-bar"><div style="width:${pct}%"></div></div>
+            <p>${i.doneToday ? 'Today\'s goal is done — nice work.' : `Send ${left} more message${left === 1 ? '' : 's'} today to ${i.current ? 'keep your streak going' : 'start a streak'}.`}</p>
+        </div>
+        <div class="ai-pr-grid">
+            <div><b>${i.best}</b><span>best streak</span></div>
+            <div><b>${i.days}</b><span>practice days</span></div>
+            <div><b>${i.messages}</b><span>messages sent</span></div>
+            <div><b>${i.words}</b><span>words written</span></div>
+            <div><b>${savedWords}</b><span>saved words</span></div>
+        </div>
+        <p class="ai-mw-note">Saved on this device.</p>`;
+}
+
 function aiOpenWords() {
     aiClosePopovers();
     const sheet = aiSheetShell('My words', false);
@@ -3093,6 +3156,7 @@ async function submitAiMessage(message, opts) {
         const userEl = appendAiMessage('user', (opts.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '') + escapeHtml(message));
         entry = { el: userEl, text: message, voice: !!opts.voice, help: !!opts.help, fixes: [], graded: false };
         aiLessonLog.push(entry);
+        if (!entry.help) aiRecordProgress(message);
         if (!entry.help) userEl.querySelector('.ai-bubble').insertAdjacentHTML('beforeend', '<div class="ai-fb is-pending"><i class="fas fa-circle-notch fa-spin"></i></div>');
         aiUpdateProgress();
         if (!opts.help) { aiMessageInput.value = ''; aiAutosize(); }
@@ -3155,6 +3219,17 @@ function ensureAiExtras() {
         bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100'); bar.setAttribute('aria-valuenow', '0');
         bar.innerHTML = '<div class="ai-progress-fill"></div>';
         head.after(bar);
+    }
+
+    // Streak flame (opens "My progress").
+    if (actions && !document.getElementById('aiStreakBtn')) {
+        const st = document.createElement('button');
+        st.id = 'aiStreakBtn'; st.type = 'button'; st.className = 'ai-streak';
+        st.setAttribute('aria-label', 'My progress and daily streak');
+        st.innerHTML = '<i class="fas fa-fire"></i><span>0</span>';
+        st.addEventListener('click', aiOpenProgress);
+        actions.insertBefore(st, actions.firstChild);
+        aiRefreshStreak();
     }
 
     // Voice settings (reading voice + pace) live behind one button in the header instead of loose controls.
@@ -3253,9 +3328,11 @@ function ensureAiExtras() {
             + item('', 'picture', 'fa-image', 'Describe a picture', 'Describe a scene in your own words')
             + item('', 'grammar', 'fa-spell-check', 'Grammar drill', 'Short, game-like exercises')
             + item('', 'free', 'fa-comments', 'Free chat', 'Talk about anything you like')
+            + `<button type="button" role="menuitem" class="ai-pop-item" onclick="aiOpenProgress()"><i class="fas fa-fire"></i><span><b>My progress</b><small id="aiProgressSub">Your practice</small></span></button>`
             + `<button type="button" role="menuitem" class="ai-pop-item" onclick="aiOpenWords()"><i class="fas fa-bookmark"></i><span><b>My words</b><small id="aiWordsCount">Words you save from the chat</small></span></button>`;
         footer.appendChild(menu);
         aiRefreshWordsCount();
+        aiRefreshStreak();
         const btn = document.getElementById('aiActivityBtn');
         if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', btn); });
     }

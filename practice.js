@@ -139,6 +139,54 @@ function practiceLessonStats(log) {
     return { turns: turns.length, clean, words, unique: seen.size, longest, accuracy: turns.length ? Math.round(100 * clean / turns.length) : 0 };
 }
 
+// ---- daily streak + progress (kept on the student's device; no setup screen, the goal is fixed) ----
+const PRACTICE_DAY_GOAL = 5;   // messages that make a day count toward the streak
+const PRACTICE_DAYS_KEPT = 120;
+
+function practiceDayKey(d) {
+    const x = d || new Date();
+    return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+}
+function practiceDayShift(key, delta) {
+    const [y, m, d] = key.split('-').map(Number);
+    return practiceDayKey(new Date(y, m - 1, d + delta));
+}
+
+// prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words }
+function practiceProgressNormalize(prog) {
+    const p = prog && typeof prog === 'object' ? prog : {};
+    return { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
+}
+// Adds one message of `words` words to `dayKey`; returns a new object (old days beyond the cap are dropped).
+function practiceProgressAdd(prog, dayKey, words) {
+    const p = practiceProgressNormalize(prog);
+    const days = { ...p.days };
+    const cur = days[dayKey] || { m: 0, w: 0 };
+    days[dayKey] = { m: cur.m + 1, w: cur.w + Math.max(0, words | 0) };
+    const keys = Object.keys(days).sort();
+    while (keys.length > PRACTICE_DAYS_KEPT) delete days[keys.shift()];
+    return { days, m: p.m + 1, w: p.w + Math.max(0, words | 0) };
+}
+// Streak = consecutive goal-days ending today (or yesterday, so the streak is still alive until today is over).
+function practiceStreakInfo(prog, todayKey) {
+    const p = practiceProgressNormalize(prog);
+    const ok = k => (p.days[k] && p.days[k].m >= PRACTICE_DAY_GOAL);
+    const doneToday = !!ok(todayKey);
+    let current = 0, k = doneToday ? todayKey : practiceDayShift(todayKey, -1);
+    while (ok(k)) { current++; k = practiceDayShift(k, -1); }
+    const goalDays = Object.keys(p.days).filter(ok).sort();
+    let best = 0, run = 0, prev = null;
+    goalDays.forEach(d => { run = prev && practiceDayShift(prev, 1) === d ? run + 1 : 1; best = Math.max(best, run); prev = d; });
+    const todayM = p.days[todayKey] ? p.days[todayKey].m : 0;
+    const week = [];
+    for (let i = 6; i >= 0; i--) {
+        const key = practiceDayShift(todayKey, -i);
+        const [y, mo, d] = key.split('-').map(Number);
+        week.push({ key, label: 'SMTWTFS'[new Date(y, mo - 1, d).getDay()], on: !!ok(key), today: i === 0 });
+    }
+    return { current, best, doneToday, todayM, goal: PRACTICE_DAY_GOAL, days: goalDays.length, messages: p.m, words: p.w, week };
+}
+
 // ---- tap a word in a tutor message ----
 // Splits text into words and everything between them, so each word can be wrapped in a tappable span.
 function practiceWordSplit(text) {
@@ -718,6 +766,7 @@ function practiceRingSvg(pct) {
 function practiceStoryScreens() {
     const st = practiceStory.stats, rep = practiceStory.report;
     const done = st.turns >= PRACTICE_LESSON_TURNS;
+    const streak = typeof aiStreakNow === 'function' ? aiStreakNow() : null;
     const screens = [];
     screens.push(`<div class="ai-story-ring">${practiceRingSvg(st.accuracy)}<div class="ai-ring-num">${st.accuracy}<span>%</span></div></div>
         <h4 class="ai-story-title">${done ? 'Lesson complete' : 'Nice work today'}</h4>
@@ -725,6 +774,7 @@ function practiceStoryScreens() {
         <ul class="ai-story-list">
             <li><i class="fas fa-check"></i> ${st.turns} message${st.turns === 1 ? '' : 's'} sent${done ? '' : ` (a full lesson is ${PRACTICE_LESSON_TURNS})`}</li>
             <li><i class="fas fa-check"></i> ${st.clean} with no corrections</li>
+            ${streak && streak.current ? `<li><i class="fas fa-fire"></i> ${streak.current}-day streak${streak.doneToday ? '' : ` &mdash; ${streak.goal - streak.todayM} more message${streak.goal - streak.todayM === 1 ? '' : 's'} today to count it`}</li>` : ''}
         </ul>`);
     screens.push(`<p class="ai-story-kicker">You wrote</p>
         <div class="ai-story-big">${st.words}</div>
@@ -1327,6 +1377,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES

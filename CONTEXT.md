@@ -204,6 +204,13 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   there is no database table yet.** "My words" is an item in the ＋ menu (`aiOpenWords`): list, listen, remove, and "Practise these
   words", which sends a help-type message that `PRACTICE_ACTIVITIES_RULE` tells the tutor to turn into a mini-game. A one-line tip
   under the first tutor message ("Tap any word…") disappears for good (`localStorage aiWordHint`) after the first word card opens.
+- **Stage 4 — daily streak + progress (2026-10-29):** NO first-run/onboarding screen (Aaron's decision); the daily goal is fixed
+  (`PRACTICE_DAY_GOAL` = 5 student messages; helps/hints don't count). Every sent message calls `aiRecordProgress` →
+  `localStorage aiProgress_<userId>` = `{days:{'YYYY-MM-DD':{m,w}}, m, w}` (local-time days, last 120 kept, totals kept forever; per
+  device, no database table). Pure helpers in practice.js (`practiceProgressAdd`, `practiceStreakInfo`: streak = consecutive goal days
+  ending today or yesterday). UI: a flame pill in the chat header (`#aiStreakBtn`, lit once today's goal is met) and "My progress" in
+  the ＋ menu open a sheet (`aiOpenProgress`: streak, last-7-days dots, today's bar, best streak / practice days / messages / words /
+  saved words); the end-of-lesson first screen shows the streak line (`aiStreakNow`).
 
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.
