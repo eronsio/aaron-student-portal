@@ -178,6 +178,25 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
 - Setup: run `supabase/speaking_practice.sql` once in the Supabase SQL editor, deploy the `ai-companion` function with the
   `ANTHROPIC_API_KEY` secret, then enable students in Admin → Speaking Practice.
 
+### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
+Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
+interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word
+practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboarding, daily goal, streak, profile stats.
+- **Corrections live on the student's message.** `practiceSplitFixes()` (practice.js) pulls every `[✓ corrected sentence — reason]`
+  out of the tutor reply; the tutor bubble shows the clean text, the student's bubble underlines the changed words
+  (`practiceMarkWords` / `practiceWordDiff`, a longest-common-subsequence compare) and shows "See the fix" or "No corrections".
+  A `✓` bracket whose reason is praise is dropped. A bracket that is only a fragment (`fui, not 'fue'`) is shown as a "Tip" with
+  no word marking (`practiceFixIsFullSentence`). The transcript saved to the database still contains the original reply.
+- Tapping a student bubble opens the feedback sheet (`aiOpenFeedback`, Grammar tab; a Pronunciation tab arrives in Stage 3).
+- Tutor bubbles carry listen / slow / translate buttons (`aiAddTutorTools`); slow uses `speakText(text, {slow:true})`, a
+  one-off pace that does not change the saved setting; translate asks the AI proxy for an English version and caches it.
+- Progress bar: fills over `PRACTICE_LESSON_TURNS` (8) student messages (help messages do not count); at 8 it turns green and End
+  becomes a filled "Finish" button (the student can keep going).
+- End of lesson (`practiceStoryStart`): step-through screens — accuracy ring (share of messages with no corrections), words
+  written / different words / longest message (`practiceLessonStats`), then the AI recap (went well / work on / tip) that
+  loads in the background while the first two screens show. Sessions under `PRACTICE_MIN_TURNS_FOR_REPORT` keep the plain card.
+- Unit-testable helpers are exported from practice.js; the lesson state is `aiLessonLog` in script.js.
+
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.
   iPhone students open the site in Safari → Share → Add to Home Screen; it then opens full-screen with its own icon (name "Aaron Learning").

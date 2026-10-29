@@ -2415,6 +2415,10 @@ let ttsSlow = (() => { try { return localStorage.getItem('aiTtsSlow') === '1'; }
 
 function toggleSlowTTS() { setSlowTTS(!ttsSlow); }
 
+// One reply can be played slowly without changing the student's saved pace (the slow button under a tutor message).
+let ttsPaceOverride = null;
+function ttsIsSlow() { return ttsPaceOverride === null ? ttsSlow : ttsPaceOverride; }
+
 function setSlowTTS(slow) {
     ttsSlow = !!slow;
     try { localStorage.setItem('aiTtsSlow', ttsSlow ? '1' : '0'); } catch (e) {}
@@ -2481,7 +2485,7 @@ function stopSpeaking() {
 
 // Resolves true once audio is playing (or the request was superseded), false when the browser voice should take over.
 async function speakViaServer(clean, english, seq) {
-    const pace = ttsSlow ? 'slow' : 'normal';
+    const pace = ttsIsSlow() ? 'slow' : 'normal';
     const key = `${english ? 'en' : 'es'}|${pace}|${clean}`;
     let url = ttsAudioCache.get(key);
     if (!url) {
@@ -2532,7 +2536,7 @@ function speakInBrowser(clean, english, seq) {
     }
     const utt = new SpeechSynthesisUtterance(clean);
     utt.lang = english ? 'en-US' : 'es-ES';
-    utt.rate = english ? 0.95 : (ttsSlow ? 0.7 : 0.88);
+    utt.rate = english ? 0.95 : (ttsIsSlow() ? 0.7 : 0.88);
     utt.pitch = 1;
     const voice = english ? ttsEnVoice : ttsVoice;
     if (voice) utt.voice = voice;
@@ -2548,7 +2552,9 @@ async function speakText(text, opts) {
     if (!clean) return;
     stopSpeaking();
     const seq = ttsSpeakSeq;
+    ttsPaceOverride = (opts && typeof opts.slow === 'boolean') ? opts.slow : null;
     const done = new Promise(resolve => { ttsDoneResolve = resolve; });
+    done.then(() => { if (seq === ttsSpeakSeq) ttsPaceOverride = null; });
     const english = ttsLooksEnglish(clean);
     try {
         if (_accessToken && Date.now() >= ttsServerUntil && await speakViaServer(clean, english, seq)) return done;
@@ -2646,6 +2652,9 @@ async function startAiMode(mode, context) {
     currentAiMode = mode;
     currentAiContext = context || null;
     aiConversationHistory = [];
+    aiLessonLog = [];
+    aiCloseSheet();
+    aiUpdateProgress();
 
     // Show the chat straight away; the session itself loads behind a "starting" bubble.
     document.getElementById('aiRecapView').classList.add('hidden');
@@ -2717,34 +2726,136 @@ function leaveAiChat() {
     document.getElementById('aiChatView').classList.add('hidden');
     document.getElementById('aiRecapView').classList.add('hidden');
     aiConversationHistory = [];
+    aiLessonLog = [];
+    aiCloseSheet();
+    aiUpdateProgress();
     currentAiMode = null;
     currentAiContext = null;
     syncAiChatClass();
     practiceResetSession();
 }
 
-// `raw` (optional, bot messages only) is the plain reply text; when given the bubble gets a "listen again" button.
+// `raw` (optional, bot messages only) is the plain reply text; when given the bubble gets listen / slow / translate buttons.
 function appendAiMessage(type, html, raw) {
     const el = document.createElement('div');
     el.className = `ai-message ai-${type}`;
-    if (type === 'bot') {
-        el.innerHTML = `<span class="ai-avatar" aria-hidden="true"><i class="fas fa-comments"></i></span><div class="ai-bubble"><p>${html}</p></div>`;
-        if (typeof raw === 'string' && raw && (window.speechSynthesis || window.Audio)) {
-            const b = document.createElement('button');
-            b.type = 'button'; b.className = 'ai-replay'; b.title = 'Listen again'; b.setAttribute('aria-label', 'Listen again');
-            b.innerHTML = '<i class="fas fa-volume-up"></i>';
-            b.addEventListener('click', () => speakText(raw, { force: true }));
-            el.querySelector('.ai-bubble p').appendChild(b);   // sits at the end of the last line, so it takes no space of its own
-        }
-    } else {
-        el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div>`;
-    }
+    el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div>`;
+    if (type === 'bot' && typeof raw === 'string' && raw) aiAddTutorTools(el, raw);
     const box = document.getElementById('aiChatMessages');
     // Stay glued to the bottom only if the student was already reading the latest message.
     const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
     box.appendChild(el);
     if (nearEnd || type === 'user') aiScrollToEnd(box);
     return el;
+}
+
+// The small buttons under a tutor message: hear it again, hear it slowly, see it in English.
+function aiAddTutorTools(el, raw) {
+    const bar = document.createElement('div');
+    bar.className = 'ai-tools';
+    const mk = (icon, label, fn) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'ai-tool'; b.title = label; b.setAttribute('aria-label', label);
+        b.innerHTML = `<i class="fas fa-${icon}"></i>`;
+        b.addEventListener('click', () => fn(b));
+        return b;
+    };
+    if (window.speechSynthesis || window.Audio) {
+        bar.appendChild(mk('volume-high', 'Listen again', () => speakText(raw, { force: true, slow: false })));
+        bar.appendChild(mk('hourglass-half', 'Listen slowly', () => speakText(raw, { force: true, slow: true })));
+    }
+    bar.appendChild(mk('language', 'Show in English', (b) => aiToggleTranslation(el, raw, b)));
+    el.querySelector('.ai-bubble').appendChild(bar);
+}
+
+async function aiToggleTranslation(el, raw, btn) {
+    let box = el.querySelector('.ai-translation');
+    if (box) { box.classList.toggle('hidden'); btn.classList.toggle('is-on', !box.classList.contains('hidden')); return; }
+    if (btn.classList.contains('is-busy')) return;
+    btn.classList.add('is-busy');
+    const text = await callAnthropicAPI([{ role: 'user', content: raw }],
+        "Translate the user's message from Spanish into natural English. Reply with the translation only: no quotes, no notes, no Markdown.");
+    btn.classList.remove('is-busy');
+    box = document.createElement('div');
+    box.className = 'ai-translation';
+    box.textContent = text.startsWith('⚠️') ? "Couldn't translate that just now." : text.replace(/\*+/g, '');
+    el.querySelector('.ai-bubble').insertBefore(box, el.querySelector('.ai-tools'));
+    btn.classList.add('is-on');
+}
+
+// ---- the student's own messages carry the tutor's feedback (underlined words + a feedback sheet) ----
+let aiLessonLog = [];   // one entry per message the student sent: { el, text, voice, help, fixes, graded }
+
+function aiRenderFeedback(entry) {
+    const bubble = entry.el.querySelector('.ai-bubble');
+    const words = practiceMarkWords(entry.text, entry.fixes);
+    const body = words.map(w => w.bad ? `<span class="ai-bad">${escapeHtml(w.t)}</span>` : escapeHtml(w.t)).join(' ');
+    const tag = entry.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '';
+    const ok = !entry.fixes.length;
+    bubble.innerHTML = `<p>${tag}${body}</p><div class="ai-fb ${ok ? 'is-ok' : 'has-fix'}">${ok ? '<i class="fas fa-check"></i> No corrections' : '<i class="fas fa-pen"></i> See the fix'}</div>`;
+    bubble.setAttribute('role', 'button');
+    bubble.tabIndex = 0;
+    bubble.onclick = () => aiOpenFeedback(entry);
+    bubble.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); aiOpenFeedback(entry); } };
+    entry.el.classList.add('is-graded');
+}
+
+function aiOpenFeedback(entry) {
+    const shell = document.querySelector('#aiChatView .ai-shell');
+    if (!shell) return;
+    aiCloseSheet();
+    const marked = practiceMarkWords(entry.text, entry.fixes).map(w => w.bad ? `<span class="ai-bad">${escapeHtml(w.t)}</span>` : escapeHtml(w.t)).join(' ');
+    const rows = entry.fixes.length
+        ? entry.fixes.map((f, i) => {
+            const full = practiceFixIsFullSentence(entry.text, f.sentence);
+            return `<div class="ai-sheet-fix">
+                <div class="ai-sheet-label">${full ? 'Better' : 'Tip'}</div>
+                <div class="ai-sheet-sentence">${escapeHtml(f.sentence)}${full ? `<button type="button" class="ai-sheet-say" data-fix="${i}" aria-label="Listen"><i class="fas fa-volume-high"></i></button>` : ''}</div>
+                ${f.reason ? `<p class="ai-sheet-reason">${escapeHtml(f.reason)}</p>` : ''}
+            </div>`;
+        }).join('')
+        : `<div class="ai-sheet-ok"><i class="fas fa-check"></i><div><strong>Nothing to fix</strong><p>Your tutor found no mistakes in this message.</p></div></div>`;
+    const el = document.createElement('div');
+    el.id = 'aiSheet';
+    el.className = 'ai-sheet-backdrop';
+    el.innerHTML = `<div class="ai-sheet" role="dialog" aria-label="Feedback on your message">
+        <div class="ai-sheet-head">
+            <div class="ai-sheet-tabs" role="tablist"><button type="button" role="tab" class="is-active" aria-selected="true">Grammar</button></div>
+            <button type="button" class="ai-sheet-close" aria-label="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="ai-sheet-you"><div class="ai-sheet-label">You wrote</div><div class="ai-sheet-sentence">${marked}</div></div>
+        ${rows}
+    </div>`;
+    shell.appendChild(el);
+    el.addEventListener('click', (e) => { if (e.target === el) aiCloseSheet(); });
+    el.querySelector('.ai-sheet-close').addEventListener('click', aiCloseSheet);
+    el.querySelectorAll('.ai-sheet-say').forEach(b => b.addEventListener('click', () => speakText(entry.fixes[+b.dataset.fix].sentence, { force: true })));
+    requestAnimationFrame(() => el.classList.add('is-open'));
+    el.querySelector('.ai-sheet-close').focus();
+}
+
+function aiCloseSheet() {
+    document.getElementById('aiSheet')?.remove();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') aiCloseSheet(); });
+
+// The bar under the header fills as the student sends messages; at PRACTICE_LESSON_TURNS the lesson counts as complete
+// (they can keep going) and End becomes a prominent Finish button.
+function aiUpdateProgress() {
+    const bar = document.getElementById('aiProgress');
+    if (!bar) return;
+    const done = aiLessonLog.filter(e => !e.help).length;
+    const pct = Math.min(100, Math.round(100 * done / PRACTICE_LESSON_TURNS));
+    bar.querySelector('.ai-progress-fill').style.width = pct + '%';
+    const complete = done >= PRACTICE_LESSON_TURNS;
+    bar.classList.toggle('is-complete', complete);
+    bar.setAttribute('aria-valuenow', String(pct));
+    const end = document.querySelector('#aiChatView .ai-end-btn');
+    if (end) {
+        end.classList.toggle('is-ready', complete);
+        const label = end.querySelector('span');
+        if (label) { if (!end.dataset.label) end.dataset.label = label.textContent; label.textContent = complete ? 'Finish' : end.dataset.label; }
+    }
 }
 
 function aiScrollToEnd(box, instant) {
@@ -2810,9 +2921,13 @@ async function submitAiMessage(message, opts) {
     aiBusy = true;
     setAiBusyUI(true);
     if (convo.on) convoDetach();   // a typed message went out while the mic was open: the reply decides what happens next
-    let spoken = null, reply = '', failed = false;
+    let spoken = null, reply = '', failed = false, entry = null;
     try {
-        appendAiMessage('user', (opts.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '') + escapeHtml(message));
+        const userEl = appendAiMessage('user', (opts.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '') + escapeHtml(message));
+        entry = { el: userEl, text: message, voice: !!opts.voice, help: !!opts.help, fixes: [], graded: false };
+        aiLessonLog.push(entry);
+        if (!entry.help) userEl.querySelector('.ai-bubble').insertAdjacentHTML('beforeend', '<div class="ai-fb is-pending"><i class="fas fa-circle-notch fa-spin"></i></div>');
+        aiUpdateProgress();
         if (!opts.help) { aiMessageInput.value = ''; aiAutosize(); }
 
         // Typing indicator
@@ -2832,8 +2947,15 @@ async function submitAiMessage(message, opts) {
         if (!failed) practiceRecordTurn('assistant', response);
 
         typing.remove();
-        appendAiMessage('bot', practiceFormatReply(response), failed ? '' : response);
-        spoken = speakText(response);
+        // The tutor's "[✓ corrected sentence — reason]" notes belong to the student's own message, not to the tutor's reply.
+        const split = failed ? { text: response, fixes: [] } : practiceSplitFixes(response);
+        const shown = split.text || (failed ? response : '');
+        if (entry && !entry.help) {
+            if (failed) entry.el.querySelector('.ai-fb')?.remove();
+            else { entry.fixes = split.fixes; entry.graded = true; aiRenderFeedback(entry); }
+        }
+        appendAiMessage('bot', practiceFormatReply(shown), failed ? '' : shown);
+        spoken = speakText(shown);
     } finally {
         aiBusy = false;
         setAiBusyUI(false);
@@ -2856,6 +2978,17 @@ function ensureAiExtras() {
     const footer = document.querySelector('#aiChatView .ai-footer');
     const composer = document.querySelector('#aiChatView .ai-chat-input-container');
     const actions = document.querySelector('#aiChatView .ai-header-actions');
+
+    // Lesson progress bar under the header.
+    const head = document.querySelector('#aiChatView .ai-header');
+    if (head && !document.getElementById('aiProgress')) {
+        const bar = document.createElement('div');
+        bar.id = 'aiProgress'; bar.className = 'ai-progress';
+        bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-label', 'Lesson progress');
+        bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100'); bar.setAttribute('aria-valuenow', '0');
+        bar.innerHTML = '<div class="ai-progress-fill"></div>';
+        head.after(bar);
+    }
 
     // Voice settings (reading voice + pace) live behind one button in the header instead of loose controls.
     if (actions && !document.getElementById('aiSettingsBtn')) {

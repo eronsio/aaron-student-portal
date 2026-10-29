@@ -3372,3 +3372,115 @@ body.on-ai-tab .floating-book-btn { display: none; }
     .form-group select,
     #messageInput { font-size: 16px; }
 }
+
+/* =====================================================================
+   Lesson look for the practice chat: tutor bubbles with listen/slow/translate buttons, your own messages carry the
+   tutor's feedback, a progress bar, a feedback sheet, and step-through end-of-lesson screens. Calm palette.
+   ===================================================================== */
+#ai-companion .ai-shell { background: linear-gradient(180deg, #f7f9fc 0, #eef2f8 100%); }
+
+/* progress */
+#ai-companion .ai-progress { flex: none; height: 6px; margin: 0 var(--ai-gutter) 4px; border-radius: 99px; background: #dfe5ee; overflow: hidden; }
+#ai-companion .ai-progress-fill { height: 100%; width: 0; border-radius: 99px; background: #8aa0bd; transition: width 0.45s ease, background 0.3s ease; }
+#ai-companion .ai-progress.is-complete .ai-progress-fill { background: #6fa388; }
+#ai-companion .ai-end-btn.is-ready { background: var(--ai-accent); border-color: var(--ai-accent); color: #fff; }
+#ai-companion .ai-end-btn.is-ready:hover { background: #324d70; color: #fff; }
+
+/* tutor: a filled bubble */
+#ai-companion .ai-message.ai-bot { align-self: flex-start; max-width: 100%; }
+#ai-companion .ai-message.ai-bot .ai-bubble {
+    max-width: min(88%, 520px); padding: 13px 16px 9px; border-radius: 20px 20px 20px 6px;
+    background: var(--ai-accent); color: #fff; font-size: 16px; line-height: 1.6; box-shadow: 0 6px 16px -10px rgba(41, 62, 94, 0.55);
+}
+#ai-companion .ai-message.ai-bot .ai-note { color: rgba(255, 255, 255, 0.78); }
+#ai-companion .ai-message.ai-bot .ai-starting { color: rgba(255, 255, 255, 0.85); }
+#ai-companion .ai-message.ai-bot .typing-indicator span { background: rgba(255, 255, 255, 0.75); }
+#ai-companion .ai-tools { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; }
+#ai-companion .ai-tool {
+    display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; cursor: pointer; border: 0; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.92); font-size: 13px; touch-action: manipulation;
+    transition: background 0.15s ease;
+}
+#ai-companion .ai-tool:hover, #ai-companion .ai-tool.is-on { background: rgba(255, 255, 255, 0.3); }
+#ai-companion .ai-tool.is-busy { opacity: 0.6; pointer-events: none; animation: aiDots 1.2s infinite ease-in-out; }
+#ai-companion .ai-tool:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+#ai-companion .ai-translation { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid rgba(255, 255, 255, 0.25); font-size: 14.5px; line-height: 1.5; color: rgba(255, 255, 255, 0.9); }
+
+/* you: a white bubble that carries the feedback */
+#ai-companion .ai-message.ai-user .ai-bubble {
+    background: #fff; border: 1px solid var(--ai-line); border-radius: 20px 20px 6px 20px; padding: 10px 15px 9px;
+    box-shadow: 0 6px 16px -12px rgba(41, 62, 94, 0.45); color: var(--ai-ink);
+}
+#ai-companion .ai-message.is-graded .ai-bubble { cursor: pointer; }
+#ai-companion .ai-message.is-graded .ai-bubble:focus-visible { outline: 2px solid var(--ai-accent); outline-offset: 2px; }
+#ai-companion .ai-bad { text-decoration: underline; text-decoration-color: #b7791f; text-decoration-thickness: 2px; text-underline-offset: 3px; background: rgba(183, 121, 31, 0.12); border-radius: 4px; padding: 0 1px; }
+#ai-companion .ai-fb { margin-top: 5px; font-size: 12px; font-weight: 550; color: var(--ai-muted); }
+#ai-companion .ai-fb i { margin-right: 3px; }
+#ai-companion .ai-fb.is-ok { color: #4f8a6a; }
+#ai-companion .ai-fb.has-fix { color: #9a6a1f; }
+#ai-companion .ai-fb.is-pending { color: #a3adbb; }
+
+/* feedback sheet */
+#ai-companion .ai-sheet-backdrop {
+    position: absolute; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center;
+    background: rgba(31, 41, 55, 0.35); opacity: 0; transition: opacity 0.2s ease;
+}
+#ai-companion .ai-sheet-backdrop.is-open { opacity: 1; }
+#ai-companion .ai-sheet {
+    width: min(100%, 560px); max-height: 82%; overflow-y: auto; background: #fff; border-radius: 22px 22px 0 0;
+    padding: 14px 20px calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateY(28px); transition: transform 0.25s ease;
+    box-shadow: 0 -18px 40px -20px rgba(31, 41, 55, 0.45); color: var(--ai-ink);
+}
+#ai-companion .ai-sheet-backdrop.is-open .ai-sheet { transform: none; }
+#ai-companion .ai-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+#ai-companion .ai-sheet-tabs { display: inline-flex; padding: 4px; border-radius: 99px; background: var(--ai-wash); }
+#ai-companion .ai-sheet-tabs button { border: 0; border-radius: 99px; padding: 7px 18px; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: var(--ai-muted); }
+#ai-companion .ai-sheet-tabs button.is-active { background: #fff; color: var(--ai-ink); box-shadow: 0 1px 4px rgba(31, 41, 55, 0.12); }
+#ai-companion .ai-sheet-close { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--ai-wash); color: var(--ai-ink-soft); font-size: 15px; cursor: pointer; }
+#ai-companion .ai-sheet-label { margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--ai-muted); }
+#ai-companion .ai-sheet-sentence { font-size: 17px; line-height: 1.55; }
+#ai-companion .ai-sheet-fix { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ai-line); }
+#ai-companion .ai-sheet-fix .ai-sheet-label { color: var(--ai-accent); }
+#ai-companion .ai-sheet-say { display: inline-grid; place-items: center; width: 30px; height: 30px; margin-left: 8px; padding: 0; border: 0; border-radius: 50%; background: var(--ai-accent-soft); color: var(--ai-accent); font-size: 13px; vertical-align: middle; cursor: pointer; }
+#ai-companion .ai-sheet-reason { margin: 8px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ai-ink-soft); }
+#ai-companion .ai-sheet-ok { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ai-line); }
+#ai-companion .ai-sheet-ok > i { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: #e3f1e9; color: #4f8a6a; }
+#ai-companion .ai-sheet-ok p { margin: 2px 0 0; font-size: 14.5px; color: var(--ai-ink-soft); }
+
+/* end-of-lesson screens */
+#ai-companion .ai-story { display: flex; flex-direction: column; max-width: 420px; min-height: 100%; margin: 0 auto; padding: 8px 4px 24px; color: var(--ai-ink); }
+#ai-companion .ai-story-dots { display: flex; gap: 6px; margin-bottom: 18px; }
+#ai-companion .ai-story-dots span { flex: 1; height: 4px; border-radius: 99px; background: #dde3ec; }
+#ai-companion .ai-story-dots span.is-on { background: var(--ai-accent); }
+#ai-companion .ai-story-screen { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8px 0 24px; }
+#ai-companion .ai-story-ring { position: relative; width: 200px; height: 200px; margin-bottom: 18px; }
+#ai-companion .ai-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+#ai-companion .ai-ring circle { fill: none; stroke-width: 9; }
+#ai-companion .ai-ring-track { stroke: #e3e8ef; }
+#ai-companion .ai-ring-fill { stroke: #6fa388; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+#ai-companion .ai-ring-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 54px; font-weight: 650; letter-spacing: -0.02em; }
+#ai-companion .ai-ring-num span { font-size: 24px; margin: 8px 0 0 2px; color: var(--ai-muted); }
+#ai-companion .ai-story-title { margin: 0 0 6px; font-size: 26px; font-weight: 650; letter-spacing: -0.015em; }
+#ai-companion .ai-story-sub { margin: 0 0 18px; color: var(--ai-muted); font-size: 15px; }
+#ai-companion .ai-story-kicker { margin: 0; color: var(--ai-muted); font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; }
+#ai-companion .ai-story-big { font-size: 96px; line-height: 1.05; font-weight: 650; letter-spacing: -0.03em; color: var(--ai-accent); }
+#ai-companion .ai-story-list { list-style: none; margin: 4px 0 0; padding: 0; text-align: left; font-size: 16px; }
+#ai-companion .ai-story-list li { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+#ai-companion .ai-story-list i { display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: 50%; background: #e3f1e9; color: #4f8a6a; font-size: 11px; }
+#ai-companion .ai-story-screen .ai-recap-block { width: 100%; text-align: left; }
+#ai-companion .ai-story-btn { width: 100%; height: 52px; border: 0; border-radius: 99px; background: var(--ai-accent); color: #fff; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; }
+#ai-companion .ai-story-btn:hover { background: #324d70; }
+@media (prefers-reduced-motion: reduce) {
+    #ai-companion .ai-ring-fill, #ai-companion .ai-progress-fill, #ai-companion .ai-sheet, #ai-companion .ai-sheet-backdrop { transition: none; }
+}
+/* the lesson panel is a visible card now, so it needs its own inner padding on phones (the old transparent layout relied on the page's) */
+#ai-companion .ai-shell { border-radius: 18px; }
+#ai-companion .ai-sheet-backdrop { border-radius: inherit; }
+@media (max-width: 640px) {
+    #ai-companion .ai-shell { --ai-gutter: 14px; }
+    #ai-companion .ai-header { padding: 10px 10px 6px 14px; }
+    #ai-companion .ai-chat-messages { padding: 12px 14px; }
+    #ai-companion .ai-footer { padding: 4px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+    #ai-companion .ai-end-btn.is-ready::after { content: "Finish"; }
+    #ai-companion .ai-story { padding-left: 0; padding-right: 0; }
+}

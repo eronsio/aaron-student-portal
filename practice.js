@@ -62,6 +62,77 @@ function practiceFormatReply(text) {
         .replace(/(<span class="ai-fix">[\s\S]*?<\/span>)\s*[.,;]+\s*/g, '$1 ');
 }
 
+// ---- lesson-style chat: corrections belong to the student's own message, not to the tutor's reply ----
+const PRACTICE_LESSON_TURNS = 8;   // student messages in one "lesson": the progress bar fills over this many
+
+const PRACTICE_PRAISE_RE = /\b(perfect[oa]s?|genial|excelente|sin errores)\b/i;
+
+// Pulls every "[✓ corrected sentence — reason]" out of a tutor reply. Returns the reply without them (so the tutor bubble
+// reads cleanly) plus the corrections. A "correction" that is really praise is dropped.
+function practiceSplitFixes(reply) {
+    const fixes = [];
+    const text = String(reply == null ? '' : reply)
+        .replace(/\s*\[\s*✓\s*([^\]\n]{1,400})\]\s*[.,;]*/g, (m, inner) => {
+            const parts = inner.split(/\s+[—–-]\s+/);
+            const sentence = parts[0].trim();
+            const reason = parts.slice(1).join(' — ').trim();
+            if (!PRACTICE_PRAISE_RE.test(reason || sentence)) fixes.push({ sentence, reason });
+            return ' ';
+        })
+        .replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').trim();
+    return { text, fixes };
+}
+
+function practiceWordKey(w) {
+    return String(w).toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+}
+
+// The student's message split into words, each flagged `bad` when it is not part of the corrected sentence (longest common run).
+function practiceWordDiff(original, corrected) {
+    const words = String(original || '').split(/\s+/).filter(Boolean);
+    const a = words.map(practiceWordKey);
+    const b = String(corrected || '').split(/\s+/).filter(Boolean).map(practiceWordKey);
+    const n = a.length, m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+    const keep = new Array(n).fill(false);
+    for (let i = 0, j = 0; i < n && j < m;) {
+        if (a[i] === b[j]) { keep[i] = true; i++; j++; }
+        else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+    }
+    return words.map((t, i) => ({ t, bad: !keep[i] && a[i] !== '' }));
+}
+
+// A bracket like "fui, not 'fue'" is a fragment, not the whole corrected sentence: comparing it word by word would mark nonsense.
+function practiceFixIsFullSentence(original, sentence) {
+    const o = String(original || '').split(/\s+/).filter(Boolean).length;
+    const s = String(sentence || '').split(/\s+/).filter(Boolean).length;
+    return o > 0 && s >= o * 0.75 && s <= o * 1.5 + 2;
+}
+
+// Which words of the student's message to underline, given every correction the tutor made to it.
+function practiceMarkWords(original, fixes) {
+    const diffs = (fixes || []).filter(f => practiceFixIsFullSentence(original, f.sentence)).map(f => practiceWordDiff(original, f.sentence));
+    const words = String(original || '').split(/\s+/).filter(Boolean);
+    return words.map((t, i) => ({ t, bad: diffs.some(d => d[i] && d[i].bad) }));
+}
+
+// Numbers for the end-of-lesson screens. `log` = [{ text, help, fixes }] in the order sent.
+function practiceLessonStats(log) {
+    const turns = (log || []).filter(e => e && !e.help && e.text);
+    const seen = new Set();
+    let words = 0, longest = 0, clean = 0;
+    turns.forEach(e => {
+        const ws = e.text.split(/\s+/).map(practiceWordKey).filter(Boolean);
+        words += ws.length; longest = Math.max(longest, ws.length);
+        ws.forEach(w => seen.add(w));
+        if (!(e.fixes && e.fixes.length)) clean++;
+    });
+    return { turns: turns.length, clean, words, unique: seen.size, longest, accuracy: turns.length ? Math.round(100 * clean / turns.length) : 0 };
+}
+
 function practiceSlug(text) {
     return String(text || '').toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -597,12 +668,83 @@ function practiceShowRecapShell(html) {
     if (typeof syncAiChatClass === 'function') syncAiChatClass();
 }
 
+// ---- end of lesson: a few full-card screens you step through (score, words, what to work on) ----
+let practiceStory = null;   // { stats, report, step } while the screens are showing
+
+function practiceRingSvg(pct) {
+    const C = 2 * Math.PI * 54;
+    return `<svg class="ai-ring" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="ai-ring-track" cx="60" cy="60" r="54"/>
+        <circle class="ai-ring-fill" cx="60" cy="60" r="54" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${C.toFixed(1)}" data-target="${(C * (1 - pct / 100)).toFixed(1)}"/>
+    </svg>`;
+}
+
+function practiceStoryScreens() {
+    const st = practiceStory.stats, rep = practiceStory.report;
+    const done = st.turns >= PRACTICE_LESSON_TURNS;
+    const screens = [];
+    screens.push(`<div class="ai-story-ring">${practiceRingSvg(st.accuracy)}<div class="ai-ring-num">${st.accuracy}<span>%</span></div></div>
+        <h4 class="ai-story-title">${done ? 'Lesson complete' : 'Nice work today'}</h4>
+        <p class="ai-story-sub">of your messages had no corrections</p>
+        <ul class="ai-story-list">
+            <li><i class="fas fa-check"></i> ${st.turns} message${st.turns === 1 ? '' : 's'} sent${done ? '' : ` (a full lesson is ${PRACTICE_LESSON_TURNS})`}</li>
+            <li><i class="fas fa-check"></i> ${st.clean} with no corrections</li>
+        </ul>`);
+    screens.push(`<p class="ai-story-kicker">You wrote</p>
+        <div class="ai-story-big">${st.words}</div>
+        <p class="ai-story-sub">words in Spanish</p>
+        <ul class="ai-story-list">
+            <li><i class="fas fa-check"></i> ${st.unique} different word${st.unique === 1 ? '' : 's'}</li>
+            <li><i class="fas fa-check"></i> Longest message: ${st.longest} word${st.longest === 1 ? '' : 's'}</li>
+        </ul>`);
+    const rc = rep && rep.student_recap;
+    const blocks = [];
+    if (rc && rc.went_well) blocks.push(`<div class="ai-recap-block"><h5>Went well</h5><p>${practiceEsc(rc.went_well)}</p></div>`);
+    if (rc && rc.work_on) blocks.push(`<div class="ai-recap-block"><h5>Work on</h5><p>${practiceEsc(rc.work_on)}</p></div>`);
+    if (rc && rc.tip) blocks.push(`<div class="ai-recap-block"><h5>Tip</h5><p>${practiceEsc(rc.tip)}</p></div>`);
+    if (rep === undefined) screens.push(`<h4 class="ai-story-title">Your recap</h4><div class="ai-recap-loading"><span class="typing-indicator"><span></span><span></span><span></span></span><p>Wrapping up your session…</p></div>`);
+    else screens.push(`<h4 class="ai-story-title">Your recap</h4>${blocks.length ? blocks.join('') : '<p class="ai-recap-plain">Your session was saved — nice work. Aaron will go over how it went with you in your next lesson.</p>'}`);
+    return screens;
+}
+
+function practiceStoryRender() {
+    const sc = practiceStoryScreens();
+    const i = Math.min(practiceStory.step, sc.length - 1);
+    const last = i === sc.length - 1;
+    document.getElementById('aiRecapBody').innerHTML = `<div class="ai-story">
+        <div class="ai-story-dots" aria-hidden="true">${sc.map((_, k) => `<span class="${k <= i ? 'is-on' : ''}"></span>`).join('')}</div>
+        <div class="ai-story-screen">${sc[i]}</div>
+        ${last ? `<button type="button" class="ai-story-btn" onclick="practiceStartAnother()"><i class="fas fa-rotate-right"></i> Practice again</button>`
+               : `<button type="button" class="ai-story-btn" onclick="practiceStoryNext()">Next</button>`}
+    </div>`;
+    const ring = document.querySelector('#aiRecapBody .ai-ring-fill');
+    if (ring) requestAnimationFrame(() => requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.target; }));
+}
+
+function practiceStoryNext() {
+    if (!practiceStory) return;
+    practiceStory.step++;
+    practiceStoryRender();
+}
+
+// The recap text arrives after the first screens are already showing (it takes a few seconds to write).
+function practiceStoryStart(stats, reportPromise) {
+    practiceStory = { stats, report: undefined, step: 0 };
+    practiceShowRecapShell('');
+    practiceStoryRender();
+    const story = practiceStory;
+    reportPromise.then(report => {
+        story.report = report || null;
+        if (practiceStory === story && story.step >= 2) practiceStoryRender();
+    });
+}
+
 function practiceRenderRecap(report) {
     const rc = report && report.student_recap;
     const parts = [];
-    if (rc && rc.went_well) parts.push(`<div class="ai-recap-block"><h5>👍 Went well</h5><p>${practiceEsc(rc.went_well)}</p></div>`);
-    if (rc && rc.work_on) parts.push(`<div class="ai-recap-block"><h5>🎯 Work on</h5><p>${practiceEsc(rc.work_on)}</p></div>`);
-    if (rc && rc.tip) parts.push(`<div class="ai-recap-block"><h5>💡 Tip</h5><p>${practiceEsc(rc.tip)}</p></div>`);
+    if (rc && rc.went_well) parts.push(`<div class="ai-recap-block"><h5>Went well</h5><p>${practiceEsc(rc.went_well)}</p></div>`);
+    if (rc && rc.work_on) parts.push(`<div class="ai-recap-block"><h5>Work on</h5><p>${practiceEsc(rc.work_on)}</p></div>`);
+    if (rc && rc.tip) parts.push(`<div class="ai-recap-block"><h5>Tip</h5><p>${practiceEsc(rc.tip)}</p></div>`);
     const body = parts.length
         ? parts.join('')
         : `<p class="ai-recap-plain">Your session was saved — nice work. Aaron will go over how it went with you in your next lesson.</p>`;
@@ -626,12 +768,14 @@ async function practiceFinishSession() {
         practiceSession = null;
         return false;
     }
-    practiceShowRecapShell(`<div class="ai-recap-loading"><span class="typing-indicator"><span></span><span></span><span></span></span><p>Wrapping up your session…</p></div>`);
-    const report = await practiceGenerateReport(s);
-    practiceMarkEnded(s, report);
-    practiceSession = null;
-    practiceCtx.loadedAt = 0; // next load picks up this session
-    practiceRenderRecap(report);
+    const stats = practiceLessonStats(typeof aiLessonLog !== 'undefined' ? aiLessonLog : []);
+    const reportPromise = practiceGenerateReport(s).then(report => {
+        practiceMarkEnded(s, report);
+        practiceSession = null;
+        practiceCtx.loadedAt = 0; // next load picks up this session
+        return report;
+    });
+    practiceStoryStart(stats, reportPromise);
     return true;
 }
 
@@ -1145,6 +1289,7 @@ async function practiceAdminAnalyzeAll() {
 // ============================================================
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        practiceSplitFixes, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES
