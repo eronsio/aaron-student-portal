@@ -211,6 +211,12 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   ending today or yesterday). UI: a flame pill in the chat header (`#aiStreakBtn`, lit once today's goal is met) and "My progress" in
   the ＋ menu open a sheet (`aiOpenProgress`: streak, last-7-days dots, today's bar, best streak / practice days / messages / words /
   saved words); the end-of-lesson first screen shows the streak line (`aiStreakNow`).
+- **Voice-first dock (2026-10-29):** the Practice footer now defaults to a dock (`#aiDock`, built in `ensureAiExtras`): big centred mic
+  (`#aiDockMic` → `micPress`, i.e. the existing voice note: tap to start, tap again to send; the hands-free beta still applies),
+  ＋ (the activity/progress/words menu) on the left, keyboard on the right. Mode is `localStorage aiDockMode` ('voice' default, 'text');
+  `aiApplyDockMode` toggles `.dock-voice` / `.voice-ok` on `#aiChatView`. In keyboard mode the composer's own mic slot becomes
+  `#aiToVoice` (back to the dock) and `#aiRecordBtn` is hidden; browsers that cannot record always get the text box. The dock hides
+  while a note/voice call is on (`.note-on` / `.voice-on`). No hold-to-talk (Loora has it): deliberately not built, iOS press events are risky.
 
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.

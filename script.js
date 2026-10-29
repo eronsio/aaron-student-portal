@@ -3200,6 +3200,7 @@ async function submitAiMessage(message, opts) {
 function setAiBusyUI(busy) {
     document.querySelectorAll('#aiQuickReplies button').forEach(b => { b.disabled = busy; });
     document.querySelector('#aiChatView .ai-composer')?.classList.toggle('is-busy', busy);
+    document.getElementById('aiDock')?.classList.toggle('is-busy', busy);
     aiAutosize();   // also decides whether Send is enabled
 }
 
@@ -3317,6 +3318,29 @@ function ensureAiExtras() {
         document.getElementById('aiVoiceEnd').addEventListener('click', convoStop);
         document.getElementById('aiVoiceType').addEventListener('click', () => { convoStop(); aiMessageInput.focus(); });
     }
+    // Voice-first dock: a big centred mic (tap to talk, tap again to send: the same voice note as the mic in the text box),
+    // "+" for activities / progress / words, and a switch to the keyboard. The text box stays one tap away.
+    if (footer && composer && !document.getElementById('aiDock')) {
+        const dock = document.createElement('div');
+        dock.id = 'aiDock'; dock.className = 'ai-dock';
+        dock.innerHTML = `<button type="button" id="aiDockPlus" class="ai-dock-side" title="Switch activity" aria-label="Switch activity" aria-haspopup="true" aria-expanded="false"><i class="fas fa-plus"></i></button>
+            <div class="ai-dock-mid">
+                <button type="button" id="aiDockMic" class="ai-dock-mic" aria-label="Talk: tap to start, tap again to send"><i class="fas fa-microphone"></i></button>
+                <div class="ai-dock-cap">Tap to speak</div>
+            </div>
+            <button type="button" id="aiDockKeys" class="ai-dock-side" title="Type instead" aria-label="Type instead"><i class="fas fa-keyboard"></i></button>`;
+        footer.insertBefore(dock, composer);
+        document.getElementById('aiDockMic').addEventListener('click', micPress);
+        document.getElementById('aiDockKeys').addEventListener('click', () => aiSetDockMode('text', true));
+        document.getElementById('aiDockPlus').addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', e.currentTarget); });
+        const back = document.createElement('button');
+        back.id = 'aiToVoice'; back.type = 'button'; back.className = 'ai-icon-btn ai-to-voice';
+        back.title = 'Talk instead'; back.setAttribute('aria-label', 'Talk instead');
+        back.innerHTML = '<i class="fas fa-microphone"></i>';
+        back.addEventListener('click', () => aiSetDockMode('voice'));
+        composer.insertBefore(back, document.getElementById('aiRecordBtn'));
+        aiApplyDockMode();
+    }
     // "+" opens the activity menu (the AI switches activity when asked; see PRACTICE_ACTIVITIES_RULE in practice.js).
     if (!document.getElementById('aiActivityMenu')) {
         const menu = document.createElement('div');
@@ -3336,6 +3360,26 @@ function ensureAiExtras() {
         const btn = document.getElementById('aiActivityBtn');
         if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', btn); });
     }
+}
+
+// Voice dock (default) or the text box; remembered per device. Browsers that cannot record always get the text box.
+function aiDockMode() {
+    if (!convoSupported()) return 'text';
+    try { return localStorage.getItem('aiDockMode') === 'text' ? 'text' : 'voice'; } catch (e) { return 'voice'; }
+}
+function aiApplyDockMode() {
+    const view = document.getElementById('aiChatView');
+    if (view) {
+        view.classList.toggle('dock-voice', aiDockMode() === 'voice');
+        view.classList.toggle('voice-ok', convoSupported());
+    }
+}
+function aiSetDockMode(mode, focusInput) {
+    try { localStorage.setItem('aiDockMode', mode); } catch (e) {}
+    aiClosePopovers();
+    if (convo.on) convoStop();
+    aiApplyDockMode();
+    if (mode === 'text' && focusInput) { const el = document.getElementById('aiMessageInput'); if (el) el.focus(); }
 }
 
 // Small popover menus (voice settings, activities): one open at a time, closed by a click elsewhere or Escape.
