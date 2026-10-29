@@ -3519,3 +3519,7 @@ body.on-ai-tab .floating-book-btn { display: none; }
 #ai-companion .ai-mw-empty i { font-size: 26px; color: #a3adbb; margin-bottom: 6px; }
 #ai-companion .ai-mw-empty p { margin: 0; font-weight: 600; color: var(--ai-ink); }
 #ai-companion .ai-mw-empty small { font-size: 14px; max-width: 280px; }
+#ai-companion .ai-wc-ex-es { display: flex; align-items: flex-start; gap: 10px; }
+#ai-companion .ai-wc-ex-es > span { flex: 1 1 auto; min-width: 0; }
+#ai-companion .ai-wc-ex-es .ai-sheet-say { flex: none; margin: 0; }
+#ai-companion .ai-mw-text b i { font-style: normal; font-weight: 500; font-size: 13px; color: var(--ai-muted); margin-left: 4px; }

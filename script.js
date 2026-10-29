@@ -2853,7 +2853,7 @@ function aiWordsStore(list) {
     try { localStorage.setItem(aiWordsKey(), JSON.stringify(list.slice(0, 300))); } catch (e) {}
     aiRefreshWordsCount();
 }
-function aiWordId(e) { return practiceWordKey(e.lemma || e.w || ''); }
+function aiWordId(e) { return practiceWordKey(e.w || e.lemma || ''); }
 function aiWordIsSaved(id) { return aiWordsLoad().some(e => aiWordId(e) === id); }
 function aiRefreshWordsCount() {
     const el = document.getElementById('aiWordsCount');
@@ -2950,11 +2950,11 @@ async function aiOpenWord(span) {
         detail.querySelector('.ai-wc-retry').addEventListener('click', () => aiOpenWord(span));
         return;
     }
-    const id = practiceWordKey(card.lemma || word);
+    const id = practiceWordKey(word);
     detail.innerHTML = `<div class="ai-wc-tr">${escapeHtml(card.translation)}</div>
         <div class="ai-wc-meta">${escapeHtml(card.pos)}${card.lemma && practiceWordKey(card.lemma) !== practiceWordKey(word) ? ` · from <b>${escapeHtml(card.lemma)}</b>` : ''}</div>
         ${card.example ? `<div class="ai-wc-ex"><div class="ai-sheet-label">Example</div>
-            <div class="ai-wc-ex-es">${escapeHtml(card.example)}<button type="button" class="ai-sheet-say" aria-label="Listen to the example"><i class="fas fa-volume-high"></i></button></div>
+            <div class="ai-wc-ex-es"><span>${escapeHtml(card.example)}</span><button type="button" class="ai-sheet-say" aria-label="Listen to the example"><i class="fas fa-volume-high"></i></button></div>
             ${card.example_en ? `<div class="ai-wc-ex-en">${escapeHtml(card.example_en)}</div>` : ''}</div>` : ''}`;
     detail.querySelector('.ai-sheet-say')?.addEventListener('click', () => speakText(card.example, { force: true }));
 
@@ -2989,16 +2989,16 @@ function aiOpenWords() {
             return;
         }
         body.innerHTML = list.map((e, i) => `<div class="ai-mw">
-                <div class="ai-mw-text"><b>${escapeHtml(e.lemma || e.w)}</b><span>${escapeHtml(e.tr || '')}</span></div>
+                <div class="ai-mw-text"><b>${escapeHtml(e.w || e.lemma)}${e.lemma && practiceWordKey(e.lemma) !== practiceWordKey(e.w) ? ` <i>from ${escapeHtml(e.lemma)}</i>` : ''}</b><span>${escapeHtml(e.tr || '')}</span></div>
                 <button type="button" class="ai-mw-btn" data-say="${i}" aria-label="Listen"><i class="fas fa-volume-high"></i></button>
                 <button type="button" class="ai-mw-btn" data-del="${i}" aria-label="Remove"><i class="fas fa-xmark"></i></button>
             </div>`).join('')
             + `<button type="button" class="ai-story-btn ai-mw-go"><i class="fas fa-comments"></i> Practise these words</button>
                <p class="ai-mw-note">Saved on this device.</p>`;
-        body.querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => { const e = list[+b.dataset.say]; speakText(e.lemma || e.w, { force: true }); }));
+        body.querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => { const e = list[+b.dataset.say]; speakText(e.w || e.lemma, { force: true }); }));
         body.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { const l = aiWordsLoad(); l.splice(+b.dataset.del, 1); aiWordsStore(l); draw(); }));
         body.querySelector('.ai-mw-go').addEventListener('click', () => {
-            const words = list.slice(0, 8).map(e => e.lemma || e.w).join(', ');
+            const words = list.slice(0, 8).map(e => e.w || e.lemma).join(', ');
             aiCloseSheet();
             submitAiMessage(`Let's practise my saved words: ${words}.`, { help: true });
         });
