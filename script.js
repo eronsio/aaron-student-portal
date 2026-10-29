@@ -2952,7 +2952,7 @@ async function submitAiMessage(message, opts) {
         const shown = split.text || (failed ? response : '');
         if (entry && !entry.help) {
             if (failed) entry.el.querySelector('.ai-fb')?.remove();
-            else { entry.fixes = split.fixes; entry.graded = true; aiRenderFeedback(entry); }
+            else { entry.fixes = split.fixes.filter(f => !practiceSameText(entry.text, f.sentence)); entry.graded = true; aiRenderFeedback(entry); }
         }
         appendAiMessage('bot', practiceFormatReply(shown), failed ? '' : shown);
         spoken = speakText(shown);

@@ -65,7 +65,7 @@ function practiceFormatReply(text) {
 // ---- lesson-style chat: corrections belong to the student's own message, not to the tutor's reply ----
 const PRACTICE_LESSON_TURNS = 8;   // student messages in one "lesson": the progress bar fills over this many
 
-const PRACTICE_PRAISE_RE = /\b(perfect[oa]s?|genial|excelente|sin errores)\b/i;
+const PRACTICE_PRAISE_RE = /\b(perfect[oa]s?|genial|excelente|correct[oa]s?|sin errores|bien dicho|est[aá] bien|todo bien)\b/i;
 
 // Pulls every "[✓ corrected sentence — reason]" out of a tutor reply. Returns the reply without them (so the tutor bubble
 // reads cleanly) plus the corrections. A "correction" that is really praise is dropped.
@@ -103,6 +103,12 @@ function practiceWordDiff(original, corrected) {
         else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
     }
     return words.map((t, i) => ({ t, bad: !keep[i] && a[i] !== '' }));
+}
+
+// True when two phrases are the same words ignoring case, punctuation and spacing (a "correction" that changes nothing).
+function practiceSameText(a, b) {
+    const k = t => String(t || '').split(/\s+/).map(practiceWordKey).filter(Boolean).join(' ');
+    return k(a) !== '' && k(a) === k(b);
 }
 
 // A bracket like "fui, not 'fue'" is a fragment, not the whole corrected sentence: comparing it word by word would mark nonsense.
@@ -1289,7 +1295,7 @@ async function practiceAdminAnalyzeAll() {
 // ============================================================
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
-        practiceSplitFixes, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
+        practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES
