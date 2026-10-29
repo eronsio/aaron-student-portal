@@ -196,6 +196,14 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   written / different words / longest message (`practiceLessonStats`), then the AI recap (went well / work on / tip) that
   loads in the background while the first two screens show. Sessions under `PRACTICE_MIN_TURNS_FOR_REPORT` keep the plain card.
 - Unit-testable helpers are exported from practice.js; the lesson state is `aiLessonLog` in script.js.
+- **Stage 2 — tap a word (2026-10-29):** every word in a tutor bubble is a `.ai-w` span (`aiMakeWordsTappable`, text nodes only, using
+  `practiceWordSplit`); one delegated click handler on `#aiChatMessages` opens the word card (`aiOpenWord`): the word, listen / slow
+  buttons (`speakText`), and an AI dictionary lookup (`PRACTICE_WORD_SYSTEM` via the normal `ai-companion` proxy, JSON parsed by
+  `practiceParseWordCard`, cached per word+sentence) showing meaning in context, part of speech / base form and an example sentence
+  with its English; the bookmark saves the word. **Saved words are in `localStorage` key `aiWords_<userId>` (per device, max 300) —
+  there is no database table yet.** "My words" is an item in the ＋ menu (`aiOpenWords`): list, listen, remove, and "Practise these
+  words", which sends a help-type message that `PRACTICE_ACTIVITIES_RULE` tells the tutor to turn into a mini-game. A one-line tip
+  under the first tutor message ("Tap any word…") disappears for good (`localStorage aiWordHint`) after the first word card opens.
 
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.

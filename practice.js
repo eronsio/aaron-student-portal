@@ -139,6 +139,36 @@ function practiceLessonStats(log) {
     return { turns: turns.length, clean, words, unique: seen.size, longest, accuracy: turns.length ? Math.round(100 * clean / turns.length) : 0 };
 }
 
+// ---- tap a word in a tutor message ----
+// Splits text into words and everything between them, so each word can be wrapped in a tappable span.
+function practiceWordSplit(text) {
+    const s = String(text == null ? '' : text);
+    const re = /[\p{L}\p{M}]+(?:['’][\p{L}\p{M}]+)*/gu;
+    const out = [];
+    let last = 0, m;
+    while ((m = re.exec(s))) {
+        if (m.index > last) out.push({ text: s.slice(last, m.index), word: false });
+        out.push({ text: m[0], word: true });
+        last = m.index + m[0].length;
+    }
+    if (last < s.length) out.push({ text: s.slice(last), word: false });
+    return out;
+}
+
+const PRACTICE_WORD_SYSTEM = `You are a Spanish-English dictionary for a beginner/intermediate learner. The user gives a Spanish WORD as it appears in a SENTENCE. Reply with ONLY one JSON object, no Markdown, no extra text:
+{"lemma":"the dictionary form (infinitive for verbs, singular masculine for adjectives/nouns)","translation":"the short English meaning of the word as used in this sentence","pos":"part of speech in English, e.g. verb (preterite of ir), noun, adjective","example":"one short, natural Spanish sentence using the word, at A2 level","example_en":"English translation of that sentence"}`;
+
+function practiceParseWordCard(raw) {
+    const m = String(raw || '').match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    let o;
+    try { o = JSON.parse(m[0]); } catch (e) { return null; }
+    const str = v => (typeof v === 'string' ? v.trim() : '');
+    const translation = str(o && o.translation);
+    if (!translation) return null;
+    return { lemma: str(o.lemma).toLowerCase(), translation, pos: str(o.pos), example: str(o.example), example_en: str(o.example_en) };
+}
+
 function practiceSlug(text) {
     return String(text || '').toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -290,7 +320,7 @@ Estudiante: "Ayer yo fue al supermercado"
 Tú: "¡Bien! [✓ 'fui' para yo — 'fue' es para él/ella] ¿Y qué compraste allí?"`;
 
 // There is no activity menu: the student asks for a different kind of practice in the chat and the AI switches.
-const PRACTICE_ACTIVITIES_RULE = `ACTIVIDADES (el estudiante puede cambiar de actividad en cualquier momento): aparte del plan de práctica y la conversación libre, puedes hacer (a) un ROLEPLAY en una situación real (café, aeropuerto, supermercado, médico, hotel, conocer a alguien nuevo…): tú interpretas a la otra persona y te quedas en el personaje; (b) DESCRIPCIÓN DE UNA IMAGEN: describes con palabras una escena cotidiana vívida del mundo hispano y el estudiante la describe con sus propias palabras; (c) un EJERCICIO DE GRAMÁTICA sobre un tema (ser y estar, presente, artículos, números y hora, pretérito, gustar…): preguntas cortas, como un juego. Si el estudiante pide una de estas actividades, o volver a su plan o a la conversación libre, cambia enseguida y empieza con una primera frase en español, sin pedir permiso. Si falta un dato (qué situación, qué tema), ofrece 2 o 3 opciones en una sola frase. Los mensajes en los que el estudiante solo pide cambiar de actividad no se corrigen. Mantén todas las reglas anteriores en cualquier actividad.`;
+const PRACTICE_ACTIVITIES_RULE = `ACTIVIDADES (el estudiante puede cambiar de actividad en cualquier momento): aparte del plan de práctica y la conversación libre, puedes hacer (a) un ROLEPLAY en una situación real (café, aeropuerto, supermercado, médico, hotel, conocer a alguien nuevo…): tú interpretas a la otra persona y te quedas en el personaje; (b) DESCRIPCIÓN DE UNA IMAGEN: describes con palabras una escena cotidiana vívida del mundo hispano y el estudiante la describe con sus propias palabras; (c) un EJERCICIO DE GRAMÁTICA sobre un tema (ser y estar, presente, artículos, números y hora, pretérito, gustar…): preguntas cortas, como un juego. Si el estudiante pide una de estas actividades, o volver a su plan o a la conversación libre, cambia enseguida y empieza con una primera frase en español, sin pedir permiso. Si falta un dato (qué situación, qué tema), ofrece 2 o 3 opciones en una sola frase. Los mensajes en los que el estudiante solo pide cambiar de actividad no se corrigen. Si el estudiante te da una lista de SUS PALABRAS GUARDADAS para practicar, haz un mini-juego: una pregunta corta por palabra que obligue a usarla, de una en una, empezando ya. Mantén todas las reglas anteriores en cualquier actividad.`;
 
 // Added when the student's latest message came from the microphone (hands-free conversation mode).
 const PRACTICE_VOICE_RULE = `16. El último mensaje del estudiante viene del reconocimiento de voz, no está escrito: puede faltar puntuación, tildes y mayúsculas, y alguna palabra puede estar mal reconocida. NUNCA corrijas puntuación, tildes ni ortografía en un mensaje de voz; corrige solo errores claros de gramática o vocabulario. Si una palabra no tiene sentido y suena parecida a otra, pregunta "¿Quisiste decir…?" en vez de corregir. Esto es una conversación hablada: responde con 1 o 2 frases cortas y termina con una pregunta.`;
@@ -1295,6 +1325,7 @@ async function practiceAdminAnalyzeAll() {
 // ============================================================
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+        practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,

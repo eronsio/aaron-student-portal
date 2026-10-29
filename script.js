@@ -2740,11 +2740,12 @@ function appendAiMessage(type, html, raw) {
     const el = document.createElement('div');
     el.className = `ai-message ai-${type}`;
     el.innerHTML = `<div class="ai-bubble"><p>${html}</p></div>`;
-    if (type === 'bot' && typeof raw === 'string' && raw) aiAddTutorTools(el, raw);
+    if (type === 'bot' && typeof raw === 'string' && raw) { aiMakeWordsTappable(el.querySelector('.ai-bubble p')); aiAddTutorTools(el, raw); }
     const box = document.getElementById('aiChatMessages');
     // Stay glued to the bottom only if the student was already reading the latest message.
     const nearEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
     box.appendChild(el);
+    if (type === 'bot' && typeof raw === 'string' && raw) aiMaybeWordHint(box, el);
     if (nearEnd || type === 'user') aiScrollToEnd(box);
     return el;
 }
@@ -2836,8 +2837,174 @@ function aiOpenFeedback(entry) {
 
 function aiCloseSheet() {
     document.getElementById('aiSheet')?.remove();
+    document.querySelectorAll('.ai-w.is-active').forEach(x => x.classList.remove('is-active'));
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') aiCloseSheet(); });
+
+// ---- tap a word in a tutor message: its meaning, listen, save ----
+// Saved words live in this browser (per student) for now; syncing them to the database would need a new table.
+const aiWordCache = new Map();   // "word|sentence" -> card, so tapping the same word again is instant
+
+function aiWordsKey() { return 'aiWords_' + ((currentUser && currentUser.id) || 'guest'); }
+function aiWordsLoad() {
+    try { const a = JSON.parse(localStorage.getItem(aiWordsKey()) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+function aiWordsStore(list) {
+    try { localStorage.setItem(aiWordsKey(), JSON.stringify(list.slice(0, 300))); } catch (e) {}
+    aiRefreshWordsCount();
+}
+function aiWordId(e) { return practiceWordKey(e.lemma || e.w || ''); }
+function aiWordIsSaved(id) { return aiWordsLoad().some(e => aiWordId(e) === id); }
+function aiRefreshWordsCount() {
+    const el = document.getElementById('aiWordsCount');
+    if (!el) return;
+    const n = aiWordsLoad().length;
+    el.textContent = n ? `${n} saved` : 'Words you save from the chat';
+}
+
+function aiMakeWordsTappable(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(n => {
+        if (n.parentElement && n.parentElement.closest('.ai-w')) return;
+        const parts = practiceWordSplit(n.nodeValue);
+        if (!parts.some(x => x.word)) return;
+        const frag = document.createDocumentFragment();
+        parts.forEach(x => {
+            if (!x.word) { frag.appendChild(document.createTextNode(x.text)); return; }
+            const sp = document.createElement('span');
+            sp.className = 'ai-w'; sp.textContent = x.text;
+            frag.appendChild(sp);
+        });
+        n.parentNode.replaceChild(frag, n);
+    });
+}
+
+// A one-line tip under the first tutor message, until the student has opened a word card once.
+function aiWordsLearned() { try { return localStorage.getItem('aiWordHint') === '1'; } catch (e) { return false; } }
+function aiMaybeWordHint(box, el) {
+    if (aiWordsLearned() || box.querySelector('.ai-hint')) return;
+    const hint = document.createElement('div');
+    hint.className = 'ai-hint';
+    hint.innerHTML = '<i class="fas fa-hand-pointer"></i> Tap any word to see what it means';
+    el.after(hint);
+}
+
+// Builds the bottom sheet frame used by the word card and "My words". Returns the backdrop element.
+function aiSheetShell(title, withSave) {
+    const shell = document.querySelector('#aiChatView .ai-shell');
+    if (!shell) return null;
+    aiCloseSheet();
+    const el = document.createElement('div');
+    el.id = 'aiSheet';
+    el.className = 'ai-sheet-backdrop';
+    el.innerHTML = `<div class="ai-sheet" role="dialog" aria-label="${escapeAttr(title)}">
+        <div class="ai-sheet-head">
+            <div class="ai-sheet-tabs" role="tablist"><button type="button" role="tab" class="is-active" aria-selected="true">${escapeHtml(title)}</button></div>
+            <div class="ai-sheet-head-r">
+                ${withSave ? '<button type="button" class="ai-sheet-save" aria-label="Save this word" aria-pressed="false"><i class="far fa-bookmark"></i></button>' : ''}
+                <button type="button" class="ai-sheet-close" aria-label="Close"><i class="fas fa-xmark"></i></button>
+            </div>
+        </div>
+        <div class="ai-sheet-body"></div>
+    </div>`;
+    shell.appendChild(el);
+    el.addEventListener('click', (e) => { if (e.target === el) aiCloseSheet(); });
+    el.querySelector('.ai-sheet-close').addEventListener('click', aiCloseSheet);
+    requestAnimationFrame(() => el.classList.add('is-open'));
+    return el;
+}
+
+async function aiOpenWord(span) {
+    const word = span.textContent.trim();
+    const sentence = ((span.closest('p') || span).textContent || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    const sheet = aiSheetShell('Word', true);
+    if (!sheet) return;
+    span.classList.add('is-active');
+    try { localStorage.setItem('aiWordHint', '1'); } catch (e) {}
+    document.querySelectorAll('#aiChatMessages .ai-hint').forEach(h => h.remove());
+    const body = sheet.querySelector('.ai-sheet-body');
+    const saveBtn = sheet.querySelector('.ai-sheet-save');
+    body.innerHTML = `<div class="ai-wc-word">${escapeHtml(word)}</div>
+        <div class="ai-wc-btns">
+            <button type="button" class="ai-wc-say" data-slow="0" aria-label="Listen"><i class="fas fa-volume-high"></i></button>
+            <button type="button" class="ai-wc-say" data-slow="1" aria-label="Listen slowly"><i class="fas fa-hourglass-half"></i></button>
+        </div>
+        <div class="ai-wc-detail"><span class="typing-indicator ai-wc-typing"><span></span><span></span><span></span></span></div>`;
+    body.querySelectorAll('.ai-wc-say').forEach(b => b.addEventListener('click', () => speakText(word, { force: true, slow: b.dataset.slow === '1' })));
+    saveBtn.disabled = true;
+
+    const key = practiceWordKey(word) + '|' + sentence;
+    let card = aiWordCache.get(key);
+    if (!card) {
+        const raw = await callAnthropicAPI([{ role: 'user', content: `WORD: "${word}"\nSENTENCE: "${sentence}"` }], PRACTICE_WORD_SYSTEM);
+        card = practiceParseWordCard(raw);
+        if (card) aiWordCache.set(key, card);
+    }
+    if (!document.body.contains(sheet)) return;   // the student closed it while it loaded
+    const detail = body.querySelector('.ai-wc-detail');
+    if (!card) {
+        detail.innerHTML = `<p class="ai-wc-err">Couldn't look that up just now.</p><button type="button" class="ai-wc-retry">Try again</button>`;
+        detail.querySelector('.ai-wc-retry').addEventListener('click', () => aiOpenWord(span));
+        return;
+    }
+    const id = practiceWordKey(card.lemma || word);
+    detail.innerHTML = `<div class="ai-wc-tr">${escapeHtml(card.translation)}</div>
+        <div class="ai-wc-meta">${escapeHtml(card.pos)}${card.lemma && practiceWordKey(card.lemma) !== practiceWordKey(word) ? ` · from <b>${escapeHtml(card.lemma)}</b>` : ''}</div>
+        ${card.example ? `<div class="ai-wc-ex"><div class="ai-sheet-label">Example</div>
+            <div class="ai-wc-ex-es">${escapeHtml(card.example)}<button type="button" class="ai-sheet-say" aria-label="Listen to the example"><i class="fas fa-volume-high"></i></button></div>
+            ${card.example_en ? `<div class="ai-wc-ex-en">${escapeHtml(card.example_en)}</div>` : ''}</div>` : ''}`;
+    detail.querySelector('.ai-sheet-say')?.addEventListener('click', () => speakText(card.example, { force: true }));
+
+    const paint = () => {
+        const saved = aiWordIsSaved(id);
+        saveBtn.setAttribute('aria-pressed', saved ? 'true' : 'false');
+        saveBtn.setAttribute('aria-label', saved ? 'Remove from my words' : 'Save this word');
+        saveBtn.classList.toggle('is-saved', saved);
+        saveBtn.innerHTML = `<i class="${saved ? 'fas' : 'far'} fa-bookmark"></i>`;
+    };
+    saveBtn.disabled = false;
+    saveBtn.onclick = () => {
+        const list = aiWordsLoad();
+        const at = list.findIndex(e => aiWordId(e) === id);
+        if (at >= 0) list.splice(at, 1);
+        else list.unshift({ w: word, lemma: card.lemma || '', tr: card.translation, pos: card.pos, ex: card.example, exEn: card.example_en, t: Date.now() });
+        aiWordsStore(list);
+        paint();
+    };
+    paint();
+}
+
+function aiOpenWords() {
+    aiClosePopovers();
+    const sheet = aiSheetShell('My words', false);
+    if (!sheet) return;
+    const body = sheet.querySelector('.ai-sheet-body');
+    const draw = () => {
+        const list = aiWordsLoad();
+        if (!list.length) {
+            body.innerHTML = `<div class="ai-mw-empty"><i class="far fa-bookmark"></i><p>No saved words yet.</p><small>Tap a word in a tutor message, then the bookmark, and it will be kept here.</small></div>`;
+            return;
+        }
+        body.innerHTML = list.map((e, i) => `<div class="ai-mw">
+                <div class="ai-mw-text"><b>${escapeHtml(e.lemma || e.w)}</b><span>${escapeHtml(e.tr || '')}</span></div>
+                <button type="button" class="ai-mw-btn" data-say="${i}" aria-label="Listen"><i class="fas fa-volume-high"></i></button>
+                <button type="button" class="ai-mw-btn" data-del="${i}" aria-label="Remove"><i class="fas fa-xmark"></i></button>
+            </div>`).join('')
+            + `<button type="button" class="ai-story-btn ai-mw-go"><i class="fas fa-comments"></i> Practise these words</button>
+               <p class="ai-mw-note">Saved on this device.</p>`;
+        body.querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => { const e = list[+b.dataset.say]; speakText(e.lemma || e.w, { force: true }); }));
+        body.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { const l = aiWordsLoad(); l.splice(+b.dataset.del, 1); aiWordsStore(l); draw(); }));
+        body.querySelector('.ai-mw-go').addEventListener('click', () => {
+            const words = list.slice(0, 8).map(e => e.lemma || e.w).join(', ');
+            aiCloseSheet();
+            submitAiMessage(`Let's practise my saved words: ${words}.`, { help: true });
+        });
+    };
+    draw();
+}
 
 // The bar under the header fills as the student sends messages; at PRACTICE_LESSON_TURNS the lesson counts as complete
 // (they can keep going) and End becomes a prominent Finish button.
@@ -3022,6 +3189,14 @@ function ensureAiExtras() {
         const diag = menu.querySelector('#aiDiagBtn');
         if (diag) diag.addEventListener('click', () => convoCopyDiagnostics(diag));
     }
+    const msgBox = document.getElementById('aiChatMessages');
+    if (msgBox && !msgBox.dataset.wordsBound) {
+        msgBox.dataset.wordsBound = '1';
+        msgBox.addEventListener('click', (e) => {
+            const w = e.target.closest && e.target.closest('.ai-w');
+            if (w && !(window.getSelection && String(window.getSelection()).trim())) aiOpenWord(w);
+        });
+    }
     if (!footer || !composer) return;
 
     // Footer, top to bottom: voice status line, voice call panel, help chips, composer.
@@ -3077,8 +3252,10 @@ function ensureAiExtras() {
             + item('', 'roleplay', 'fa-masks-theater', 'Roleplay', 'Practise a real situation: café, airport…')
             + item('', 'picture', 'fa-image', 'Describe a picture', 'Describe a scene in your own words')
             + item('', 'grammar', 'fa-spell-check', 'Grammar drill', 'Short, game-like exercises')
-            + item('', 'free', 'fa-comments', 'Free chat', 'Talk about anything you like');
+            + item('', 'free', 'fa-comments', 'Free chat', 'Talk about anything you like')
+            + `<button type="button" role="menuitem" class="ai-pop-item" onclick="aiOpenWords()"><i class="fas fa-bookmark"></i><span><b>My words</b><small id="aiWordsCount">Words you save from the chat</small></span></button>`;
         footer.appendChild(menu);
+        aiRefreshWordsCount();
         const btn = document.getElementById('aiActivityBtn');
         if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', btn); });
     }
