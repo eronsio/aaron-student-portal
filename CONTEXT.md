@@ -217,6 +217,22 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   `aiApplyDockMode` toggles `.dock-voice` / `.voice-ok` on `#aiChatView`. In keyboard mode the composer's own mic slot becomes
   `#aiToVoice` (back to the dock) and `#aiRecordBtn` is hidden; browsers that cannot record always get the text box. The dock hides
   while a note/voice call is on (`.note-on` / `.voice-on`). No hold-to-talk (Loora has it): deliberately not built, iOS press events are risky.
+- **Phone shell redesign (2026-10-30):** below 640px the tab row (`#tabNav`) is hidden (it stays in the DOM: the buttons are still what `showTab` uses)
+  and a ☰ opens a side drawer (`navOpen/navClose`, built by `navRender` from the visible `#tabNav .tab-btn`, so it follows the student/music/admin
+  tab set automatically; items click the real tab button; Log out clicks `#logoutBtn`). The drawer is a modal dialog: `#mainApp.inert`, focus trap,
+  Escape / scrim / ✕ / swipe-left close, focus returns to the ☰. Three ☰ buttons exist (`navHamburger`): page header, practice header
+  (`.nav-hamburger-ai`), practice end screens. On the Practice tab the page header is hidden too, so Practice is full screen. Desktop (>640px)
+  is unchanged. Everything is injected from script.js / styles.css, nothing in index.html. Research notes: hamburgers hide navigation (NN/g-type
+  findings; Aaron asked for it anyway) so the drawer highlights the current section; iOS standalone viewport bugs (dvh/keyboard) are why the chat uses `--vvh`.
+- **Loora-style voice dock (2026-10-30, replaces the first dock):** white bar, raised 88px white mic with a halo, left cluster = Help (hint/explain/simpler
+  popover `#aiHelpMenu`), activities/progress/words, keyboard. `aiDockBind` = pointer-event state machine: press starts recording at once
+  (`noteStart`), release after >=350ms sends, slide left >80px then release cancels, a quick tap leaves it recording and the next tap sends;
+  `click` with detail 0 (keyboard/AT) calls `micPress`. `aiDockSync` mirrors `note.state`/`dockG` into the dock (red mic + level halo, captions,
+  "Slide to cancel", Cancel button) and `aiVoicePending` shows a spinner bubble while transcribing. Text mode: composer + `#aiToVoice`.
+- **Tutor voices (2026-10-30):** `TUTOR_VOICES` (Carolina Spain F, Sofía Colombia F, Diego Latin-American M, Salva Spain M) in script.js; choice in
+  `localStorage aiTutorVoice`, picker = ⚙ → "Tutor voice" (`aiOpenVoices`, preview buttons); `speakViaServer` sends `voice: <key>`; the
+  `ai-speak` function maps keys to ElevenLabs voice ids (allow-list `VOICES`; unknown key = the default `ELEVENLABS_VOICE_ID`). The three
+  extra voices were added to Aaron's ElevenLabs "My Voices". NOTE: the function must be redeployed for the picker to change the sound.
 - **Varied, personal openings (2026-10-29):** no mode has a fixed greeting any more (free chat used to always say the same line). Every session's
   hidden first message comes from `practiceOpeningStart()` → `practiceOpeningBrief`: day + time of day, one random angle from
   `PRACTICE_OPENING_ANGLES`, and the student's last 6 openings (`localStorage aiOpenings_<userId>`, saved by `practiceOpeningsRemember`) to avoid.

@@ -2490,10 +2490,55 @@ function stopSpeaking() {
     ttsEndDone();
 }
 
+// ---- the tutor's voice: students pick one of a few natural voices (all Spanish-native, served by the ai-speak function) ----
+const TUTOR_VOICES = [
+    { key: 'carolina', name: 'Carolina', desc: 'Spain · woman · warm and clear', sample: 'Hola, soy Carolina. ¿Practicamos un poco de español juntos?' },
+    { key: 'sofia', name: 'Sofía', desc: 'Colombia · woman · friendly and natural', sample: 'Hola, soy Sofía. ¿Practicamos un poco de español juntos?' },
+    { key: 'diego', name: 'Diego', desc: 'Latin America · man · relaxed and neutral', sample: 'Hola, soy Diego. ¿Practicamos un poco de español juntos?' },
+    { key: 'salva', name: 'Salva', desc: 'Spain · man · deep and calm', sample: 'Hola, soy Salva. ¿Practicamos un poco de español juntos?' }
+];
+function ttsTutorVoiceKey() {
+    let k = '';
+    try { k = localStorage.getItem('aiTutorVoice') || ''; } catch (e) {}
+    return TUTOR_VOICES.some(v => v.key === k) ? k : TUTOR_VOICES[0].key;
+}
+function ttsTutorVoice() { const k = ttsTutorVoiceKey(); return TUTOR_VOICES.find(v => v.key === k); }
+function aiRefreshVoiceLabel() {
+    const b = document.getElementById('aiVoicePick');
+    if (b) b.innerHTML = `${escapeHtml(ttsTutorVoice().name)} <i class="fas fa-chevron-right"></i>`;
+}
+function aiOpenVoices() {
+    aiClosePopovers();
+    const sheet = aiSheetShell('Tutor voice', false);
+    if (!sheet) return;
+    const body = sheet.querySelector('.ai-sheet-body');
+    const draw = () => {
+        const cur = ttsTutorVoiceKey();
+        body.innerHTML = `<div class="ai-vo-list" role="radiogroup" aria-label="Tutor voice">${TUTOR_VOICES.map(v => `<div class="ai-vo${v.key === cur ? ' is-on' : ''}">
+                <button type="button" class="ai-vo-pick" role="radio" aria-checked="${v.key === cur}" data-voice="${v.key}">
+                    <span class="ai-vo-av" aria-hidden="true">${escapeHtml(v.name[0])}</span>
+                    <span class="ai-vo-txt"><b>${escapeHtml(v.name)}</b><small>${escapeHtml(v.desc)}</small></span>
+                    <i class="fas fa-check ai-vo-ck" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="ai-vo-play" data-play="${v.key}" aria-label="Hear ${escapeAttr(v.name)}"><i class="fas fa-play"></i></button>
+            </div>`).join('')}</div>
+            <p class="ai-mw-note">${Date.now() < ttsServerUntil ? 'The natural voices are not available right now, so this device\'s own voice is being used. ' : ''}Your choice is saved on this device.</p>`;
+        body.querySelectorAll('[data-voice]').forEach(b => b.addEventListener('click', () => {
+            try { localStorage.setItem('aiTutorVoice', b.dataset.voice); } catch (e) {}
+            aiRefreshVoiceLabel(); draw();
+            speakText(TUTOR_VOICES.find(v => v.key === b.dataset.voice).sample, { force: true, voice: b.dataset.voice });
+        }));
+        body.querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => {
+            speakText(TUTOR_VOICES.find(v => v.key === b.dataset.play).sample, { force: true, voice: b.dataset.play });
+        }));
+    };
+    draw();
+}
+
 // Resolves true once audio is playing (or the request was superseded), false when the browser voice should take over.
-async function speakViaServer(clean, english, seq) {
+async function speakViaServer(clean, english, seq, voiceKey) {
     const pace = ttsIsSlow() ? 'slow' : 'normal';
-    const key = `${english ? 'en' : 'es'}|${pace}|${clean}`;
+    const key = `${voiceKey}|${english ? 'en' : 'es'}|${pace}|${clean}`;
     let url = ttsAudioCache.get(key);
     if (!url) {
         const controller = new AbortController();
@@ -2502,7 +2547,7 @@ async function speakViaServer(clean, english, seq) {
             const r = await fetch(AI_SPEAK_FUNCTION_URL, {
                 method: 'POST',
                 headers: _headers(_accessToken),
-                body: JSON.stringify({ text: clean, lang: english ? 'en' : 'es', pace }),
+                body: JSON.stringify({ text: clean, lang: english ? 'en' : 'es', pace, voice: voiceKey }),
                 signal: controller.signal
             });
             if (!r.ok || !/audio/i.test(r.headers.get('Content-Type') || '')) {
@@ -2564,7 +2609,7 @@ async function speakText(text, opts) {
     done.then(() => { if (seq === ttsSpeakSeq) ttsPaceOverride = null; });
     const english = ttsLooksEnglish(clean);
     try {
-        if (_accessToken && Date.now() >= ttsServerUntil && await speakViaServer(clean, english, seq)) return done;
+        if (_accessToken && Date.now() >= ttsServerUntil && await speakViaServer(clean, english, seq, (opts && opts.voice) || ttsTutorVoiceKey())) return done;
     } catch (e) { /* fall through to the browser voice */ }
     if (seq !== ttsSpeakSeq) return done;
     speakInBrowser(clean, english, seq);
@@ -3203,6 +3248,7 @@ function setAiBusyUI(busy) {
     document.querySelectorAll('#aiQuickReplies button').forEach(b => { b.disabled = busy; });
     document.querySelector('#aiChatView .ai-composer')?.classList.toggle('is-busy', busy);
     document.getElementById('aiDock')?.classList.toggle('is-busy', busy);
+    aiDockSync();
     aiAutosize();   // also decides whether Send is enabled
 }
 
@@ -3212,6 +3258,10 @@ function ensureAiExtras() {
     const footer = document.querySelector('#aiChatView .ai-footer');
     const composer = document.querySelector('#aiChatView .ai-chat-input-container');
     const actions = document.querySelector('#aiChatView .ai-header-actions');
+
+    // Menu button at the left of the practice header (phones; the page header with its own ☰ is hidden while practising).
+    const headerRow = document.querySelector('#aiChatView .ai-header');
+    if (headerRow && !headerRow.querySelector('.nav-hamburger')) headerRow.prepend(navHamburger('nav-hamburger-ai'));
 
     // Lesson progress bar under the header.
     const head = document.querySelector('#aiChatView .ai-header');
@@ -3246,7 +3296,8 @@ function ensureAiExtras() {
         menu.id = 'aiSettingsMenu'; menu.className = 'ai-popover ai-popover-down hidden';
         menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', 'Voice settings');
         menu.innerHTML = `<div class="ai-pop-title">Voice</div>
-            <div class="ai-pop-row"><label for="ttsVoiceSelect">Reading voice</label>${window.speechSynthesis
+            <div class="ai-pop-row"><span>Tutor voice</span><button type="button" id="aiVoicePick" class="ai-pop-link"></button></div>
+            <div class="ai-pop-row"><label for="ttsVoiceSelect">Backup voice (this device)</label>${window.speechSynthesis
                 ? '<select id="ttsVoiceSelect" class="tts-voice-select"></select>' : '<em>Not available here</em>'}</div>
             <div class="ai-pop-row"><span>Pace</span>
                 <div class="ai-seg" id="aiPaceSeg" role="group" aria-label="Reading pace">
@@ -3264,6 +3315,8 @@ function ensureAiExtras() {
         setSlowTTS(ttsSlow);
         const hf = menu.querySelector('#aiHandsFree');
         if (hf) { hf.checked = noteHandsFree(); hf.addEventListener('change', () => { try { localStorage.setItem('aiHandsFree', hf.checked ? '1' : '0'); } catch (e) {} if (!hf.checked && convo.on) convoStop(); }); }
+        menu.querySelector('#aiVoicePick').addEventListener('click', aiOpenVoices);
+        aiRefreshVoiceLabel();
         const diag = menu.querySelector('#aiDiagBtn');
         if (diag) diag.addEventListener('click', () => convoCopyDiagnostics(diag));
     }
@@ -3320,21 +3373,38 @@ function ensureAiExtras() {
         document.getElementById('aiVoiceEnd').addEventListener('click', convoStop);
         document.getElementById('aiVoiceType').addEventListener('click', () => { convoStop(); aiMessageInput.focus(); });
     }
-    // Voice-first dock: a big centred mic (tap to talk, tap again to send: the same voice note as the mic in the text box),
-    // "+" for activities / progress / words, and a switch to the keyboard. The text box stays one tap away.
+    // Voice-first dock (laid out like Loora's lesson screen): a big raised mic in the middle, a small icon cluster on the left
+    // (help, activities / progress / words, keyboard). Hold the mic to talk and let go to send (slide left to cancel), or just tap it
+    // to start and tap again to send. It records the same voice note as the mic in the text box (see note*() below).
     if (footer && composer && !document.getElementById('aiDock')) {
         const dock = document.createElement('div');
         dock.id = 'aiDock'; dock.className = 'ai-dock';
-        dock.innerHTML = `<button type="button" id="aiDockPlus" class="ai-dock-side" title="Switch activity" aria-label="Switch activity" aria-haspopup="true" aria-expanded="false"><i class="fas fa-plus"></i></button>
-            <div class="ai-dock-mid">
-                <button type="button" id="aiDockMic" class="ai-dock-mic" aria-label="Talk: tap to start, tap again to send"><i class="fas fa-microphone"></i></button>
-                <div class="ai-dock-cap">Tap to speak</div>
+        dock.innerHTML = `<div class="ai-dock-left">
+                <div class="ai-dock-tools">
+                    <button type="button" id="aiDockHelp" class="ai-dock-tool" title="Help: hint, explain, say it simpler" aria-label="Help" aria-haspopup="true" aria-expanded="false"><i class="fas fa-life-ring"></i></button>
+                    <button type="button" id="aiDockPlus" class="ai-dock-tool" title="Activities, progress and words" aria-label="Activities, progress and words" aria-haspopup="true" aria-expanded="false"><i class="fas fa-table-cells-large"></i></button>
+                    <button type="button" id="aiDockKeys" class="ai-dock-tool" title="Type instead" aria-label="Type instead"><i class="fas fa-keyboard"></i></button>
+                </div>
+                <div class="ai-dock-cancel" aria-hidden="true"><i class="fas fa-chevron-left"></i><span>Slide to cancel</span></div>
+                <button type="button" id="aiDockX" class="ai-dock-x" aria-label="Cancel this recording"><i class="fas fa-xmark"></i><span>Cancel</span></button>
             </div>
-            <button type="button" id="aiDockKeys" class="ai-dock-side" title="Type instead" aria-label="Type instead"><i class="fas fa-keyboard"></i></button>`;
+            <div class="ai-dock-mid">
+                <button type="button" id="aiDockMic" class="ai-dock-mic" aria-label="Talk: hold to speak and let go to send, or tap to start and tap again to send"><i class="fas fa-microphone"></i></button>
+            </div>
+            <div class="ai-dock-cap" id="aiDockCap" role="status" aria-live="polite">Hold to talk</div>`;
         footer.insertBefore(dock, composer);
-        document.getElementById('aiDockMic').addEventListener('click', micPress);
+        aiDockBind(dock);
         document.getElementById('aiDockKeys').addEventListener('click', () => aiSetDockMode('text', true));
         document.getElementById('aiDockPlus').addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', e.currentTarget); });
+        document.getElementById('aiDockHelp').addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiHelpMenu', e.currentTarget); });
+        document.getElementById('aiDockX').addEventListener('click', () => noteAbort());
+        const hm = document.createElement('div');
+        hm.id = 'aiHelpMenu'; hm.className = 'ai-popover ai-popover-up hidden'; hm.setAttribute('role', 'menu');
+        hm.innerHTML = `<div class="ai-pop-title">Need a hand?</div>
+            <button type="button" role="menuitem" class="ai-pop-item" onclick="aiClosePopovers();sendAiHelp('hint')"><i class="fas fa-lightbulb"></i><span><b>Hint</b><small>A nudge for what to say</small></span></button>
+            <button type="button" role="menuitem" class="ai-pop-item" onclick="aiClosePopovers();sendAiHelp('explain')"><i class="fas fa-language"></i><span><b>Explain in English</b><small>What the tutor just said</small></span></button>
+            <button type="button" role="menuitem" class="ai-pop-item" onclick="aiClosePopovers();sendAiHelp('simpler')"><i class="fas fa-feather"></i><span><b>Say it simpler</b><small>Easier Spanish, same idea</small></span></button>`;
+        footer.appendChild(hm);
         const back = document.createElement('button');
         back.id = 'aiToVoice'; back.type = 'button'; back.className = 'ai-icon-btn ai-to-voice';
         back.title = 'Talk instead'; back.setAttribute('aria-label', 'Talk instead');
@@ -3361,6 +3431,80 @@ function ensureAiExtras() {
         aiRefreshStreak();
         const btn = document.getElementById('aiActivityBtn');
         if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); aiTogglePopover('aiActivityMenu', btn); });
+    }
+}
+
+// ---- the dock's mic: hold to talk / tap to start + tap to send ----
+// Recording starts the moment the finger goes down. Let go after a real hold = send; let go in the "slide to cancel" zone =
+// throw it away; let go quickly (a tap) = keep recording, and the next tap sends. Keyboard / screen reader users get the tap
+// behaviour through the button's click. The hands-free beta keeps its own tap behaviour.
+const DOCK_HOLD_MS = 350;      // a press at least this long counts as "hold to talk"
+const DOCK_CANCEL_PX = 80;     // slide this far to the left to cancel
+const dockG = { down: false, pid: null, mode: '', t0: 0, x0: 0, cancel: false };
+
+function aiDockSetCancel(on) {
+    if (dockG.cancel === on) return;
+    dockG.cancel = on;
+    aiDockSync();
+}
+
+function aiDockBind(dock) {
+    const mic = dock.querySelector('#aiDockMic');
+    mic.addEventListener('contextmenu', (e) => e.preventDefault());
+    mic.addEventListener('pointerdown', (e) => {
+        if (e.button) return;
+        if (convo.on || noteHandsFree()) return;   // beta: the click handler below runs micPress()
+        e.preventDefault();
+        if (aiBusy && note.state === 'idle') { noteToast('One moment, I am still answering.'); return; }
+        dockG.down = true; dockG.pid = e.pointerId; dockG.t0 = Date.now(); dockG.x0 = e.clientX; dockG.cancel = false;
+        try { mic.setPointerCapture(e.pointerId); } catch (err) {}
+        if (note.state === 'recording') { dockG.mode = 'stop'; return; }   // already recording (tap mode): this press ends it
+        if (note.state !== 'idle') { dockG.down = false; return; }
+        dockG.mode = 'start';
+        noteStart();
+        aiDockSync();
+    });
+    mic.addEventListener('pointermove', (e) => {
+        if (!dockG.down || e.pointerId !== dockG.pid || dockG.mode !== 'start') return;
+        aiDockSetCancel(e.clientX - dockG.x0 < -DOCK_CANCEL_PX);
+    });
+    const release = (e, cancelled) => {
+        if (!dockG.down || e.pointerId !== dockG.pid) return;
+        dockG.down = false;
+        try { mic.releasePointerCapture(e.pointerId); } catch (err) {}
+        const held = Date.now() - dockG.t0, mode = dockG.mode, cancel = dockG.cancel;
+        dockG.cancel = false;
+        if (mode === 'stop') { if (!cancelled) noteSend(); }
+        else if (mode === 'start') {
+            if (cancelled || cancel) noteAbort();
+            else if (held >= DOCK_HOLD_MS && note.state === 'recording') noteSend();
+            // a quick tap (or a hold that ended before the mic was ready) leaves it recording: the next tap sends
+        }
+        aiDockSync();
+    };
+    mic.addEventListener('pointerup', (e) => release(e, false));
+    mic.addEventListener('pointercancel', (e) => release(e, true));
+    mic.addEventListener('click', (e) => { if (e.detail === 0) micPress(); });   // keyboard / assistive tech (touch & mouse clicks have detail >= 1)
+}
+
+// Reflects what the recorder is doing in the dock (mic colour, caption, slide-to-cancel / cancel button).
+function aiDockSync() {
+    const dock = document.getElementById('aiDock');
+    if (!dock) return;
+    const rec = note.state === 'recording', busy = note.state === 'transcribing' || note.state === 'starting';
+    const holding = dockG.down && dockG.mode === 'start';
+    dock.classList.toggle('is-rec', rec || note.state === 'starting');
+    dock.classList.toggle('is-hold', holding);
+    dock.classList.toggle('is-cancel', holding && dockG.cancel);
+    dock.classList.toggle('is-wait', note.state === 'transcribing');
+    const mic = document.getElementById('aiDockMic');
+    if (mic) mic.innerHTML = note.state === 'transcribing' ? '<i class="fas fa-circle-notch fa-spin"></i>' : '<i class="fas fa-microphone"></i>';
+    const cap = document.getElementById('aiDockCap');
+    if (cap) {
+        cap.textContent = note.state === 'transcribing' ? 'Transcribing…'
+            : note.state === 'starting' ? 'Getting ready…'
+            : rec ? (holding ? (dockG.cancel ? 'Release to cancel' : 'Release to send') : 'Tap to send')
+            : aiBusy ? 'Reply coming…' : 'Hold to talk';
     }
 }
 
@@ -4003,6 +4147,19 @@ function noteSetState(state) {
         const send = document.getElementById('aiNoteSend');
         if (send) send.disabled = state !== 'recording';
     }
+    aiDockSync();
+    aiVoicePending(state === 'transcribing');
+}
+
+// While a voice note is being transcribed, a placeholder bubble (spinner) sits where the student's message will appear.
+let aiVoicePendingEl = null;
+function aiVoicePending(on) {
+    if (on && !aiVoicePendingEl && document.getElementById('aiChatMessages')) {
+        aiVoicePendingEl = appendAiMessage('user', '<span class="ai-voice-pending"><i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i><em>Transcribing…</em></span>');
+    } else if (!on && aiVoicePendingEl) {
+        aiVoicePendingEl.remove();
+        aiVoicePendingEl = null;
+    }
 }
 
 // A short message above the composer (e.g. "Too short"), gone after a few seconds.
@@ -4059,6 +4216,7 @@ function noteFrame(buf) {
     const level = Math.min(1, Math.sqrt(sum / buf.length) * 9);
     const panel = document.getElementById('aiNotePanel');
     if (panel && note.state === 'recording') panel.style.setProperty('--level', String(level));
+    if (note.state === 'recording') { const dk = document.getElementById('aiDock'); if (dk) dk.style.setProperty('--level', String(level)); }
     if (note.state === 'recording' && note.engine === 'server') note.chunks.push(new Float32Array(buf));
 }
 
@@ -6344,3 +6502,142 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 });
+
+// ============================================================
+// MOBILE NAVIGATION — a side menu on phones (the tab row stays on desktop)
+// ============================================================
+// On a phone the tab row used up a strip of the screen on every page and made Practice share its space. Below 640px the row is
+// hidden and a menu button (☰) opens a drawer from the left instead; Practice then takes the whole screen. The drawer is built
+// from the real tab buttons (whatever is visible for this student / the music portal / the admin), so it can never list a tab
+// that doesn't exist, and choosing an item simply clicks that tab button. Accessibility: a modal dialog (focus moves in and is
+// kept there, Escape / scrim / ✕ / swipe-left close it, focus goes back to the ☰ that opened it, the page behind is inert).
+const navMQ = window.matchMedia('(max-width: 640px)');
+let navOpener = null, navCloseTimer = null, navSwipe = null;
+
+function navTabs() {
+    return [...document.querySelectorAll('#tabNav .tab-btn')].filter(b => b.style.display !== 'none');
+}
+function navLabel(btn) {
+    const short = btn.querySelector('.tab-short') || btn.querySelector('.tab-long');
+    return (short ? short.textContent : btn.textContent).replace(/\s+/g, ' ').trim();
+}
+
+// Creates the drawer once. It lives on <body>, outside #mainApp, so the app can be made inert while it is open.
+function navEnsure() {
+    if (document.getElementById('navDrawer')) return;
+    const scrim = document.createElement('div');
+    scrim.id = 'navScrim'; scrim.className = 'nav-scrim'; scrim.hidden = true;
+    const drawer = document.createElement('aside');
+    drawer.id = 'navDrawer'; drawer.className = 'nav-drawer'; drawer.hidden = true;
+    drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'Menu');
+    document.body.append(scrim, drawer);
+    scrim.addEventListener('click', () => navClose());
+    drawer.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-nav-tab]');
+        if (item) { navGo(item.dataset.navTab); return; }
+        if (e.target.closest('.nav-close')) navClose();
+        else if (e.target.closest('[data-nav-book]')) { navClose(false); window.open('https://calendly.com/aaronsiebertsio/lesson', '_blank'); }
+        else if (e.target.closest('[data-nav-logout]')) { navClose(false); document.getElementById('logoutBtn')?.click(); }
+    });
+    drawer.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const f = [...drawer.querySelectorAll('button:not([disabled])')];
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    // swipe left to close
+    drawer.addEventListener('touchstart', (e) => { const t = e.touches[0]; navSwipe = { x: t.clientX, y: t.clientY }; }, { passive: true });
+    drawer.addEventListener('touchmove', (e) => {
+        if (!navSwipe) return;
+        const t = e.touches[0];
+        if (navSwipe.x - t.clientX > 60 && Math.abs(t.clientY - navSwipe.y) < 40) { navSwipe = null; navClose(); }
+    }, { passive: true });
+    drawer.addEventListener('touchend', () => { navSwipe = null; }, { passive: true });
+}
+
+function navRender() {
+    const drawer = document.getElementById('navDrawer');
+    if (!drawer) return;
+    const active = document.querySelector('#tabNav .tab-btn.active');
+    const items = navTabs().map(b => {
+        const icon = (b.querySelector('i') || {}).className || 'fas fa-circle';
+        const on = b === active;
+        return `<button type="button" class="nav-item${on ? ' is-active' : ''}" data-nav-tab="${escapeAttr(b.dataset.tab)}"${on ? ' aria-current="page"' : ''}>
+            <span class="nav-ico"><i class="${escapeAttr(icon)}"></i></span><span class="nav-txt">${escapeHtml(navLabel(b))}</span></button>`;
+    }).join('');
+    const name = (currentUser && currentUser.name) || '';
+    const title = document.getElementById('portalTitle')?.textContent || 'Menu';
+    const role = currentUser ? (currentUser.isAdmin ? 'Admin' : currentUser.type === 'music' ? 'Music student' : 'Spanish student') : '';
+    const book = document.getElementById('bookLessonBtn')
+        ? `<button type="button" class="nav-item" data-nav-book><span class="nav-ico"><i class="fas fa-calendar-plus"></i></span><span class="nav-txt">Book a lesson</span></button>` : '';
+    drawer.innerHTML = `<div class="nav-head">
+            <div class="nav-brand">${escapeHtml(title)}</div>
+            <button type="button" class="nav-close" aria-label="Close menu"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="nav-user"><span class="nav-avatar" aria-hidden="true">${escapeHtml((name.trim()[0] || '?').toUpperCase())}</span>
+            <span class="nav-user-txt"><b>${escapeHtml(name || 'Welcome')}</b><small>${escapeHtml(role)}</small></span></div>
+        <nav class="nav-list" aria-label="Sections">${items}</nav>
+        <div class="nav-foot">${book}<button type="button" class="nav-item nav-logout" data-nav-logout><span class="nav-ico"><i class="fas fa-arrow-right-from-bracket"></i></span><span class="nav-txt">Log out</span></button></div>`;
+}
+
+function navSetExpanded(on) {
+    document.querySelectorAll('.nav-hamburger').forEach(b => b.setAttribute('aria-expanded', on ? 'true' : 'false'));
+}
+
+function navOpen(opener) {
+    if (!navMQ.matches) return;
+    navEnsure();
+    navRender();
+    clearTimeout(navCloseTimer);
+    const drawer = document.getElementById('navDrawer'), scrim = document.getElementById('navScrim');
+    navOpener = opener || document.activeElement;
+    drawer.hidden = false; scrim.hidden = false;
+    document.getElementById('mainApp').inert = true;
+    document.getElementById('bookLessonBtn')?.setAttribute('inert', '');
+    document.body.classList.add('nav-open');
+    navSetExpanded(true);
+    requestAnimationFrame(() => { drawer.classList.add('is-open'); scrim.classList.add('is-open'); });
+    (drawer.querySelector('.nav-item.is-active') || drawer.querySelector('.nav-item'))?.focus({ preventScroll: true });
+}
+
+function navClose(restoreFocus) {
+    const drawer = document.getElementById('navDrawer'), scrim = document.getElementById('navScrim');
+    if (!drawer || drawer.hidden) return;
+    drawer.classList.remove('is-open'); scrim.classList.remove('is-open');
+    document.getElementById('mainApp').inert = false;
+    document.getElementById('bookLessonBtn')?.removeAttribute('inert');
+    document.body.classList.remove('nav-open');
+    navSetExpanded(false);
+    clearTimeout(navCloseTimer);
+    navCloseTimer = setTimeout(() => { drawer.hidden = true; scrim.hidden = true; }, 260);
+    if (restoreFocus !== false && navOpener && document.contains(navOpener)) { try { navOpener.focus({ preventScroll: true }); } catch (e) {} }
+}
+
+function navGo(tab) {
+    navClose(false);
+    const btn = document.querySelector(`#tabNav .tab-btn[data-tab="${tab}"]`);
+    if (btn) btn.click();
+    window.scrollTo(0, 0);
+}
+
+// A ☰ button: one in the page header, one in the practice header, one on the practice end screens.
+function navHamburger(extraClass) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'nav-hamburger' + (extraClass ? ' ' + extraClass : '');
+    b.setAttribute('aria-label', 'Open menu'); b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false');
+    b.innerHTML = '<i class="fas fa-bars"></i>';
+    b.addEventListener('click', () => navOpen(b));
+    return b;
+}
+
+function navInit() {
+    const top = document.querySelector('#mainApp .header-top');
+    if (top && !top.querySelector('.nav-hamburger')) top.prepend(navHamburger('nav-hamburger-header'));
+    const recap = document.getElementById('aiRecapView');
+    if (recap && !recap.querySelector('.nav-hamburger')) recap.prepend(navHamburger('nav-hamburger-recap'));
+}
+document.addEventListener('DOMContentLoaded', navInit);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('nav-open')) navClose(); });
+navMQ.addEventListener('change', (e) => { if (!e.matches) navClose(false); });

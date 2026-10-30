@@ -12,13 +12,21 @@
 // Deploy with the default JWT verification ENABLED. Like ai-companion it additionally resolves the
 // token via /auth/v1/user so only a real logged-in student can spend the voice budget.
 //
-// Secrets: ELEVENLABS_API_KEY (required), ELEVENLABS_VOICE_ID (optional, pick a Spanish voice in the
-// ElevenLabs voice library), ELEVENLABS_MODEL (optional, default eleven_flash_v2_5; use
+// Secrets: ELEVENLABS_API_KEY (required), ELEVENLABS_VOICE_ID (optional: the default voice, "carolina" below), ELEVENLABS_MODEL (optional, default eleven_flash_v2_5; use
 // eleven_multilingual_v2 for higher quality at twice the cost and a little more delay).
 
 const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 const VOICE_ID = Deno.env.get("ELEVENLABS_VOICE_ID") || "21m00Tcm4TlvDq8ikWAM";
 const MODEL_ID = Deno.env.get("ELEVENLABS_MODEL") || "eleven_flash_v2_5";
+
+// Voices a student may choose between (all added to Aaron's ElevenLabs "My Voices"). The request carries only a short key,
+// never a voice id, so nobody can spend the budget on an arbitrary voice. Unknown/missing key = the default voice above.
+const VOICES: Record<string, string> = {
+  carolina: VOICE_ID,
+  sofia: "b2htR0pMe28pYwCY9gnP",   // Sofía: Colombian (Medellín), female
+  diego: "hLWSpwRIXvafYWP2GPET",   // Diego: neutral Latin American, male
+  salva: "hyKxCTlAqtnW188CgltM",   // Salva: Peninsular, male
+};
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
@@ -88,7 +96,7 @@ Deno.serve(async (req: Request) => {
   const user = await userRes.json();
   if (!user?.id) return json(req, { error: "Not authenticated" }, 401);
 
-  let body: { text?: unknown; lang?: unknown; pace?: unknown };
+  let body: { text?: unknown; lang?: unknown; pace?: unknown; voice?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -98,6 +106,7 @@ Deno.serve(async (req: Request) => {
   if (!text) return json(req, { error: "text is required" }, 400);
   const lang = body.lang === "en" ? "en" : "es";
   const speed = SPEEDS[body.pace === "slow" ? "slow" : "normal"];
+  const voiceId = (typeof body.voice === "string" && VOICES[body.voice]) || VOICE_ID;
 
   if (!tryConsume(user.id, SPEAK_RULES)) {
     return json(req, { error: "Vas muy rápido. Espera un momento e inténtalo otra vez." }, 429);
@@ -113,7 +122,7 @@ Deno.serve(async (req: Request) => {
     if (/flash|turbo/i.test(MODEL_ID)) payload.language_code = lang;
 
     const res = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(VOICE_ID)}?output_format=mp3_44100_64`,
+      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_64`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "xi-api-key": ELEVENLABS_API_KEY, Accept: "audio/mpeg" },
