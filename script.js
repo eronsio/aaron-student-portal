@@ -1226,7 +1226,9 @@ async function loadUserFromSession(session) {
             driveFolder: profile.drive_folder || '',
             thisWeek: profile.this_week || ''
         };
+        aiApplyRemoteVoice(session.user);
         showMainApp();
+        aiSyncPull();
     } catch(err) {
         console.error('loadUserFromSession error:', err);
         if (err instanceof TypeError) {
@@ -1644,6 +1646,7 @@ async function handleLogout() {
 }
 
 function showLoginModal() {
+    bootSplashHide();
     loginModal.classList.remove('hidden');
     mainApp.classList.add('hidden');
     document.getElementById('adminFloatingBar')?.classList.add('hidden');
@@ -1677,6 +1680,7 @@ function maybeShowInstallTip() {
 }
 
 async function showMainApp() {
+    bootSplashHide();
     loginModal.classList.add('hidden');
     mainApp.classList.remove('hidden');
     document.body.style.overflow = 'auto';
@@ -2503,6 +2507,19 @@ function ttsTutorVoiceKey() {
     return TUTOR_VOICES.some(v => v.key === k) ? k : TUTOR_VOICES[0].key;
 }
 function ttsTutorVoice() { const k = ttsTutorVoiceKey(); return TUTOR_VOICES.find(v => v.key === k); }
+// The choice follows the student to other devices: it is kept in their sign-in profile's metadata (no database table needed).
+async function sbSaveTutorVoice(key) {
+    if (!_accessToken || !currentUser || currentUser.isAdmin || currentUser.isPreview) return;
+    try {
+        await fetch(`${SUPABASE_URL}/auth/v1/user`, { method: 'PUT', headers: _headers(_accessToken), body: JSON.stringify({ data: { tutor_voice: key } }) });
+    } catch (e) { /* offline: the device keeps the choice */ }
+}
+function aiApplyRemoteVoice(user) {
+    const k = user && user.user_metadata && user.user_metadata.tutor_voice;
+    if (!TUTOR_VOICES.some(v => v.key === k)) return;
+    try { localStorage.setItem('aiTutorVoice', k); } catch (e) {}
+    aiRefreshVoiceLabel();
+}
 function aiRefreshVoiceLabel() {
     const b = document.getElementById('aiVoicePick');
     if (b) b.innerHTML = `${escapeHtml(ttsTutorVoice().name)} <i class="fas fa-chevron-right"></i>`;
@@ -2525,6 +2542,7 @@ function aiOpenVoices() {
             <p class="ai-mw-note">${Date.now() < ttsServerUntil ? 'The natural voices are not available right now, so this device\'s own voice is being used. ' : ''}Your choice is saved on this device.</p>`;
         body.querySelectorAll('[data-voice]').forEach(b => b.addEventListener('click', () => {
             try { localStorage.setItem('aiTutorVoice', b.dataset.voice); } catch (e) {}
+            sbSaveTutorVoice(b.dataset.voice);
             aiRefreshVoiceLabel(); draw();
             speakText(TUTOR_VOICES.find(v => v.key === b.dataset.voice).sample, { force: true, voice: b.dataset.voice });
         }));
@@ -2904,9 +2922,19 @@ function aiWordsKey() { return 'aiWords_' + ((currentUser && currentUser.id) || 
 function aiWordsLoad() {
     try { const a = JSON.parse(localStorage.getItem(aiWordsKey()) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
 }
+function aiWordsDelKey() { return 'aiWordsDel_' + ((currentUser && currentUser.id) || 'guest'); }
+function aiWordsDelLoad() {
+    try { const o = JSON.parse(localStorage.getItem(aiWordsDelKey()) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; }
+}
 function aiWordsStore(list) {
-    try { localStorage.setItem(aiWordsKey(), JSON.stringify(list.slice(0, 300))); } catch (e) {}
+    // words that disappeared are remembered (with the time) so another device does not bring them back
+    const before = aiWordsLoad(), now = Date.now(), del = aiWordsDelLoad();
+    const keep = new Set(list.map(aiWordId));
+    before.forEach(e => { const k = aiWordId(e); if (!keep.has(k)) del[k] = now; });
+    keep.forEach(k => { if (del[k] && !before.some(e => aiWordId(e) === k)) delete del[k]; });
+    try { localStorage.setItem(aiWordsKey(), JSON.stringify(list.slice(0, 300))); localStorage.setItem(aiWordsDelKey(), JSON.stringify(del)); } catch (e) {}
     aiRefreshWordsCount();
+    aiSyncSoon();
 }
 function aiWordId(e) { return practiceWordKey(e.w || e.lemma || ''); }
 function aiWordIsSaved(id) { return aiWordsLoad().some(e => aiWordId(e) === id); }
@@ -3043,6 +3071,7 @@ function aiRecordProgress(text) {
     const was = aiStreakNow().doneToday;
     try { localStorage.setItem(aiProgressKey(), JSON.stringify(practiceProgressAdd(aiProgressLoad(), practiceDayKey(), words))); } catch (e) {}
     aiRefreshStreak(!was && aiStreakNow().doneToday);
+    aiSyncSoon();
 }
 // The little flame in the chat header: the streak count; lit once today's goal is done. `bump` = just reached it.
 function aiRefreshStreak(bump) {
@@ -3056,6 +3085,54 @@ function aiRefreshStreak(bump) {
     }
     const sub = document.getElementById('aiProgressSub');
     if (sub) sub.textContent = info.current ? `${info.current}-day streak` : 'Your practice';
+}
+
+// ---- keeping saved words + streak across devices (table `student_app_state`, see supabase/student_app_state.sql) ----
+// Pull once per sign-in and merge with what is on this device, then push after every change (debounced). If the table does not exist
+// yet (the SQL has not been run) or the student is the admin previewing, none of this does anything and the data stays on the device.
+const aiSync = { off: false, uid: '', pulled: false, timer: null };
+function aiSyncOk() { return !aiSync.off && _accessToken && currentUser && currentUser.id && !currentUser.isAdmin && !currentUser.isPreview; }
+function aiSyncLocal() { return { words: aiWordsLoad(), del: aiWordsDelLoad(), progress: aiProgressLoad() }; }
+function aiSyncApply(state) {
+    try {
+        localStorage.setItem(aiWordsKey(), JSON.stringify(state.words));
+        localStorage.setItem(aiWordsDelKey(), JSON.stringify(state.del));
+        localStorage.setItem(aiProgressKey(), JSON.stringify(state.progress));
+    } catch (e) {}
+    aiRefreshWordsCount();
+    aiRefreshStreak();
+}
+async function aiSyncPull() {
+    if (!aiSyncOk()) return;
+    if (aiSync.uid !== currentUser.id) { aiSync.uid = currentUser.id; aiSync.pulled = false; }
+    if (aiSync.pulled) return;
+    aiSync.pulled = true;
+    try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/student_app_state?user_id=eq.${currentUser.id}&select=words,progress`, { headers: _headers(_accessToken) });
+        if (!r.ok) { if (r.status === 404 || r.status === 400 || r.status === 406) aiSync.off = true; else aiSync.pulled = false; return; }
+        const row = (await r.json())[0];
+        const remote = row ? { words: (row.words && row.words.list) || [], del: (row.words && row.words.del) || {}, progress: row.progress } : null;
+        const merged = practiceMergeState(aiSyncLocal(), remote);
+        aiSyncApply(merged);
+        if (!remote || JSON.stringify(merged.words.map(aiWordId).sort()) !== JSON.stringify(remote.words.map(aiWordId).sort()) || (merged.progress.m !== (remote.progress && remote.progress.m))) aiSyncSoon();
+    } catch (e) { aiSync.pulled = false; }
+}
+function aiSyncSoon() {
+    if (!aiSyncOk()) return;
+    clearTimeout(aiSync.timer);
+    aiSync.timer = setTimeout(aiSyncPush, 2500);
+}
+async function aiSyncPush() {
+    if (!aiSyncOk() || !aiSync.pulled) return;   // never push before the first pull: that could overwrite another device's data
+    const st = aiSyncLocal();
+    try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/student_app_state`, {
+            method: 'POST',
+            headers: { ..._headers(_accessToken), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify({ user_id: currentUser.id, words: { list: st.words, del: st.del }, progress: st.progress, updated_at: new Date().toISOString() })
+        });
+        if (r.status === 404) aiSync.off = true;
+    } catch (e) { /* offline: the next change tries again */ }
 }
 
 function aiOpenProgress() {
@@ -3558,6 +3635,10 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.ai-popover')
         const keyboard = window.innerHeight - vv.height > 140;
         const was = document.body.classList.contains('kb-open');
         document.body.classList.toggle('kb-open', keyboard);
+        // A hardware keyboard (iPad / Simulator / Bluetooth) shows no on-screen keyboard, but iOS still floats its ^ v ✓ bar over the
+        // bottom of the page without telling it: lift the message box clear of that bar while the box has focus.
+        const typing = document.activeElement && document.activeElement.id === 'aiMessageInput';
+        document.body.classList.toggle('kb-bar', typing && !keyboard && window.matchMedia('(pointer: coarse)').matches);
         if (keyboard !== was && document.body.classList.contains('on-ai-tab')) {
             const box = document.getElementById('aiChatMessages');
             if (box) setTimeout(() => aiScrollToEnd(box, true), 80);
@@ -3565,6 +3646,9 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.ai-popover')
     };
     vv.addEventListener('resize', sync);
     vv.addEventListener('scroll', sync);
+    // the software keyboard needs a moment to slide up before we can tell it from the hardware-keyboard bar
+    document.addEventListener('focusin', () => { sync(); setTimeout(sync, 450); });
+    document.addEventListener('focusout', () => setTimeout(sync, 60));
     sync();
 })();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') aiClosePopovers(); });
@@ -6598,13 +6682,15 @@ function navOpen(opener) {
     document.getElementById('bookLessonBtn')?.setAttribute('inert', '');
     document.body.classList.add('nav-open');
     navSetExpanded(true);
+    try { history.pushState({ navDrawer: true }, ''); navHistory = true; } catch (e) {}
     requestAnimationFrame(() => { drawer.classList.add('is-open'); scrim.classList.add('is-open'); });
     (drawer.querySelector('.nav-item.is-active') || drawer.querySelector('.nav-item'))?.focus({ preventScroll: true });
 }
 
-function navClose(restoreFocus) {
+function navClose(restoreFocus, fromPop) {
     const drawer = document.getElementById('navDrawer'), scrim = document.getElementById('navScrim');
-    if (!drawer || drawer.hidden) return;
+    if (!drawer || drawer.hidden || !document.body.classList.contains('nav-open')) return;
+    if (navHistory && !fromPop) { navHistory = false; try { history.back(); } catch (e) {} }
     drawer.classList.remove('is-open'); scrim.classList.remove('is-open');
     document.getElementById('mainApp').inert = false;
     document.getElementById('bookLessonBtn')?.removeAttribute('inert');
@@ -6641,3 +6727,46 @@ function navInit() {
 document.addEventListener('DOMContentLoaded', navInit);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.body.classList.contains('nav-open')) navClose(); });
 navMQ.addEventListener('change', (e) => { if (!e.matches) navClose(false); });
+
+// ============================================================
+// START-UP SPLASH — no blank / login flash while a saved login is being restored
+// ============================================================
+(function () {
+    const splash = document.createElement('div');
+    splash.id = 'bootSplash';
+    splash.setAttribute('role', 'status');
+    splash.setAttribute('aria-label', 'Loading');
+    splash.innerHTML = '<i class="fas fa-graduation-cap" aria-hidden="true"></i><span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    document.body.appendChild(splash);
+    setTimeout(bootSplashHide, 9000);   // never leave it up if something goes wrong
+})();
+function bootSplashHide() {
+    const s = document.getElementById('bootSplash');
+    if (!s) return;
+    s.classList.add('is-out');
+    setTimeout(() => s.remove(), 260);
+}
+
+// ---- menu: the Back button / back gesture closes it, and an edge swipe opens it in the installed app ----
+// (In a normal Safari tab the left edge belongs to the browser's own back swipe, so the edge swipe is for the home-screen app only.)
+let navHistory = false;   // true while the drawer owns a history entry
+window.addEventListener('popstate', () => {
+    if (navHistory) { navHistory = false; navClose(false, true); }
+});
+(function () {
+    const standalone = () => navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    let s = null;
+    document.addEventListener('touchstart', (e) => {
+        const t = e.touches[0];
+        s = (e.touches.length === 1 && t.clientX < 18 && standalone() && navMQ.matches && !document.body.classList.contains('nav-open')) ? { x: t.clientX, y: t.clientY } : null;
+    }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+        if (!s) return;
+        const t = e.touches[0];
+        if (t.clientX - s.x > 56 && Math.abs(t.clientY - s.y) < 36) {
+            s = null;
+            if (!document.getElementById('mainApp').classList.contains('hidden') && !document.getElementById('aiSheet')) navOpen(document.querySelector('.nav-hamburger:not([hidden])'));
+        }
+    }, { passive: true });
+    document.addEventListener('touchend', () => { s = null; }, { passive: true });
+})();

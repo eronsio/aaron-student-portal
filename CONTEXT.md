@@ -233,6 +233,15 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   `localStorage aiTutorVoice`, picker = ⚙ → "Tutor voice" (`aiOpenVoices`, preview buttons); `speakViaServer` sends `voice: <key>`; the
   `ai-speak` function maps keys to ElevenLabs voice ids (allow-list `VOICES`; unknown key = the default `ELEVENLABS_VOICE_ID`). The three
   extra voices were added to Aaron's ElevenLabs "My Voices". NOTE: the function must be redeployed for the picker to change the sound.
+- **Polish round (2026-10-30, later):** (a) hardware-keyboard bar: iOS floats its ^ v ✓ bar over the bottom without resizing the page; the
+  visual-viewport sync sets `body.kb-bar` (box focused + no soft keyboard + coarse pointer) and styles.css lifts the footer 60px. (b) start-up splash
+  (`#bootSplash`, created in script.js, removed by `bootSplashHide()` from `showMainApp`/`showLoginModal`, 9 s safety). (c) menu: opening pushes a
+  history entry (`navHistory`) so the Back button/gesture closes it; edge-swipe-to-open only in the installed app (standalone), because in Safari the
+  edge belongs to the browser. (d) tutor voice follows the student: saved in auth user_metadata (`sbSaveTutorVoice` PUT /auth/v1/user, read back by
+  `aiApplyRemoteVoice` in `loadUserFromSession`), no table needed. (e) saved words + streak sync through table `student_app_state`
+  (`supabase/student_app_state.sql`, RLS own-row, Aaron runs it once): `aiSyncPull` at sign-in (merge via `practiceMergeState`: newest word wins,
+  deletions travel as tombstones `aiWordsDel_<uid>`, day counts take the max), `aiSyncSoon/Push` after each change, never pushes before the first
+  successful pull; if the table is missing it switches itself off and everything stays per-device.
 - **Varied, personal openings (2026-10-29):** no mode has a fixed greeting any more (free chat used to always say the same line). Every session's
   hidden first message comes from `practiceOpeningStart()` → `practiceOpeningBrief`: day + time of day, one random angle from
   `PRACTICE_OPENING_ANGLES`, and the student's last 6 openings (`localStorage aiOpenings_<userId>`, saved by `practiceOpeningsRemember`) to avoid.

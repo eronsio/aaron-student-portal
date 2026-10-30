@@ -187,6 +187,33 @@ function practiceStreakInfo(prog, todayKey) {
     return { current, best, doneToday, todayM, goal: PRACTICE_DAY_GOAL, days: goalDays.length, messages: p.m, words: p.w, week };
 }
 
+// ---- merging a student's saved words + progress between devices ----
+// local / remote = { words: [..], del: { key: deletedAtMs }, progress: { days, m, w } } (any part may be missing).
+// A word counts as deleted when it was removed after it was saved (tombstone newer than the word's own time), so a word removed on one
+// phone does not come back from another; otherwise the newest copy of each word wins. Days keep the larger count; totals keep the larger.
+function practiceMergeState(local, remote) {
+    const L = local || {}, R = remote || {};
+    const del = {};
+    [L.del, R.del].forEach(d => Object.keys(d || {}).forEach(k => { del[k] = Math.max(del[k] || 0, +d[k] || 0); }));
+    const byKey = new Map();
+    [].concat(L.words || [], R.words || []).forEach(e => {
+        const k = practiceWordKey(e && (e.w || e.lemma) || '');
+        if (!k) return;
+        const cur = byKey.get(k);
+        if (!cur || (+e.t || 0) > (+cur.t || 0)) byKey.set(k, e);
+    });
+    const words = [...byKey.entries()].filter(([k, e]) => !(del[k] && del[k] >= (+e.t || 0))).map(([, e]) => e)
+        .sort((a, b) => (+b.t || 0) - (+a.t || 0)).slice(0, 300);
+    const lp = practiceProgressNormalize(L.progress), rp = practiceProgressNormalize(R.progress);
+    const days = {};
+    [lp.days, rp.days].forEach(d => Object.keys(d).forEach(k => {
+        const cur = days[k] || { m: 0, w: 0 };
+        days[k] = { m: Math.max(cur.m, +d[k].m || 0), w: Math.max(cur.w, +d[k].w || 0) };
+    }));
+    Object.keys(days).sort().slice(0, Math.max(0, Object.keys(days).length - PRACTICE_DAYS_KEPT)).forEach(k => delete days[k]);
+    return { words, del, progress: { days, m: Math.max(lp.m, rp.m), w: Math.max(lp.w, rp.w) } };
+}
+
 // ---- tap a word in a tutor message ----
 // Splits text into words and everything between them, so each word can be wrapped in a tappable span.
 function practiceWordSplit(text) {
@@ -1438,7 +1465,7 @@ if (typeof module !== 'undefined' && module.exports) {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
         practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo,
-        practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES,
+        practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES
