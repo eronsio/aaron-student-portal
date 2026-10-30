@@ -346,8 +346,13 @@ function practiceOpeningBrief(opts) {
     const part = h < 12 ? 'morning' : h < 19 ? 'afternoon' : 'evening';
     const lines = ['[START SESSION - greet the student and set up the activity in Spanish]'];
     lines.push(`(For you only, do not mention this: it is ${day} ${part} where the student is, so greet in a way that fits (not always "¡Hola!").`);
-    if (o.angle) lines.push(`Begin this way: ${o.angle}.`);
-    lines.push('Keep it to one or two short sentences, ending in ONE question.');
+    if (o.calibrate) {
+        lines.push('You do NOT know this student\'s level yet, so this opening is a placement check. Open with a plain greeting and the easiest possible question (their name, or how they are): ONE sentence of at most 8 words, present tense, everyday words only. Do not invent a scene or any fact about them. Judge their level from how they answer, then step the questions up or down from there.');
+        lines.push('Keep it to one short sentence, ending in ONE question.');
+    } else {
+        if (o.angle) lines.push(`Begin this way: ${o.angle}.`);
+        lines.push('Keep it to one or two short sentences, ending in ONE question.');
+    }
     const avoid = (o.avoid || []).filter(Boolean).slice(0, 6);
     if (avoid.length) lines.push(`Your recent openings were: ${avoid.map(a => '"' + practiceClip(a, 110) + '"').join(' | ')}. Open with a clearly different greeting AND a different question.`);
     return lines.join(' ') + ')';
@@ -364,7 +369,10 @@ function practiceOpeningsRemember(text) {
 }
 function practiceOpeningStart(now) {
     const angle = PRACTICE_OPENING_ANGLES[Math.floor(Math.random() * PRACTICE_OPENING_ANGLES.length)];
-    return practiceOpeningBrief({ now: now || new Date(), angle, avoid: practiceOpeningsLoad() });
+    // No level, notes or focus areas on file = the app knows nothing about this student: start with a placement check.
+    const prof = practiceCtx && practiceCtx.profile;
+    const calibrate = !(prof && (prof.level || prof.ai_notes)) && !((practiceCtx && practiceCtx.focus) || []).length;
+    return practiceOpeningBrief({ now: now || new Date(), angle, avoid: practiceOpeningsLoad(), calibrate });
 }
 
 function practiceExampleLine(ex) {
@@ -710,7 +718,7 @@ function buildAISystemPrompt(mode, context, insight, opts) {
     };
     const levelLine = (profile && profile.level)
         ? `Nivel del estudiante: ${practiceClip(profile.level, 120)}. Adapta tu vocabulario y gramática a ese nivel.`
-        : 'Adapta el nivel: vocabulario sencillo, verbos del presente principalmente.';
+        : 'No sabes su nivel: empieza con frases MUY cortas (máximo 8 palabras), verbos en presente y palabras de todos los días. Observa cómo responde y sube o baja la dificultad poco a poco. Si contesta en inglés o se atasca, añade una pista breve en inglés y haz una pregunta más fácil. Nunca inventes datos ni escenas sobre el estudiante.';
 
     // What this student has actually been doing lately (every mode, so a free chat still starts from their life, not from nothing).
     const thisWeek = currentUser && currentUser.thisWeek ? practiceClip(currentUser.thisWeek, 500) : '';
