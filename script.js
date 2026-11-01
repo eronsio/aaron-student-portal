@@ -99,7 +99,8 @@ async function sbRefreshSession(refreshToken) {
     try {
         const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
             method: 'POST', headers: _headers(),
-            body: JSON.stringify({ refresh_token: refreshToken })
+            body: JSON.stringify({ refresh_token: refreshToken }),
+            signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(15000) : undefined   // a hung connection must not freeze start-up
         });
         if (r.status >= 500) return { offline: true };
         const data = await r.json();
@@ -4877,18 +4878,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // Register horizontal rule blot for Quill
-document.addEventListener('DOMContentLoaded', () => {
-    if (window.Quill) {
-        const BlockEmbed = Quill.import('blots/block/embed');
-        class DividerBlot extends BlockEmbed {
-            static create() { return document.createElement('hr'); }
-            static value() { return true; }
-        }
-        DividerBlot.blotName = 'divider';
-        DividerBlot.tagName = 'hr';
-        Quill.register(DividerBlot);
+// (Quill loads asynchronously so a slow CDN can't block the portal: this runs when the page is ready and again when Quill arrives.)
+function registerQuillDivider() {
+    if (!window.Quill || registerQuillDivider.done) return;
+    registerQuillDivider.done = true;
+    const BlockEmbed = Quill.import('blots/block/embed');
+    class DividerBlot extends BlockEmbed {
+        static create() { return document.createElement('hr'); }
+        static value() { return true; }
     }
-});
+    DividerBlot.blotName = 'divider';
+    DividerBlot.tagName = 'hr';
+    Quill.register(DividerBlot);
+}
+window.registerQuillDivider = registerQuillDivider;
+document.addEventListener('DOMContentLoaded', registerQuillDivider);
 
 // ============================================================
 // ADMIN PANEL
@@ -6732,13 +6736,17 @@ navMQ.addEventListener('change', (e) => { if (!e.matches) navClose(false); });
 // START-UP SPLASH — no blank / login flash while a saved login is being restored
 // ============================================================
 (function () {
-    const splash = document.createElement('div');
-    splash.id = 'bootSplash';
-    splash.setAttribute('role', 'status');
-    splash.setAttribute('aria-label', 'Loading');
-    splash.innerHTML = '<i class="fas fa-graduation-cap" aria-hidden="true"></i><span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
-    document.body.appendChild(splash);
-    setTimeout(bootSplashHide, 9000);   // never leave it up if something goes wrong
+    // The splash is plain HTML in index.html (it must show before any script arrives); build it here only if it is missing.
+    if (!document.getElementById('bootSplash')) {
+        const splash = document.createElement('div');
+        splash.id = 'bootSplash';
+        splash.setAttribute('role', 'status');
+        splash.setAttribute('aria-label', 'Loading');
+        splash.innerHTML = '<i class="fas fa-graduation-cap" aria-hidden="true"></i><span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span><p class="boot-slow" hidden>Taking longer than usual. Check your connection.<br><button type="button" onclick="location.reload()">Try again</button></p>';
+        document.body.appendChild(splash);
+    }
+    // If start-up is still unfinished after 8 s, say so and offer a retry (never fall through to a blank page).
+    setTimeout(() => { const slow = document.querySelector('#bootSplash .boot-slow'); if (slow) slow.hidden = false; }, 8000);
 })();
 function bootSplashHide() {
     const s = document.getElementById('bootSplash');
