@@ -178,6 +178,23 @@ Ties the companion to each student's lesson notes and reports back to Aaron.
 - Setup: run `supabase/speaking_practice.sql` once in the Supabase SQL editor, deploy the `ai-companion` function with the
   `ANTHROPIC_API_KEY` secret, then enable students in Admin → Speaking Practice.
 
+### Skills (mastery) + daily mission (2026-11-07)
+Gamification that is tied to what the student is actually learning. Logic is in `practice.js` (`practiceSkill*`, `practiceMission*`, `practiceStripHits`,
+`practiceSessionPlan`), UI in `script.js` (`aiApplyHits`, `aiRefreshMission`, `aiMissionNow`, `aiSkillsHtml`) and a block at the end of `styles.css`.
+- **How a clean use is detected:** the plan block gives every target/radar area a `(clave: key)`; when the student's latest message used one correctly the tutor ends
+  its reply with a hidden `{{ok:key}}` (`PRACTICE_HITS_RULE`, only added when the plan has keys). The client strips it before display, voice, saved chat and
+  transcript, and counts it ONLY if the key is on the student's plan, the message was not a help request, the same reply contains NO correction, and the
+  area has had fewer than 5 marks this session. The marks are stored on the assistant turn (`turn.hits`) of `practice_sessions.transcript` and shown to the
+  report generator.
+- **Mastery:** per area, up to 2 clean uses per day count; 5 points over at least 3 different days = mastered (sticky: `m` = day it happened). Mastered areas
+  stay in the rotation only as spaced review (`PRACTICE_MASTERED_PENALTY` in `practicePickTargets`). Teacher-set `student_focus.status` is NOT changed.
+- **Daily mission:** one unmastered area (rotating through the top 3 by priority) to use correctly 3 times; chosen once per day and saved in
+  `progress.mission`; the mission area becomes target 1 of the day's session (`practiceSessionPlan`). With no focus areas the mission is the old
+  5-message goal. Shown as a strip under the lesson bar (visible on phones), in the "My progress" sheet, and as a card when completed/mastered.
+- **Storage:** everything lives in the existing `student_app_state.progress` jsonb (`skills`, `mission`), merged between devices by `practiceMergeState`
+  (per-day max, earliest mastered day). No new SQL. Admin preview keeps marks under `<studentUid>|<key>` locally and never syncs them.
+- Not visible to the teacher yet except through the transcript marks; a mastery view in Admin → Speaking Practice would need a server-readable copy.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

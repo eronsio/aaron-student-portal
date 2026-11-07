@@ -2740,6 +2740,7 @@ async function startAiMode(mode, context) {
     studentInsightCache = await loadStudentInsight();
     await practiceBeginSession(mode, context);
     refreshAiActivityChips();
+    aiRefreshMission();
     if (aiStartSeq !== startToken) return;   // the student left (or restarted) while this was loading
     const messages = document.getElementById('aiChatMessages');
 
@@ -2754,7 +2755,7 @@ async function startAiMode(mode, context) {
         // Let the AI write the opening
         const systemPrompt = buildAISystemPrompt(mode, context, studentInsightCache);
         const startMsg = practiceOpeningStart();
-        const opening = await callAnthropicAPI([{ role: 'user', content: startMsg }], systemPrompt);
+        const opening = practiceStripHits(await callAnthropicAPI([{ role: 'user', content: startMsg }], systemPrompt)).text;
         if (aiStartSeq !== startToken) return;
         messages.innerHTML = '';
         appendAiMessage('bot', practiceFormatReply(opening), opening.startsWith('⚠️') ? '' : opening);
@@ -2867,7 +2868,9 @@ function aiRenderFeedback(entry) {
     const body = words.map(w => w.bad ? `<span class="ai-bad">${escapeHtml(w.t)}</span>` : escapeHtml(w.t)).join(' ');
     const tag = entry.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '';
     const ok = !entry.fixes.length;
-    bubble.innerHTML = `<p>${tag}${body}</p><div class="ai-fb ${ok ? 'is-ok' : 'has-fix'}">${ok ? '<i class="fas fa-check"></i> No corrections' : '<i class="fas fa-pen"></i> See the fix'}</div>`;
+    const hit = ok && entry.hits && entry.hits.length;
+    const okLabel = hit ? `<i class="fas fa-bullseye"></i> ${escapeHtml(practiceClip(entry.hits.map(h => h.area).join(' · '), 70))} &mdash; used correctly` : '<i class="fas fa-check"></i> No corrections';
+    bubble.innerHTML = `<p>${tag}${body}</p><div class="ai-fb ${ok ? 'is-ok' : 'has-fix'}${hit ? ' is-hit' : ''}">${ok ? okLabel : '<i class="fas fa-pen"></i> See the fix'}</div>`;
     bubble.setAttribute('role', 'button');
     bubble.tabIndex = 0;
     bubble.onclick = () => aiOpenFeedback(entry);
@@ -3066,11 +3069,76 @@ function aiProgressKey() { return 'aiProgress_' + ((currentUser && currentUser.i
 function aiProgressLoad() {
     try { return practiceProgressNormalize(JSON.parse(localStorage.getItem(aiProgressKey()) || 'null')); } catch (e) { return practiceProgressNormalize(null); }
 }
+function aiProgressSave(prog) { try { localStorage.setItem(aiProgressKey(), JSON.stringify(prog)); } catch (e) {} }
 function aiStreakNow() { return practiceStreakInfo(aiProgressLoad(), practiceDayKey()); }
+
+// ---- skills + daily mission (rules and maths in practice.js) ----
+// Today's mission, the same all day: the first look saves the choice into the progress object (so it cannot change after a mastery,
+// and a second device agrees).
+function aiMissionNow() {
+    const day = practiceDayKey();
+    const prog = aiProgressLoad();
+    const m = practiceMissionInfo(prog, practiceCtx.focus, day);
+    if (m.fresh) { aiProgressSave({ ...prog, mission: { day, key: m.key } }); aiSyncSoon(); m.fresh = false; }
+    return m;
+}
+// The tutor's marks that count: a focus area on this student's plan, and not more than a few per area in one session.
+function aiValidHits(keys) {
+    const out = [];
+    const turns = practiceSession ? practiceSession.turns : [];
+    (keys || []).forEach(k => {
+        const f = (practiceCtx.focus || []).find(x => x.key === k);
+        if (!f || out.some(h => h.key === k)) return;
+        const used = turns.reduce((n, t) => n + (Array.isArray(t.hits) && t.hits.includes(k) ? 1 : 0), 0);
+        if (used < PRACTICE_HITS_PER_SESSION) out.push({ key: k, area: f.area });
+    });
+    return out;
+}
+// Adds the clean uses to the student's skills and shows what changed (mastered an area, finished the mission).
+function aiApplyHits(hits) {
+    if (!hits.length) return;
+    const day = practiceDayKey();
+    const before = aiMissionNow();
+    let prog = aiProgressLoad();
+    const mastered = [];
+    hits.forEach(h => { const r = practiceSkillsAdd(prog, h.key, day); prog = r.progress; if (r.mastered) mastered.push(h); });
+    aiProgressSave(prog);
+    aiSyncSoon();
+    practiceRenderChips();
+    aiRefreshMission();
+    const after = aiMissionNow();
+    mastered.forEach(h => aiNote('mastered', `<i class="fas fa-graduation-cap"></i><div><b>Skill mastered</b><span>${escapeHtml(h.area)}</span></div>`));
+    if (before.kind === 'skill' && !before.complete && after.complete) aiNote('mission', `<i class="fas fa-flag-checkered"></i><div><b>Mission complete</b><span>${escapeHtml(after.area)} &mdash; ${after.goal} out of ${after.goal}</span></div>`);
+}
+// A small card in the conversation (not a message from anyone).
+function aiNote(kind, html) {
+    const box = document.getElementById('aiChatMessages');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.className = 'ai-milestone ai-milestone-' + kind;
+    el.setAttribute('role', 'status');
+    el.innerHTML = html;
+    box.appendChild(el);
+    aiScrollToEnd(box);
+}
+// The strip under the lesson bar: today's mission and how far along it is.
+function aiRefreshMission() {
+    const el = document.getElementById('aiMission');
+    if (!el) return;
+    const m = aiMissionNow();
+    const dots = Array.from({ length: m.goal }, (_, i) => `<i class="${i < m.done ? 'is-on' : ''}"></i>`).join('');
+    el.classList.toggle('is-complete', m.complete);
+    el.setAttribute('aria-label', `Today's mission: ${m.complete ? 'complete' : m.done + ' of ' + m.goal}`);
+    el.innerHTML = `<i class="fas fa-${m.complete ? 'circle-check' : 'bullseye'} ai-mission-icon"></i>
+        <span class="ai-mission-text"><small>Today's mission</small>${m.kind === 'skill'
+            ? (m.complete ? 'Done: ' : 'Use ') + '<b>' + escapeHtml(practiceClip(m.area, 48)) + '</b>' + (m.complete ? '' : ' correctly')
+            : (m.complete ? 'Done: <b>chatted in Spanish</b>' : 'Send <b>' + m.goal + ' messages</b> in Spanish')}</span>
+        <span class="ai-mission-dots" title="${m.done} of ${m.goal}">${dots}</span>`;
+}
 function aiRecordProgress(text) {
     const words = String(text || '').split(/\s+/).filter(Boolean).length;
     const was = aiStreakNow().doneToday;
-    try { localStorage.setItem(aiProgressKey(), JSON.stringify(practiceProgressAdd(aiProgressLoad(), practiceDayKey(), words))); } catch (e) {}
+    aiProgressSave(practiceProgressAdd(aiProgressLoad(), practiceDayKey(), words));
     aiRefreshStreak(!was && aiStreakNow().doneToday);
     aiSyncSoon();
 }
@@ -3086,6 +3154,7 @@ function aiRefreshStreak(bump) {
     }
     const sub = document.getElementById('aiProgressSub');
     if (sub) sub.textContent = info.current ? `${info.current}-day streak` : 'Your practice';
+    aiRefreshMission();
 }
 
 // ---- keeping saved words + streak across devices (table `student_app_state`, see supabase/student_app_state.sql) ----
@@ -3115,7 +3184,7 @@ async function aiSyncPull() {
         const remote = row ? { words: (row.words && row.words.list) || [], del: (row.words && row.words.del) || {}, progress: row.progress } : null;
         const merged = practiceMergeState(aiSyncLocal(), remote);
         aiSyncApply(merged);
-        if (!remote || JSON.stringify(merged.words.map(aiWordId).sort()) !== JSON.stringify(remote.words.map(aiWordId).sort()) || (merged.progress.m !== (remote.progress && remote.progress.m))) aiSyncSoon();
+        if (!remote || JSON.stringify(merged.words.map(aiWordId).sort()) !== JSON.stringify(remote.words.map(aiWordId).sort()) || (merged.progress.m !== (remote.progress && remote.progress.m)) || JSON.stringify(merged.progress.skills || {}) !== JSON.stringify((remote.progress && remote.progress.skills) || {}) || JSON.stringify(merged.progress.mission || null) !== JSON.stringify((remote.progress && remote.progress.mission) || null)) aiSyncSoon();
     } catch (e) { aiSync.pulled = false; }
 }
 function aiSyncSoon() {
@@ -3136,6 +3205,29 @@ async function aiSyncPush() {
     } catch (e) { /* offline: the next change tries again */ }
 }
 
+function aiMissionCardHtml() {
+    const m = aiMissionNow();
+    if (m.kind !== 'skill') return '';
+    return `<div class="ai-pr-mission${m.complete ? ' is-complete' : ''}">
+        <div class="ai-pr-goal-top"><span>Today's mission</span><b>${m.done} / ${m.goal}</b></div>
+        <p class="ai-pr-mission-text">${m.complete ? 'Complete: ' : 'Use '}<b>${escapeHtml(m.area)}</b>${m.complete ? '' : ' correctly in your messages.'}</p>
+        <div class="ai-pr-bar"><div style="width:${Math.round(100 * m.done / m.goal)}%"></div></div>
+    </div>`;
+}
+// Every focus area on the student's plan with how close they are to mastering it.
+function aiSkillsHtml() {
+    const day = practiceDayKey(), prog = aiProgressLoad();
+    const rows = (practiceCtx.focus || []).filter(f => f && f.key && f.status !== 'resolved')
+        .map(f => ({ f, k: practiceSkillInfo(prog, f.key, day) }))
+        .sort((a, b) => (a.k.mastered - b.k.mastered) || (b.k.frac - a.k.frac) || String(a.f.area).localeCompare(String(b.f.area)));
+    if (!rows.length) return '';
+    const label = k => k.mastered ? 'Mastered' : !k.points ? 'Not yet' : (k.points >= PRACTICE_MASTER_POINTS ? 'Almost: use it on another day' : Math.min(k.points, PRACTICE_MASTER_POINTS) + ' of ' + PRACTICE_MASTER_POINTS + ' clean uses');
+    return `<div class="ai-pr-skills"><h5>Your focus areas</h5>${rows.map(({ f, k }) => `<div class="ai-pr-skill${k.mastered ? ' is-mastered' : ''}">
+            <div class="ai-pr-skill-top"><span>${k.mastered ? '<i class="fas fa-check"></i> ' : ''}${escapeHtml(practiceClip(f.area, 70))}</span><small>${label(k)}</small></div>
+            <div class="ai-pr-bar"><div style="width:${Math.round(k.frac * 100)}%"></div></div>
+        </div>`).join('')}<p class="ai-mw-note">A clean use is a message your tutor found completely correct that used the focus area. Up to 2 count per day, so mastering one takes at least 3 days.</p></div>`;
+}
+
 function aiOpenProgress() {
     aiClosePopovers();
     const sheet = aiSheetShell('My progress', false);
@@ -3150,11 +3242,13 @@ function aiOpenProgress() {
             <div class="ai-pr-label">day streak</div>
         </div>
         <div class="ai-pr-week" aria-label="The last 7 days">${i.week.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.today ? ' is-today' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div>
+        ${aiMissionCardHtml()}
         <div class="ai-pr-goal">
             <div class="ai-pr-goal-top"><span>Today</span><b>${Math.min(i.todayM, i.goal)} / ${i.goal} messages</b></div>
             <div class="ai-pr-bar"><div style="width:${pct}%"></div></div>
             <p>${i.doneToday ? 'Today\'s goal is done — nice work.' : `Send ${left} more message${left === 1 ? '' : 's'} today to ${i.current ? 'keep your streak going' : 'start a streak'}.`}</p>
         </div>
+        ${aiSkillsHtml()}
         <div class="ai-pr-grid">
             <div><b>${i.best}</b><span>best streak</span></div>
             <div><b>${i.days}</b><span>practice days</span></div>
@@ -3296,22 +3390,33 @@ async function submitAiMessage(message, opts) {
         const systemPrompt = buildAISystemPrompt(currentAiMode, currentAiContext, studentInsightCache, { voice: !!opts.voice });
         const response = await callAnthropicAPI(aiConversationHistory, systemPrompt);
 
-        aiConversationHistory.push({ role: 'assistant', content: response });
-        saveConversationTurn('assistant', response);
         failed = response.startsWith('⚠️');
-        reply = response;
-        if (!failed) practiceRecordTurn('assistant', response);
+        // The hidden {{ok:key}} marks stay in the model's own history (so it keeps using them) but never reach the screen, the voice or the saved chat.
+        const marked = failed ? { text: response, keys: [] } : practiceStripHits(response);
+        aiConversationHistory.push({ role: 'assistant', content: response });
+        saveConversationTurn('assistant', marked.text);
+        reply = marked.text;
 
         typing.remove();
         // The tutor's "[✓ corrected sentence — reason]" notes belong to the student's own message, not to the tutor's reply.
-        const split = failed ? { text: response, fixes: [] } : practiceSplitFixes(response);
-        const shown = split.text || (failed ? response : '');
+        const split = failed ? { text: marked.text, fixes: [] } : practiceSplitFixes(marked.text);
+        const shown = split.text || (failed ? marked.text : '');
+        let hits = [];
         if (entry && !entry.help) {
             if (failed) entry.el.querySelector('.ai-fb')?.remove();
-            else { entry.fixes = split.fixes.filter(f => !practiceSameText(entry.text, f.sentence)); entry.graded = true; aiRenderFeedback(entry); }
+            else {
+                entry.fixes = split.fixes.filter(f => !practiceSameText(entry.text, f.sentence));
+                entry.graded = true;
+                // A clean use counts only when the whole message came back with no correction at all.
+                if (!entry.fixes.length) hits = aiValidHits(marked.keys);
+                entry.hits = hits;
+                aiRenderFeedback(entry);
+            }
         }
+        if (!failed) practiceRecordTurn('assistant', marked.text, hits.length ? { hits: hits.map(h => h.key) } : undefined);
         appendAiMessage('bot', practiceFormatReply(shown), failed ? '' : shown);
         spoken = speakText(shown);
+        aiApplyHits(hits);
     } finally {
         aiBusy = false;
         setAiBusyUI(false);
@@ -3350,6 +3455,13 @@ function ensureAiExtras() {
         bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100'); bar.setAttribute('aria-valuenow', '0');
         bar.innerHTML = '<div class="ai-progress-fill"></div>';
         head.after(bar);
+    }
+    if (!document.getElementById('aiMission') && document.getElementById('aiProgress')) {
+        const ms = document.createElement('button');
+        ms.id = 'aiMission'; ms.type = 'button'; ms.className = 'ai-mission';
+        ms.addEventListener('click', aiOpenProgress);
+        document.getElementById('aiProgress').after(ms);
+        aiRefreshMission();
     }
 
     // Streak flame (opens "My progress").

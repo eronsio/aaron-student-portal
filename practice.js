@@ -152,10 +152,14 @@ function practiceDayShift(key, delta) {
     return practiceDayKey(new Date(y, m - 1, d + delta));
 }
 
-// prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words }
+// prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words,
+//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key } }
 function practiceProgressNormalize(prog) {
     const p = prog && typeof prog === 'object' ? prog : {};
-    return { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
+    const out = { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
+    if (p.skills && typeof p.skills === 'object') out.skills = p.skills;
+    if (p.mission && typeof p.mission === 'object' && p.mission.day && p.mission.key) out.mission = { day: String(p.mission.day), key: String(p.mission.key) };
+    return out;
 }
 // Adds one message of `words` words to `dayKey`; returns a new object (old days beyond the cap are dropped).
 function practiceProgressAdd(prog, dayKey, words) {
@@ -165,7 +169,7 @@ function practiceProgressAdd(prog, dayKey, words) {
     days[dayKey] = { m: cur.m + 1, w: cur.w + Math.max(0, words | 0) };
     const keys = Object.keys(days).sort();
     while (keys.length > PRACTICE_DAYS_KEPT) delete days[keys.shift()];
-    return { days, m: p.m + 1, w: p.w + Math.max(0, words | 0) };
+    return { ...p, days, m: p.m + 1, w: p.w + Math.max(0, words | 0) };
 }
 // Streak = consecutive goal-days ending today (or yesterday, so the streak is still alive until today is over).
 function practiceStreakInfo(prog, todayKey) {
@@ -211,7 +215,132 @@ function practiceMergeState(local, remote) {
         days[k] = { m: Math.max(cur.m, +d[k].m || 0), w: Math.max(cur.w, +d[k].w || 0) };
     }));
     Object.keys(days).sort().slice(0, Math.max(0, Object.keys(days).length - PRACTICE_DAYS_KEPT)).forEach(k => delete days[k]);
-    return { words, del, progress: { days, m: Math.max(lp.m, rp.m), w: Math.max(lp.w, rp.w) } };
+    const progress = { days, m: Math.max(lp.m, rp.m), w: Math.max(lp.w, rp.w) };
+    const skills = practiceMergeSkills(lp.skills, rp.skills);
+    if (Object.keys(skills).length) progress.skills = skills;
+    const missions = [lp.mission, rp.mission].filter(Boolean).sort((a, b) => b.day.localeCompare(a.day) || a.key.localeCompare(b.key));
+    if (missions[0]) progress.mission = missions[0];
+    return { words, del, progress };
+}
+
+// ---- skills: mastering the focus areas, and the daily mission ----
+// The tutor marks a student message that used a focus area correctly with a hidden {{ok:key}} (see PRACTICE_HITS_RULE). Each mark is a
+// "clean use" of that area. An area counts as mastered once the student has PRACTICE_MASTER_POINTS clean uses (at most
+// PRACTICE_MASTER_DAILY_CAP per day, so one long session cannot do it) spread over at least PRACTICE_MASTER_DAYS different days.
+// Everything lives in the student's progress object, so it syncs between devices like the streak does.
+const PRACTICE_MASTER_POINTS = 5;
+const PRACTICE_MASTER_DAYS = 3;
+const PRACTICE_MASTER_DAILY_CAP = 2;
+const PRACTICE_MISSION_GOAL = 3;        // clean uses of the day's mission area
+const PRACTICE_MISSION_CHOICES = 3;     // the day's mission rotates through this many top-priority areas
+const PRACTICE_HITS_PER_SESSION = 5;    // a tutor mark beyond this many per area in one session is ignored
+const PRACTICE_MASTERED_PENALTY = 25;   // a mastered area comes back as a target only when nothing else is waiting
+
+// In the admin's preview of a student the marks are kept under that student's id, so they never mix with anything else.
+function practiceSkillId(key) {
+    return (typeof practiceAdminPreview !== 'undefined' && practiceAdminPreview && practiceAdminPreview.uid) ? practiceAdminPreview.uid + '|' + key : String(key);
+}
+
+// Where one focus area stands. `todayKey` = 'YYYY-MM-DD'.
+function practiceSkillInfo(prog, key, todayKey) {
+    const p = practiceProgressNormalize(prog);
+    const s = (p.skills || {})[practiceSkillId(key)] || {};
+    const d = s.d && typeof s.d === 'object' ? s.d : {};
+    const dayList = Object.keys(d).filter(k => (+d[k] || 0) > 0);
+    const points = dayList.reduce((n, k) => n + Math.min(+d[k], PRACTICE_MASTER_DAILY_CAP), 0);
+    const earned = points >= PRACTICE_MASTER_POINTS && dayList.length >= PRACTICE_MASTER_DAYS;
+    const mastered = !!s.m || earned;
+    const frac = mastered ? 1 : Math.min(points / PRACTICE_MASTER_POINTS, dayList.length / PRACTICE_MASTER_DAYS);
+    const last = dayList.slice().sort().pop() || '';
+    return { points, days: dayList.length, mastered, masteredOn: s.m || '', frac, hitsToday: todayKey ? (+d[todayKey] || 0) : 0, last };
+}
+
+// Records one clean use. Returns { progress, mastered } where `mastered` is true only on the use that completed the area.
+function practiceSkillsAdd(prog, key, dayKey) {
+    const p = practiceProgressNormalize(prog);
+    const id = practiceSkillId(key);
+    const skills = { ...(p.skills || {}) };
+    const cur = skills[id] || {};
+    const d = { ...(cur.d || {}) };
+    d[dayKey] = (+d[dayKey] || 0) + 1;
+    Object.keys(d).sort().slice(0, Math.max(0, Object.keys(d).length - PRACTICE_DAYS_KEPT)).forEach(k => delete d[k]);
+    skills[id] = cur.m ? { d, m: cur.m } : { d };
+    const next = { ...p, skills };
+    const was = practiceSkillInfo(p, key).mastered;
+    const now = practiceSkillInfo(next, key);
+    if (now.mastered && !skills[id].m) skills[id] = { d, m: dayKey };
+    return { progress: next, mastered: now.mastered && !was };
+}
+
+// Two devices' skills: per day the larger count, the earlier mastered day.
+function practiceMergeSkills(a, b) {
+    const out = {};
+    [a, b].forEach(src => Object.keys(src || {}).forEach(id => {
+        const s = src[id] || {};
+        const cur = out[id] || { d: {} };
+        const d = { ...cur.d };
+        Object.keys(s.d || {}).forEach(k => { d[k] = Math.max(+d[k] || 0, +s.d[k] || 0); });
+        const m = [cur.m, s.m].filter(Boolean).sort()[0];
+        out[id] = m ? { d, m } : { d };
+    }));
+    Object.keys(out).forEach(id => {
+        const days = Object.keys(out[id].d).sort();
+        days.slice(0, Math.max(0, days.length - PRACTICE_DAYS_KEPT)).forEach(k => delete out[id].d[k]);
+    });
+    return out;
+}
+
+function practiceDayNumber(dayKey) {
+    const [y, m, d] = String(dayKey).split('-').map(Number);
+    return Math.floor(Date.UTC(y, m - 1, d) / 86400000);
+}
+
+// Today's mission: one focus area to use correctly PRACTICE_MISSION_GOAL times. The same all day (it is remembered in the progress object
+// the first time it is looked at), and it rotates through the few most important unmastered areas from one day to the next.
+// With no focus areas on file the mission is simply to chat (the daily message goal).
+function practiceMissionInfo(prog, focus, dayKey) {
+    const p = practiceProgressNormalize(prog);
+    const rows = (focus || []).filter(f => f && f.key && f.status !== 'resolved');
+    let row = null, fresh = false;
+    if (p.mission && p.mission.day === dayKey) row = rows.find(f => f.key === p.mission.key) || null;
+    if (!row && rows.length) {
+        const open = rows.filter(f => !practiceSkillInfo(p, f.key, dayKey).mastered);
+        const pool = (open.length ? open : rows).map(f => ({ f, eff: Math.max(1, (Number(f.priority) || 2) - (f.status === 'improving' ? 1 : 0)), last: practiceSkillInfo(p, f.key, dayKey).last }));
+        pool.sort((a, b) => b.eff - a.eff || a.last.localeCompare(b.last) || String(a.f.key).localeCompare(String(b.f.key)));
+        const top = pool.slice(0, PRACTICE_MISSION_CHOICES);
+        row = top[practiceDayNumber(dayKey) % top.length].f;
+        fresh = true;
+    }
+    if (!row) {
+        const done = (p.days[dayKey] && p.days[dayKey].m) || 0;
+        return { kind: 'chat', key: '', area: 'Chat in Spanish', goal: PRACTICE_DAY_GOAL, done: Math.min(done, PRACTICE_DAY_GOAL), complete: done >= PRACTICE_DAY_GOAL, fresh: false };
+    }
+    const done = practiceSkillInfo(p, row.key, dayKey).hitsToday;
+    return { kind: 'skill', key: row.key, area: row.area, goal: PRACTICE_MISSION_GOAL, done: Math.min(done, PRACTICE_MISSION_GOAL), complete: done >= PRACTICE_MISSION_GOAL, fresh };
+}
+
+// The session's targets: today's mission area first (until it is done), then the usual picks; mastered areas only as spaced review.
+function practiceSessionPlan(focus, sessions, prog, dayKey, now) {
+    const mastered = new Set((focus || []).filter(f => f && practiceSkillInfo(prog, f.key, dayKey).mastered).map(f => f.key));
+    const picked = practicePickTargets(focus, sessions, PRACTICE_MAX_TARGETS, now, mastered);
+    const mission = practiceMissionInfo(prog, focus, dayKey);
+    const row = mission.kind === 'skill' && !mission.complete ? (focus || []).find(f => f.key === mission.key) : null;
+    const targets = row ? [row].concat(picked.filter(f => f.key !== row.key)).slice(0, PRACTICE_MAX_TARGETS) : picked;
+    return { targets, mission };
+}
+
+// The tutor ends a reply with {{ok:key}} (or {{ok:key1,key2}}) when the student's message used a focus area correctly.
+// Returns the reply without the marks and the keys they named. A mark cut off by the length limit is dropped too.
+function practiceStripHits(text) {
+    const keys = [];
+    const clean = String(text == null ? '' : text)
+        .replace(/\{\{\s*ok\s*:\s*([^}]{0,200})\}\}/gi, (m, inner) => {
+            inner.split(/[,;]/).map(k => k.trim()).filter(Boolean).forEach(k => { if (!keys.includes(k)) keys.push(k); });
+            return ' ';
+        })
+        .replace(/\{\{[^}]*$/, '')
+        .replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').trim();
+    return { text: clean, keys };
 }
 
 // ---- tap a word in a tutor message ----
@@ -283,14 +412,14 @@ function practiceLastPracticed(sessions) {
 // can outweigh one priority step, so lower-priority items still get their turn.
 // "Improving" items count one priority step lower so fresh wins don't crowd out
 // areas that are still open.
-function practicePickTargets(focus, sessions, n, now) {
+function practicePickTargets(focus, sessions, n, now, mastered) {
     const count = n == null ? PRACTICE_MAX_TARGETS : n;
     const nowMs = now == null ? Date.now() : now;
     const last = practiceLastPracticed(sessions);
     const rows = (focus || []).filter(f => f && f.status !== 'resolved').map(f => {
         const eff = Math.max(1, (Number(f.priority) || 2) - (f.status === 'improving' ? 1 : 0));
         const days = last[f.key] ? Math.min(14, (nowMs - last[f.key]) / 86400000) : 14;
-        return { f, score: eff * 10 + days };
+        return { f, score: eff * 10 + days - (mastered && mastered.has(f.key) ? PRACTICE_MASTERED_PENALTY : 0) };
     });
     rows.sort((a, b) => b.score - a.score || String(a.f.key).localeCompare(String(b.f.key)));
     return rows.slice(0, count).map(r => r.f);
@@ -402,7 +531,7 @@ function practiceBuildPlanBlock(opts) {
             ? `TARGETS TO WEAVE IN (use them wherever they fit the activity naturally; the activity itself comes first):`
             : `TODAY'S TARGETS — structures ${who} keeps getting wrong. Practise these:`);
         targets.forEach((t, i) => {
-            lines.push(`${i + 1}. ${practiceClip(t.area, 90)}${t.detail ? ' — ' + practiceClip(t.detail, 240) : ''}`);
+            lines.push(`${i + 1}. ${practiceClip(t.area, 90)}${t.detail ? ' — ' + practiceClip(t.detail, 240) : ''} (clave: ${t.key})`);
             (Array.isArray(t.examples) ? t.examples : []).slice(0, 2).forEach(ex => {
                 const l = practiceExampleLine(ex);
                 if (l) lines.push(l);
@@ -419,6 +548,11 @@ function practiceBuildPlanBlock(opts) {
         lines.push(`- Rotate through the targets; spend extra turns on the one they struggle with.`);
         lines.push(`- Correct a non-target mistake only if it is glaring, so the conversation keeps flowing.`);
         lines.push(`- Stay inside vocabulary and structures this student could plausibly know at their level.`);
+        const m = opts.mission;
+        if (m && m.kind === 'skill' && !m.complete && targets[0] && targets[0].key === m.key) {
+            lines.push('');
+            lines.push(`TODAY'S MISSION (the student sees it on screen): use target 1 correctly ${m.goal} times today; ${m.done} so far. Keep asking natural questions that need it, and celebrate in a few words each time they get it right. Never mention the mission count or this plan.`);
+        }
     }
 
     if (opts.lastSession) {
@@ -429,7 +563,7 @@ function practiceBuildPlanBlock(opts) {
 
     if (radar.length) {
         lines.push('');
-        lines.push(`ALSO ON THE TEACHER'S RADAR (correct gently if they come up; don't steer toward them): ${radar.slice(0, 6).map(r => practiceClip(r.area, 60)).join('; ')}.`);
+        lines.push(`ALSO ON THE TEACHER'S RADAR (correct gently if they come up; don't steer toward them): ${radar.slice(0, 6).map(r => practiceClip(r.area, 60) + ' (clave: ' + r.key + ')').join('; ')}.`);
     }
     return lines.join('\n');
 }
@@ -459,6 +593,8 @@ Tú: "¡Bien! [✓ 'fui' para yo — 'fue' es para él/ella] ¿Y qué compraste 
 const PRACTICE_ACTIVITIES_RULE = `ACTIVIDADES (el estudiante puede cambiar de actividad en cualquier momento): aparte del plan de práctica y la conversación libre, puedes hacer (a) un ROLEPLAY en una situación real (café, aeropuerto, supermercado, médico, hotel, conocer a alguien nuevo…): tú interpretas a la otra persona y te quedas en el personaje; (b) DESCRIPCIÓN DE UNA IMAGEN: describes con palabras una escena cotidiana vívida del mundo hispano y el estudiante la describe con sus propias palabras; (c) un EJERCICIO DE GRAMÁTICA sobre un tema (ser y estar, presente, artículos, números y hora, pretérito, gustar…): preguntas cortas, como un juego. Si el estudiante pide una de estas actividades, o volver a su plan o a la conversación libre, cambia enseguida y empieza con una primera frase en español, sin pedir permiso. Si falta un dato (qué situación, qué tema), ofrece 2 o 3 opciones en una sola frase. Los mensajes en los que el estudiante solo pide cambiar de actividad no se corrigen. Si el estudiante te da una lista de SUS PALABRAS GUARDADAS para practicar, haz un mini-juego: una pregunta corta por palabra que obligue a usarla, de una en una, empezando ya. Mantén todas las reglas anteriores en cualquier actividad.`;
 
 // Added when the student's latest message came from the microphone (hands-free conversation mode).
+// Hidden mark that lets the app count a clean use of a focus area (mastery + daily mission). The app removes it before anything is shown or spoken.
+const PRACTICE_HITS_RULE = `MARCA DE ACIERTO (invisible para el estudiante; la app la quita antes de mostrar tu mensaje): si en el ÚLTIMO mensaje del estudiante usó CORRECTAMENTE la estructura de algún punto del plan (los que llevan "clave:") y ese mensaje NO tiene ningún error, termina tu respuesta con {{ok:clave}} (varias claves separadas por comas). Solo si lo usó de verdad en una frase suya, no si repite tu frase ni copia un ejemplo. Nunca la pongas si corriges algo en ese mensaje, ni en mensajes de ayuda o de cambio de actividad. Nunca la menciones ni la expliques; los elogios van en el texto normal, no dentro de ella.`;
 const PRACTICE_VOICE_RULE = `16. El último mensaje del estudiante viene del reconocimiento de voz, no está escrito: puede faltar puntuación, tildes y mayúsculas, y alguna palabra puede estar mal reconocida. NUNCA corrijas puntuación, tildes ni ortografía en un mensaje de voz; corrige solo errores claros de gramática o vocabulario. Si una palabra no tiene sentido y suena parecida a otra, pregunta "¿Quisiste decir…?" en vez de corregir. Esto es una conversación hablada: responde con 1 o 2 frases cortas y termina con una pregunta.`;
 
 const PRACTICE_REPORT_SCHEMA = `{
@@ -486,7 +622,7 @@ function practiceTranscriptForPrompt(turns, maxChars) {
             studentNo++;
             rendered.push(`[${studentNo}] STUDENT${t.voice ? ' (spoken, via speech-to-text)' : ' (typed)'}: ${practiceClip(t.content, 500)}`);
         } else {
-            rendered.push(`AI: ${practiceClip(t.content, 400)}`);
+            rendered.push(`AI: ${practiceClip(t.content, 400)}${Array.isArray(t.hits) && t.hits.length ? ` (tutor marked the student's previous message as a correct use of: ${t.hits.join(', ')})` : ''}`);
         }
     });
     // Keep the most recent turns if the whole thing is too long.
@@ -702,7 +838,8 @@ function buildAISystemPrompt(mode, context, insight, opts) {
         targets,
         radar: (practiceCtx.focus || []).filter(f => !targetKeys.has(f.key)),
         secondary: mode !== 'plan',
-        lastSession: mode === 'plan' ? practiceLastSessionNote(practiceCtx.sessions, practiceCtx.focus) : ''
+        lastSession: mode === 'plan' ? practiceLastSessionNote(practiceCtx.sessions, practiceCtx.focus) : '',
+        mission: typeof aiMissionNow === 'function' ? aiMissionNow() : (practiceSession && practiceSession.mission)
     });
     // Before any focus areas exist, fall back to the old AI-written insight summary.
     const legacyWeaknesses = (!plan && insight && insight.insight_text)
@@ -734,7 +871,7 @@ ${plan ? '\n' + plan + '\n' : ''}${lately}${legacyWeaknesses}
 
 ${PRACTICE_BASE_RULES(levelLine)}
 
-${PRACTICE_ACTIVITIES_RULE}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}`;
+${PRACTICE_ACTIVITIES_RULE}${/\(clave: /.test(plan) ? '\n\n' + PRACTICE_HITS_RULE : ''}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}`;
 }
 
 function practiceMarkVoice() { practiceVoiceFlag = true; }
@@ -751,7 +888,12 @@ function practiceRenderChips() {
     if (!targets.length && !admin) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
     const label = currentAiMode === 'plan' ? 'Practising today' : 'On the plan';
     const preview = admin ? `<span class="ai-chip ai-chip-preview">👁 Admin preview${practiceAdminPreview ? ' as ' + practiceEsc(practiceAdminPreview.name) : ''} — nothing is saved</span>` : '';
-    wrap.innerHTML = preview + (targets.length ? `<span class="ai-chips-label">${label}:</span>` : '') + targets.map(t => `<span class="ai-chip">${practiceEsc(practiceClip(t.area, 60))}</span>`).join('');
+    const prog = typeof aiProgressLoad === 'function' ? aiProgressLoad() : null;
+    const chip = t => {
+        const k = practiceSkillInfo(prog, t.key, practiceDayKey());
+        return `<span class="ai-chip${k.mastered ? ' is-mastered' : ''}" title="${k.mastered ? 'Mastered' : Math.round(k.frac * 100) + '% of the way to mastering this'}">${k.mastered ? '<i class="fas fa-check"></i> ' : ''}${practiceEsc(practiceClip(t.area, 60))}<span class="ai-chip-bar"><i style="width:${Math.round(k.frac * 100)}%"></i></span></span>`;
+    };
+    wrap.innerHTML = preview + (targets.length ? `<span class="ai-chips-label">${label}:</span>` : '') + targets.map(chip).join('');
     wrap.classList.remove('hidden');
 }
 
@@ -761,9 +903,11 @@ async function practiceBeginSession(mode, context) {
     practiceVoiceFlag = false;
     await practiceLoadContext(false);
     const ctx = practiceCtx;
-    const targets = practicePickTargets(ctx.focus, ctx.sessions);
+    const prog = typeof aiProgressLoad === 'function' ? aiProgressLoad() : null;
+    const plan = practiceSessionPlan(ctx.focus, ctx.sessions, prog, practiceDayKey());
+    const targets = plan.targets;
     practiceSession = {
-        id: practiceUuid(), mode, context: context || null, targets,
+        id: practiceUuid(), mode, context: context || null, targets, mission: plan.mission,
         turns: [], startedAt: new Date().toISOString()
     };
     practiceRenderChips();
@@ -798,6 +942,8 @@ function practiceRecordTurn(role, content, meta) {
         if (meta && meta.help) turn.help = true;
         else if (practiceVoiceFlag) turn.voice = true;
         practiceVoiceFlag = false;
+    } else if (meta && meta.hits && meta.hits.length) {
+        turn.hits = meta.hits;
     }
     practiceSession.turns.push(turn);
     practicePersistTranscript();
@@ -869,6 +1015,8 @@ function practiceStoryScreens() {
         <ul class="ai-story-list">
             <li><i class="fas fa-check"></i> ${st.turns} message${st.turns === 1 ? '' : 's'} sent${done ? '' : ` (a full lesson is ${PRACTICE_LESSON_TURNS})`}</li>
             <li><i class="fas fa-check"></i> ${st.clean} with no corrections</li>
+            ${st.hits ? `<li><i class="fas fa-bullseye"></i> ${st.hits} focus-area use${st.hits === 1 ? '' : 's'} done right</li>` : ''}
+            ${st.mission && st.mission.kind === 'skill' && st.mission.complete ? `<li><i class="fas fa-flag-checkered"></i> Daily mission complete</li>` : ''}
             ${streak && streak.current ? `<li><i class="fas fa-fire"></i> ${streak.current}-day streak${streak.doneToday ? '' : ` &mdash; ${streak.goal - streak.todayM} more message${streak.goal - streak.todayM === 1 ? '' : 's'} today to count it`}</li>` : ''}
         </ul>`);
     screens.push(`<p class="ai-story-kicker">You wrote</p>
@@ -950,6 +1098,8 @@ async function practiceFinishSession() {
         return false;
     }
     const stats = practiceLessonStats(typeof aiLessonLog !== 'undefined' ? aiLessonLog : []);
+    stats.hits = s.turns.reduce((n, t) => n + (Array.isArray(t.hits) ? t.hits.length : 0), 0);
+    stats.mission = typeof aiMissionNow === 'function' ? aiMissionNow() : null;
     const reportPromise = practiceGenerateReport(s).then(report => {
         practiceMarkEnded(s, report);
         practiceSession = null;
@@ -1475,7 +1625,7 @@ if (typeof module !== 'undefined' && module.exports) {
         practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
-        practicePickTargets, practiceBuildPlanBlock, practiceBuildReportPrompt, practiceNormalizeReport,
+        practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES
     };
 }

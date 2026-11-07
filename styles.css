@@ -3733,3 +3733,62 @@ body.on-ai-tab .floating-book-btn { display: none; }
 @media (prefers-reduced-motion: reduce) { #bootSplash .boot-dots i { animation: none; } #bootSplash { transition: none; } }
 /* a hardware keyboard on a touch device: iOS floats its ^ v ✓ bar over the bottom without resizing the page */
 body.kb-bar #ai-companion .ai-footer { padding-bottom: 60px; }
+
+/* ---- skills + daily mission (practice chat) ---- */
+#ai-companion .ai-mission {
+    flex: none; display: flex; align-items: center; gap: 10px; width: calc(100% - 2 * var(--ai-gutter)); margin: 2px var(--ai-gutter) 6px; padding: 7px 12px;
+    border: 1px solid var(--ai-line-soft); border-radius: 12px; background: var(--ai-wash); color: var(--ai-ink-soft); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+#ai-companion .ai-mission:hover { background: #eef0f4; }
+#ai-companion .ai-mission-icon { color: var(--ai-accent); font-size: 15px; flex: none; }
+#ai-companion .ai-mission.is-complete .ai-mission-icon { color: #5f9378; }
+#ai-companion .ai-mission-text { flex: 1; min-width: 0; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ai-companion .ai-mission-text small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ai-muted); }
+#ai-companion .ai-mission-text b { font-weight: 600; color: var(--ai-ink); }
+#ai-companion .ai-mission-dots { display: flex; gap: 4px; flex: none; }
+#ai-companion .ai-mission-dots i { width: 9px; height: 9px; border-radius: 50%; background: #d9dee6; transition: background .3s ease, transform .3s ease; }
+#ai-companion .ai-mission-dots i.is-on { background: #6c9a80; transform: scale(1.1); }
+
+#ai-companion .ai-fb.is-hit { color: #3f7a5a; }
+#ai-companion .ai-chip { position: relative; overflow: hidden; }
+#ai-companion .ai-chip.is-mastered { background: #e9f1ec; color: #3f6b53; }
+#ai-companion .ai-chip .fa-check { font-size: 10px; margin-right: 2px; }
+#ai-companion .ai-chip-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: transparent; }
+#ai-companion .ai-chip-bar i { display: block; height: 100%; background: #8fb09f; transition: width .4s ease; }
+
+/* a small card in the conversation: skill mastered / mission complete */
+#ai-companion .ai-milestone {
+    align-self: center; display: flex; align-items: center; gap: 12px; max-width: min(92%, 420px); padding: 11px 16px; border-radius: 14px;
+    background: #eef4f0; border: 1px solid #d6e5db; color: #35604a; animation: ai-milestone-in .5s ease both;
+}
+#ai-companion .ai-milestone > i { font-size: 18px; color: #5f9378; }
+#ai-companion .ai-milestone div { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+#ai-companion .ai-milestone b { font-size: 14px; font-weight: 600; }
+#ai-companion .ai-milestone span { font-size: 13px; color: #4e7861; }
+#ai-companion .ai-milestone-mastered { background: #f4f0e6; border-color: #e6dcc0; color: #6b5a22; }
+#ai-companion .ai-milestone-mastered > i { color: #a9892f; }
+#ai-companion .ai-milestone-mastered span { color: #82702f; }
+@keyframes ai-milestone-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+
+/* progress sheet: mission card + focus areas */
+#ai-companion .ai-pr-mission { background: var(--ai-accent-soft); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+#ai-companion .ai-pr-mission.is-complete { background: #eaf2ed; }
+#ai-companion .ai-pr-mission .ai-pr-goal-top { display: flex; justify-content: space-between; font-size: 14px; color: var(--ai-ink-soft); }
+#ai-companion .ai-pr-mission-text { margin: 6px 0 0; font-size: 14px; color: var(--ai-ink-soft); }
+#ai-companion .ai-pr-mission-text b { color: var(--ai-ink); font-weight: 600; }
+#ai-companion .ai-pr-mission .ai-pr-bar { background: #dbe3ee; }
+#ai-companion .ai-pr-mission.is-complete .ai-pr-bar div { background: #6c9a80; }
+#ai-companion .ai-pr-skills { margin: 16px 0 4px; }
+#ai-companion .ai-pr-skills h5 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ai-muted); }
+#ai-companion .ai-pr-skill { padding: 8px 0; }
+#ai-companion .ai-pr-skill-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; color: var(--ai-ink); }
+#ai-companion .ai-pr-skill-top small { font-size: 12px; color: var(--ai-muted); flex: none; }
+#ai-companion .ai-pr-skill .ai-pr-bar { height: 6px; margin: 6px 0 0; }
+#ai-companion .ai-pr-skill.is-mastered .ai-pr-bar div { background: #6c9a80; }
+#ai-companion .ai-pr-skill.is-mastered .fa-check { color: #5f9378; font-size: 11px; }
+@media (max-width: 640px) {
+    #ai-companion .ai-mission { padding: 6px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #ai-companion .ai-milestone { animation: none; }
+}
