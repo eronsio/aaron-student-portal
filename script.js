@@ -2767,6 +2767,7 @@ async function startAiMode(mode, context) {
         if (!opening.startsWith('⚠️')) practiceRecordTurn('assistant', opening);
     }
     aiFreezeNotice();
+    aiPathNotice();
     aiWeekRecapMaybe();
 }
 
@@ -3314,6 +3315,62 @@ async function aiSyncPush() {
     } catch (e) { /* offline: the next change tries again */ }
 }
 
+// ---- learning path: "My path" map (the teacher writes the units; see practicePathInfo in practice.js) ----
+function aiPathNow() {
+    return practicePathInfo(practiceCtx.path || [], practiceCtx.focus, aiProgressLoad(), practiceDayKey());
+}
+function aiPathCardHtml() {
+    const info = aiPathNow();
+    if (!info.total) return '';
+    const line = info.complete ? 'Path complete' : info.current ? `Unit ${info.cur + 1} of ${info.total}: <b>${escapeHtml(practiceClip(info.current.title, 60))}</b>` : `${info.done} of ${info.total} units done`;
+    return `<div class="ai-pr-path">
+        <div class="ai-pr-goal-top"><span>Your path</span><b>${info.pct}%</b></div>
+        <p class="ai-pr-mission-text">${line}</p>
+        <div class="ai-pr-bar"><div style="width:${info.pct}%"></div></div>
+        <button type="button" class="ai-wk-link" data-path><i class="fas fa-route"></i> See my path</button>
+    </div>`;
+}
+function aiOpenPath() {
+    aiClosePopovers();
+    const sheet = aiSheetShell('My path', false);
+    if (!sheet) return;
+    const info = aiPathNow();
+    const body = sheet.querySelector('.ai-sheet-body');
+    if (!info.total) { body.innerHTML = '<p class="ai-wk-empty">No path yet. Your teacher will set up the units of your course here.</p>'; return; }
+    const skills = u => u.skills.length ? `<div class="ai-path-skills">${u.skills.map(k => `<div class="ai-path-skill${k.mastered ? ' is-mastered' : ''}"><span>${k.mastered ? '<i class="fas fa-check"></i> ' : ''}${escapeHtml(practiceClip(k.area, 60))}</span><div class="ai-pr-bar"><div style="width:${Math.round(k.frac * 100)}%"></div></div></div>`).join('')}</div>` : '';
+    const node = u => `<li class="ai-path-node is-${u.state}" data-idx="${u.idx}">
+            <span class="ai-path-dot">${u.state === 'done' ? '<i class="fas fa-check"></i>' : u.idx + 1}</span>
+            <div class="ai-path-card">
+                <b>${escapeHtml(practiceClip(u.title, 90))}</b>
+                ${u.state === 'current' ? `${u.detail ? `<p>${escapeHtml(practiceClip(u.detail, 240))}</p>` : ''}${skills(u)}<button type="button" class="ai-path-go" data-practise="${u.idx}"><i class="fas fa-comments"></i> Practise this unit</button>` : ''}
+            </div>
+        </li>`;
+    body.innerHTML = `<div class="ai-path-top"><div class="ai-wk-big">${info.pct}<span>% of the way</span></div>
+            <div class="ai-pr-bar"><div style="width:${info.pct}%"></div></div>
+            <p class="ai-wk-next">${info.complete ? 'You have finished every unit. Well done.' : `${info.done} of ${info.total} units done`}</p></div>
+        <ol class="ai-path">${info.units.map(node).join('')}</ol>`;
+    body.querySelectorAll('[data-practise]').forEach(b => b.addEventListener('click', () => {
+        const u = info.units[+b.dataset.practise];
+        aiCloseSheet();
+        if (u && currentAiMode) submitAiMessage(`Let's practise this unit: ${u.title}.`, { help: true });
+    }));
+    const cur = body.querySelector('.ai-path-node.is-current');
+    if (cur) setTimeout(() => cur.scrollIntoView({ block: 'center' }), 200);
+}
+// A unit the teacher marked done since the student last looked: a card when the chat opens (the very first look just records what is done).
+function aiPathNotice() {
+    const info = aiPathNow();
+    if (!info.total) return;
+    const key = 'aiPathSeen_' + ((currentUser && currentUser.id) || 'guest');
+    const done = info.units.filter(u => u.state === 'done').map(u => u.title);
+    let seen = null;
+    try { seen = JSON.parse(localStorage.getItem(key) || 'null'); localStorage.setItem(key, JSON.stringify(done)); } catch (e) { return; }
+    if (!Array.isArray(seen)) return;
+    const fresh = done.filter(t => !seen.includes(t));
+    if (!fresh.length) return;
+    const next = info.current ? `Next: ${escapeHtml(practiceClip(info.current.title, 60))}` : 'You have finished your whole path.';
+    aiNote('mastered', `<i class="fas fa-flag-checkered"></i><div><b>Unit complete</b><span>${escapeHtml(practiceClip(fresh[fresh.length - 1], 70))}${fresh.length > 1 ? ` and ${fresh.length - 1} more` : ''}. ${next}</span></div>`);
+}
 function aiFreezeLineHtml(i) {
     if (!i.current && !i.frozen.length) return '';
     const text = i.freezeReady
@@ -3359,6 +3416,7 @@ function aiOpenProgress() {
         </div>
         <div class="ai-pr-week" aria-label="The last 7 days">${i.week.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.frozen ? ' is-frozen' : ''}${d.today ? ' is-today' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : d.frozen ? '<i class="fas fa-snowflake"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div>
         ${aiFreezeLineHtml(i)}
+        ${aiPathCardHtml()}
         ${aiMissionCardHtml()}
         <div class="ai-pr-goal">
             <div class="ai-pr-goal-top"><span>Today</span><b>${Math.min(i.todayM, i.goal)} / ${i.goal} messages</b></div>
@@ -3375,6 +3433,7 @@ function aiOpenProgress() {
             <div><b>${savedWords}</b><span>saved words</span></div>
         </div>
         <p class="ai-mw-note">Saved on this device.</p>`;
+    sheet.querySelector('[data-path]')?.addEventListener('click', aiOpenPath);
     sheet.querySelector('[data-weekrecap]').addEventListener('click', () => aiOpenWeekRecap(practiceDayShift(practiceWeekStart(practiceDayKey()), -7)));
 }
 

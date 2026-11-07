@@ -374,6 +374,58 @@ function practiceStripHits(text) {
     return { text: clean, keys };
 }
 
+// ---- learning path: the units of a student's course, in order (table student_path, written by the teacher) ----
+// Teacher-side text format, one unit per line:  [x] done  /  [>] current  /  [ ] or no prefix = upcoming, then  Title | detail | focus-key, focus-key
+function practicePathParse(text) {
+    return String(text == null ? '' : text).split(/\r?\n/).map(l => l.trim()).filter(Boolean).map(line => {
+        let status = 'upcoming';
+        const m = line.match(/^\[\s*(x|>)?\s*\]\s*(.*)$/i);
+        if (m) { status = /x/i.test(m[1] || '') ? 'done' : (m[1] === '>' ? 'current' : 'upcoming'); line = m[2]; }
+        const parts = line.split('|').map(x => x.trim());
+        return { title: parts[0].slice(0, 200), detail: (parts[1] || '').slice(0, 600), status, focus_keys: (parts[2] || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 12) };
+    }).filter(u => u.title);
+}
+function practicePathFormat(units) {
+    return (units || []).slice().sort((a, b) => (a.position || 0) - (b.position || 0)).map(u => {
+        const mark = u.status === 'done' ? '[x]' : u.status === 'current' ? '[>]' : '[ ]';
+        const keys = Array.isArray(u.focus_keys) ? u.focus_keys.join(', ') : '';
+        const tail = keys ? ` | ${u.detail || ''} | ${keys}` : (u.detail ? ` | ${u.detail}` : '');
+        return `${mark} ${u.title}${tail}`;
+    }).join('\n');
+}
+// The unit that is current becomes done and the next unfinished one becomes current ("we finished this unit today").
+function practicePathAdvance(units) {
+    const list = (units || []).map(u => ({ ...u }));
+    let i = list.findIndex(u => u.status === 'current');
+    if (i < 0) i = list.findIndex(u => u.status !== 'done');
+    if (i < 0) return list;
+    list[i].status = 'done';
+    const next = list.findIndex((u, k) => k > i && u.status !== 'done');
+    if (next >= 0) list[next].status = 'current';
+    return list;
+}
+// What the student sees. A unit's progress while it is current = the average mastery of the focus areas linked to it.
+function practicePathInfo(units, focus, prog, dayKey) {
+    const rows = (units || []).filter(u => u && u.title).slice().sort((a, b) => (a.position || 0) - (b.position || 0));
+    const byKey = {}; (focus || []).forEach(f => { byKey[f.key] = f; });
+    const list = rows.map((u, idx) => ({
+        idx, title: u.title, detail: u.detail || '', status: u.status === 'done' || u.status === 'current' ? u.status : 'upcoming',
+        skills: (Array.isArray(u.focus_keys) ? u.focus_keys : []).map(k => byKey[k]).filter(Boolean).map(f => {
+            const s = practiceSkillInfo(prog, f.key, dayKey);
+            return { key: f.key, area: f.area, frac: s.frac, mastered: s.mastered };
+        })
+    }));
+    let cur = list.findIndex(u => u.status === 'current');
+    if (cur < 0) cur = list.findIndex(u => u.status !== 'done');   // nothing marked current: the first unfinished unit is
+    list.forEach((u, i) => {
+        u.state = u.status === 'done' ? 'done' : i === cur ? 'current' : 'upcoming';
+        u.frac = u.state === 'done' ? 1 : (u.state === 'current' && u.skills.length ? u.skills.reduce((n, s) => n + s.frac, 0) / u.skills.length : 0);
+    });
+    const done = list.filter(u => u.state === 'done').length;
+    const pct = list.length ? Math.round(100 * (done + (cur >= 0 && list[cur].state === 'current' ? list[cur].frac : 0)) / list.length) : 0;
+    return { units: list, total: list.length, done, cur, current: cur >= 0 && list[cur].state === 'current' ? list[cur] : null, pct, complete: list.length > 0 && done === list.length };
+}
+
 // ---- weekly recap: what the student did in one Monday-to-Sunday week ----
 const PRACTICE_SESSION_MINUTES_CAP = 45;   // one session counts for at most this long (a chat left open overnight is not 9 hours of Spanish)
 
@@ -600,12 +652,13 @@ function practiceBuildPlanBlock(opts) {
     const who = practiceDisplayName(opts.name);
     const targets = opts.targets || [];
     const radar = opts.radar || [];
-    if (!targets.length && !opts.level && !opts.aiNotes) return '';
+    if (!targets.length && !opts.level && !opts.aiNotes && !opts.unit) return '';
 
     const lines = [];
     lines.push(`PLAN FROM ${who.toUpperCase()}'S TEACHER (Aaron), based on the student's own lesson notes:`);
     lines.push(`Level: ${opts.level ? practiceClip(opts.level, 120) : 'not specified — start simple and adjust to how they actually write'}.`);
     if (opts.aiNotes) lines.push(`Teacher's instructions: ${practiceClip(opts.aiNotes, 600)}`);
+    if (opts.unit) lines.push(`Unit they are on in their course right now (the student sees it on their path map): ${practiceClip(opts.unit.title, 120)}${opts.unit.detail ? ' — ' + practiceClip(opts.unit.detail, 300) : ''}. Where it fits, let your questions use this unit's topics and vocabulary; the targets below still come first.`);
 
     if (targets.length) {
         lines.push('');
@@ -859,15 +912,17 @@ async function practiceLoadAdminPreviewContext(force) {
     if (!p) { practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] }; return practiceCtx; }
     if (!force && practiceCtx.loadedFor === p.uid && Date.now() - practiceCtx.loadedAt < 60000) return practiceCtx;
     const seq = ++practiceLoadSeq;
-    const [focus, settings, sessions] = await Promise.all([
+    const [focus, settings, sessions, path] = await Promise.all([
         sbRpc('admin_list_focus', { admin_secret: ADMIN_SECRET }),
         sbRpc('admin_list_practice_profiles', { admin_secret: ADMIN_SECRET }),
-        sbRpc('admin_list_practice_sessions', { admin_secret: ADMIN_SECRET, p_user_id: p.uid, p_limit: 15 })
+        sbRpc('admin_list_practice_sessions', { admin_secret: ADMIN_SECRET, p_user_id: p.uid, p_limit: 15 }),
+        sbRpc('admin_list_path', { admin_secret: ADMIN_SECRET })   // before student_path.sql is run this is an error object: no path
     ]);
     const arr = a => Array.isArray(a) ? a : [];
     const ctx = {
         loadedFor: p.uid, loadedAt: Date.now(),
         focus: arr(focus).filter(f => f.user_id === p.uid && f.status !== 'resolved'),
+        path: arr(path).filter(u => u.user_id === p.uid),
         profile: arr(settings).find(x => x.user_id === p.uid) || null,
         sessions: arr(sessions).map(x => ({ id: x.id, started_at: x.started_at, ended_at: x.ended_at, student_turns: x.student_turns, targets: x.targets, report: x.report }))
     };
@@ -881,15 +936,16 @@ async function practiceLoadContext(force) {
     const uid = currentUser.id;
     if (!force && practiceCtx.loadedFor === uid && Date.now() - practiceCtx.loadedAt < 60000) return practiceCtx;
     const seq = ++practiceLoadSeq;
-    const [focus, prof, sessions] = await Promise.all([
+    const [focus, prof, sessions, path] = await Promise.all([
         practiceRest(`student_focus?user_id=eq.${uid}&select=*&order=priority.desc,created_at.asc`),
         practiceRest(`student_practice_profile?user_id=eq.${uid}&select=*`),
-        practiceRest(`practice_sessions?user_id=eq.${uid}&select=id,started_at,ended_at,student_turns,targets,report&order=started_at.desc&limit=40`)
+        practiceRest(`practice_sessions?user_id=eq.${uid}&select=id,started_at,ended_at,student_turns,targets,report&order=started_at.desc&limit=40`),
+        practiceRest(`student_path?user_id=eq.${uid}&select=*&order=position.asc`)
     ]);
     // Two loads can overlap (e.g. leaving a session and re-opening the tab). Responses can
     // arrive out of order, so a slower, older load must never overwrite a newer one.
     if (seq === practiceLoadSeq) {
-        practiceCtx = { loadedFor: uid, loadedAt: Date.now(), focus: focus || [], profile: (prof && prof[0]) || null, sessions: sessions || [] };
+        practiceCtx = { loadedFor: uid, loadedAt: Date.now(), focus: focus || [], profile: (prof && prof[0]) || null, sessions: sessions || [], path: path || [] };
     }
     return practiceCtx;
 }
@@ -921,7 +977,8 @@ function buildAISystemPrompt(mode, context, insight, opts) {
         radar: (practiceCtx.focus || []).filter(f => !targetKeys.has(f.key)),
         secondary: mode !== 'plan',
         lastSession: mode === 'plan' ? practiceLastSessionNote(practiceCtx.sessions, practiceCtx.focus) : '',
-        mission: typeof aiMissionNow === 'function' ? aiMissionNow() : (practiceSession && practiceSession.mission)
+        mission: typeof aiMissionNow === 'function' ? aiMissionNow() : (practiceSession && practiceSession.mission),
+        unit: (practiceCtx.path || []).length ? practicePathInfo(practiceCtx.path, practiceCtx.focus, typeof aiProgressLoad === 'function' ? aiProgressLoad() : null, practiceDayKey()).current : null
     });
     // Before any focus areas exist, fall back to the old AI-written insight summary.
     const legacyWeaknesses = (!plan && insight && insight.insight_text)
@@ -1340,7 +1397,7 @@ async function practiceAdminChooseStudent(uid, name) {
 // ADMIN SIDE — Speaking Practice panel
 // ============================================================
 
-let _practiceAdmin = { profiles: [], focus: [], settings: [], sessions: [], error: null };
+let _practiceAdmin = { profiles: [], focus: [], settings: [], sessions: [], path: [], pathReady: false, error: null };
 
 function openPracticeOverlay() {
     document.getElementById('adminPracticeOverlay').classList.remove('hidden');
@@ -1354,11 +1411,12 @@ function practiceRpcFailure(result) {
 async function loadAdminPractice() {
     const root = document.getElementById('adminPracticeContent');
     root.innerHTML = '<p style="color:var(--text-secondary);">Loading...</p>';
-    const [profiles, focus, settings, sessions] = await Promise.all([
+    const [profiles, focus, settings, sessions, path] = await Promise.all([
         sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET }),
         sbRpc('admin_list_focus', { admin_secret: ADMIN_SECRET }),
         sbRpc('admin_list_practice_profiles', { admin_secret: ADMIN_SECRET }),
-        sbRpc('admin_list_practice_sessions', { admin_secret: ADMIN_SECRET, p_limit: 300 })
+        sbRpc('admin_list_practice_sessions', { admin_secret: ADMIN_SECRET, p_limit: 300 }),
+        sbRpc('admin_list_path', { admin_secret: ADMIN_SECRET })
     ]);
     const failure = practiceRpcFailure(focus) || practiceRpcFailure(settings) || practiceRpcFailure(sessions) || practiceRpcFailure(profiles);
     if (failure) {
@@ -1368,7 +1426,8 @@ async function loadAdminPractice() {
             : `<p style="color:#b45309;">Could not load practice data: ${practiceEsc(failure.message)}</p>`;
         return;
     }
-    _practiceAdmin = { profiles: profiles.filter(p => p.type === 'spanish'), focus, settings, sessions, error: null };
+    // The path box works only after supabase/student_path.sql has been run; until then the rest of the panel is unaffected.
+    _practiceAdmin = { profiles: profiles.filter(p => p.type === 'spanish'), focus, settings, sessions, path: Array.isArray(path) ? path : [], pathReady: Array.isArray(path), error: null };
     renderAdminPractice();
 }
 
@@ -1388,6 +1447,7 @@ function renderAdminPractice() {
     const settingsByUser = {}; settings.forEach(s => { settingsByUser[s.user_id] = s; });
     const sessionsByUser = {}; sessions.forEach(s => { (sessionsByUser[s.user_id] = sessionsByUser[s.user_id] || []).push(s); });
     const focusByUser = {}; focus.forEach(f => { (focusByUser[f.user_id] = focusByUser[f.user_id] || []).push(f); });
+    const pathByUser = {}; (_practiceAdmin.path || []).forEach(u => { (pathByUser[u.user_id] = pathByUser[u.user_id] || []).push(u); });
     const real = s => (s.student_turns || 0) >= PRACTICE_MIN_TURNS_FOR_REPORT;
     const unanalysed = sessions.filter(s => real(s) && !s.report);
 
@@ -1410,7 +1470,7 @@ function renderAdminPractice() {
 
     // --- Per-student cards ---
     html += `<h3 class="practice-h" style="margin-top:28px;">Students</h3>`;
-    html += profiles.map(p => practiceStudentCard(p, settingsByUser[p.id], focusByUser[p.id] || [], sessionsByUser[p.id] || [])).join('') || `<p class="practice-empty">No Spanish students yet.</p>`;
+    html += profiles.map(p => practiceStudentCard(p, settingsByUser[p.id], focusByUser[p.id] || [], sessionsByUser[p.id] || [], pathByUser[p.id] || [])).join('') || `<p class="practice-empty">No Spanish students yet.</p>`;
     root.innerHTML = html;
     root.querySelectorAll('details[data-k]').forEach(d => { if (openKeys.has(d.dataset.k)) d.open = true; });
 }
@@ -1440,7 +1500,7 @@ function practiceDigestCard(p, sess) {
     </div>`;
 }
 
-function practiceStudentCard(p, setting, focusRows, sessions) {
+function practiceStudentCard(p, setting, focusRows, sessions, pathRows) {
     const enabled = !!(setting && setting.enabled);
     const real = sessions.filter(s => (s.student_turns || 0) >= PRACTICE_MIN_TURNS_FOR_REPORT);
     const activeFocus = focusRows.filter(f => f.status !== 'resolved');
@@ -1471,6 +1531,8 @@ function practiceStudentCard(p, setting, focusRows, sessions) {
                     <button class="admin-btn small primary" onclick="practiceAdminSaveFocus('${p.id}')"><i class="fas fa-plus"></i> <span id="pfbtn_${p.id}">Add focus area</span></button>
                 </div>
             </div>
+
+            ${practicePathSection(p.id, pathRows || [], focusRows)}
 
             <h5>Recent practice</h5>
             ${sessions.length ? sessions.slice(0, 8).map(s => practiceSessionRow(s)).join('') : `<p class="practice-empty">No practice sessions yet.</p>`}
@@ -1528,6 +1590,47 @@ function practiceReportBlock(r) {
         ${(r.vocab_gaps || []).length ? `<h5>Vocabulary gaps</h5><p>${r.vocab_gaps.map(w => `${practiceEsc(w.word)}${w.meaning ? ' (' + practiceEsc(w.meaning) + ')' : ''}`).join(' · ')}</p>` : ''}
         ${(r.strengths || []).length ? `<h5>Went well</h5><ul>${r.strengths.map(x => `<li>${practiceEsc(x)}</li>`).join('')}</ul>` : ''}
         ${(r.for_next_lesson || []).length ? `<h5>For the next lesson</h5><ul>${r.for_next_lesson.map(x => `<li>${practiceEsc(x)}</li>`).join('')}</ul>` : ''}`;
+}
+
+
+// ---- admin: a student's learning path ----
+function practicePathSection(uid, rows, focusRows) {
+    if (!_practiceAdmin.pathReady) {
+        return `<h5>Learning path</h5><div class="practice-callout">One-time setup needed for the learning path: run <code>supabase/student_path.sql</code> in the Supabase SQL editor once, then reload this panel.</div>`;
+    }
+    const info = practicePathInfo(rows, focusRows, null, practiceDayKey());
+    const keys = focusRows.map(f => f.key).join(', ');
+    return `<h5>Learning path <span class="practice-muted">${info.total ? `${info.done} of ${info.total} units done` : 'none yet'}</span></h5>
+        <p class="practice-muted" style="margin:0 0 6px;">One unit per line, in order. Start a line with <code>[x]</code> for done, <code>[&gt;]</code> for the unit they are on now, or nothing for upcoming. Optionally add <code>| what it covers | focus-key, focus-key</code> &mdash; a unit's progress bar then follows the mastery of those focus areas. The student sees this as a map in their practice chat.${keys ? `<br>This student's focus keys: ${practiceEsc(keys)}` : ''}</p>
+        <textarea id="ppath_${uid}" rows="${Math.min(14, Math.max(5, info.total + 2))}" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;" placeholder="[x] Greetings &amp; introductions&#10;[>] Present tense -AR verbs | regular verbs, subject pronouns | present-ar&#10;Ser vs estar&#10;Preterite">${practiceEsc(practicePathFormat(rows))}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+            <button class="admin-btn small primary" onclick="practiceAdminSavePath('${uid}')"><i class="fas fa-save"></i> Save path</button>
+            ${info.total ? `<button class="admin-btn small" onclick="practiceAdminAdvancePath('${uid}')" title="Marks the current unit done and starts the next one"><i class="fas fa-forward-step"></i> Finished this unit</button>` : ''}
+            <span id="ppstatus_${uid}" class="practice-muted"></span>
+        </div>`;
+}
+async function practiceAdminWritePath(uid, units) {
+    const res = await sbRpc('admin_set_path', { admin_secret: ADMIN_SECRET, p_user_id: uid, p_units: units });
+    const el = document.getElementById('ppstatus_' + uid);
+    const bad = practiceRpcFailure(res);
+    if (bad || !Array.isArray(res)) { if (el) { el.textContent = 'Save failed: ' + ((bad && bad.message) || 'unexpected answer'); el.style.color = '#b45309'; } return false; }
+    _practiceAdmin.path = _practiceAdmin.path.filter(u => u.user_id !== uid).concat(res);
+    renderAdminPractice();
+    const el2 = document.getElementById('ppstatus_' + uid);
+    if (el2) el2.textContent = res.length ? `Saved ${res.length} unit${res.length === 1 ? '' : 's'}` : 'Path cleared';
+    return true;
+}
+async function practiceAdminSavePath(uid) {
+    const ta = document.getElementById('ppath_' + uid);
+    if (!ta) return;
+    const units = practicePathParse(ta.value);
+    if (!units.length && _practiceAdmin.path.some(u => u.user_id === uid) && !confirm('The box is empty: this removes the whole path for this student. Continue?')) return;
+    await practiceAdminWritePath(uid, units);
+}
+async function practiceAdminAdvancePath(uid) {
+    const ta = document.getElementById('ppath_' + uid);
+    const units = practicePathAdvance(practicePathParse(ta ? ta.value : ''));
+    if (units.length) await practiceAdminWritePath(uid, units);
 }
 
 function practiceAdminStatus(uid, msg, bad) {
@@ -1704,7 +1807,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
-        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, PRACTICE_STREAK_MILESTONES,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, PRACTICE_STREAK_MILESTONES,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,

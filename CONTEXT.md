@@ -216,6 +216,21 @@ automatically. Numbers come from data that already exists (`practiceWeekRecap` i
 messages" only when higher, and the encouragement line is the existing `report.student_recap.went_well` of the week's latest session (no extra AI call).
 The student session load now selects `ended_at` and 40 sessions (was 15).
 
+### Learning path / "My path" map (2026-11-07)
+- **Data:** table `student_path` (user_id, position, title, detail, status `upcoming|current|done`, `focus_keys text[]`), created by `supabase/student_path.sql`
+  (run once; needs admin_auth.sql + speaking_practice.sql first). Students can read only their own rows; admin RPCs `admin_list_path` / `admin_set_path`
+  (replaces a student's whole path from a JSON array) use `admin_ok()`. Before the SQL is run the portal behaves as before: no path for students, and the admin
+  box shows a setup callout.
+- **Teacher editor** (Admin -> Speaking Practice -> student card -> "Learning path"): plain text, one unit per line: `[x]` done, `[>]` current, no prefix upcoming,
+  then `| what it covers | focus-key, focus-key`. Paste a syllabus, mark where they are, Save. "Finished this unit" marks the current unit done and starts the next
+  (`practicePathParse/Format/Advance` in practice.js).
+- **Student side:** "My progress" -> "Your path" card -> "See my path" map (`aiOpenPath`): done / current / upcoming units. The current unit shows its detail, the mastery bars
+  of its linked focus areas (a unit's progress = their average, from the skills system above) and "Practise this unit" (sends a help-type message, never graded).
+  Overall % = (done units + current unit's progress) / total. When the teacher marks a unit done a "Unit complete" card appears the next time the chat opens
+  (`aiPathNotice`, last-seen list in localStorage `aiPathSeen_<uid>`; the very first look only records). The current unit is also told to the tutor in the plan block
+  (`opts.unit`), so questions lean on that unit's topics.
+- No paths are pre-filled: units come from the teacher (a student's school syllabus / the lesson notes), nothing is invented.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word
