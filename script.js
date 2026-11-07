@@ -2767,6 +2767,7 @@ async function startAiMode(mode, context) {
         if (!opening.startsWith('⚠️')) practiceRecordTurn('assistant', opening);
     }
     aiFreezeNotice();
+    aiWeekRecapMaybe();
 }
 
 // There is no menu of activities any more: opening the tab goes straight into the chat (the student's practice
@@ -3163,6 +3164,44 @@ function aiDayName(key) {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' });
 }
+// ---- weekly recap: the first time the chat opens in a new week, last week's numbers (students can reopen it from "My progress") ----
+function aiWeekRecapMaybe() {
+    if (!practiceActive()) return;
+    const start = practiceWeekDue(aiProgressLoad(), practiceDayKey());
+    if (!start || !aiWeekRecap(start).practiced) return;
+    aiProgressSave({ ...aiProgressLoad(), wk: start });   // marked as shown now, so it appears once
+    aiSyncSoon();
+    setTimeout(() => { if (currentAiMode) aiOpenWeekRecap(start); }, 900);
+}
+function aiWeekRecap(start) {
+    return practiceWeekRecap(aiProgressLoad(), { sessions: practiceCtx.sessions, focus: practiceCtx.focus, words: aiWordsLoad(), weekStart: start, todayKey: practiceDayKey() });
+}
+function aiOpenWeekRecap(start) {
+    aiClosePopovers();
+    const sheet = aiSheetShell('Your week', false);
+    if (!sheet) return;
+    const r = aiWeekRecap(start);
+    const fmt = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+    const range = `${fmt(r.start)} – ${fmt(r.end)}`;
+    const body = sheet.querySelector('.ai-sheet-body');
+    const close = '<button type="button" class="ai-story-btn ai-wk-close">Start this week</button>';
+    if (!r.practiced) {
+        body.innerHTML = `<div class="ai-wk-hero"><div class="ai-wk-range">${range}</div><p class="ai-wk-empty">No practice that week. Today is a fresh start: ${PRACTICE_DAY_GOAL} messages begins a new streak.</p></div>${close}`;
+    } else {
+        const tiles = [[r.minutes ? '~' + r.minutes : '–', 'minutes practising'], [r.messages, 'messages sent'], [r.words, 'words written'], [r.cleanUses, 'focus-area uses done right'], [r.savedWords, 'words saved'], [r.goalDays, 'days goal reached']];
+        const up = r.prev.messages > 0 && r.messages > r.prev.messages ? `<p class="ai-wk-note">Up from ${r.prev.messages} message${r.prev.messages === 1 ? '' : 's'} the week before.</p>` : '';
+        const mastered = r.mastered.length ? `<div class="ai-wk-card is-mastered"><i class="fas fa-graduation-cap"></i><div><b>Mastered this week</b><span>${r.mastered.map(m => escapeHtml(practiceClip(m.area, 60))).join(', ')}</span></div></div>` : '';
+        const streak = r.streak.current ? `<div class="ai-wk-card"><i class="fas fa-fire"></i><div><b>${r.streak.current}-day streak</b><span>${r.frozenDays ? `A streak freeze covered ${r.frozenDays === 1 ? 'a day' : r.frozenDays + ' days'} this week. ` : ''}Best so far: ${r.streak.best}.</span></div></div>` : '';
+        const quote = r.quote ? `<div class="ai-wk-quote"><small>From your tutor</small><p>${escapeHtml(practiceClip(r.quote, 260))}</p></div>` : '';
+        const next = r.next ? `<p class="ai-wk-next">Next up: <b>${escapeHtml(practiceClip(r.next, 70))}</b></p>` : '';
+        body.innerHTML = `<div class="ai-wk-hero"><div class="ai-wk-range">${range}</div>
+                <div class="ai-wk-big">${r.practiced}<span> of 7 days</span></div>
+                <div class="ai-pr-week" aria-label="Days practised">${r.days.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.frozen ? ' is-frozen' : ''}${d.some && !d.on ? ' is-some' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : d.frozen ? '<i class="fas fa-snowflake"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div></div>
+            <div class="ai-pr-grid ai-wk-grid">${tiles.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('')}</div>
+            ${up}${mastered}${streak}${quote}${next}${close}`;
+    }
+    body.querySelector('.ai-wk-close').addEventListener('click', aiCloseSheet);
+}
 function aiShortDate(key) {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -3327,6 +3366,7 @@ function aiOpenProgress() {
             <p>${i.doneToday ? 'Today\'s goal is done — nice work.' : `Send ${left} more message${left === 1 ? '' : 's'} today to ${i.current ? 'keep your streak going' : 'start a streak'}.`}</p>
         </div>
         ${aiSkillsHtml()}
+        <button type="button" class="ai-wk-link" data-weekrecap><i class="fas fa-calendar-week"></i> Last week's recap</button>
         <div class="ai-pr-grid">
             <div><b>${i.best}</b><span>best streak</span></div>
             <div><b>${i.days}</b><span>practice days</span></div>
@@ -3335,6 +3375,7 @@ function aiOpenProgress() {
             <div><b>${savedWords}</b><span>saved words</span></div>
         </div>
         <p class="ai-mw-note">Saved on this device.</p>`;
+    sheet.querySelector('[data-weekrecap]').addEventListener('click', () => aiOpenWeekRecap(practiceDayShift(practiceWeekStart(practiceDayKey()), -7)));
 }
 
 function aiOpenWords() {

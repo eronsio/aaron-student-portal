@@ -3830,3 +3830,30 @@ body.kb-bar #ai-companion .ai-footer { padding-bottom: 60px; }
     #ai-companion .ai-celebrate.is-open .ai-cel-burst s { animation: none; }
     #ai-companion .ai-milestone-mastered, #ai-companion .ai-milestone-mission { animation: none; }
 }
+
+/* ---- weekly recap ---- */
+#ai-companion .ai-wk-hero { text-align: center; padding: 2px 0 4px; }
+#ai-companion .ai-wk-range { font-size: 13px; color: var(--ai-muted); letter-spacing: .02em; }
+#ai-companion .ai-wk-big { font-size: 52px; line-height: 1.1; font-weight: 650; letter-spacing: -.03em; color: var(--ai-ink); margin-top: 4px; }
+#ai-companion .ai-wk-big span { font-size: 16px; font-weight: 500; letter-spacing: 0; color: var(--ai-muted); }
+#ai-companion .ai-wk-empty { margin: 14px 0 18px; font-size: 15px; line-height: 1.5; color: var(--ai-ink-soft); }
+#ai-companion .ai-pr-day.is-some > i { background: #c3cfc8; }
+#ai-companion .ai-wk-grid { margin-top: 4px; }
+#ai-companion .ai-wk-grid span { display: block; line-height: 1.25; }
+#ai-companion .ai-wk-note { margin: 6px 0 12px; text-align: center; font-size: 13.5px; color: #4f8a6a; }
+#ai-companion .ai-wk-card { display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 11px 14px; border-radius: 14px; background: var(--ai-wash); color: var(--ai-ink-soft); }
+#ai-companion .ai-wk-card > i { font-size: 18px; color: #a9742f; width: 22px; text-align: center; }
+#ai-companion .ai-wk-card div { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+#ai-companion .ai-wk-card b { font-size: 14.5px; font-weight: 600; color: var(--ai-ink); }
+#ai-companion .ai-wk-card span { font-size: 13px; color: var(--ai-muted); }
+#ai-companion .ai-wk-card.is-mastered { background: #f4f0e6; }
+#ai-companion .ai-wk-card.is-mastered > i { color: #a9892f; }
+#ai-companion .ai-wk-quote { margin: 12px 0 8px; padding: 12px 14px; border-left: 3px solid #b9c6d8; background: var(--ai-accent-soft); border-radius: 0 12px 12px 0; }
+#ai-companion .ai-wk-quote small { display: block; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--ai-muted); }
+#ai-companion .ai-wk-quote p { margin: 4px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--ai-ink); }
+#ai-companion .ai-wk-next { margin: 12px 0 16px; text-align: center; font-size: 14px; color: var(--ai-muted); }
+#ai-companion .ai-wk-next b { color: var(--ai-ink); font-weight: 600; }
+#ai-companion .ai-wk-link { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 12px 0 4px; padding: 10px; border: 1px solid var(--ai-line); border-radius: 12px; background: #fff; color: var(--ai-ink-soft); font: inherit; font-size: 14px; cursor: pointer; }
+#ai-companion .ai-wk-link:hover { background: var(--ai-wash); }
+#ai-companion .ai-wk-link i { color: var(--ai-accent); }
+#ai-companion .ai-wk-close { margin-bottom: max(10px, env(safe-area-inset-bottom, 0px)); }

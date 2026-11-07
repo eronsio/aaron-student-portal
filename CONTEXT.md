@@ -206,6 +206,16 @@ Gamification that is tied to what the student is actually learning. Logic is in 
   (`aiCelebrate`). The highest celebrated milestone is stored as `progress.cel` (synced, merged by max), so a student with a long streak sees the largest
   uncelebrated milestone once, not all of them. Reduced-motion users get no animation. Mastery/mission cards got a one-off soft ring.
 
+### Weekly recap (2026-11-07)
+In-app only (the portal has no way to send email/WhatsApp: "Notify via Email" just opens a mailto draft). The first time the practice chat opens in a new
+Monday-to-Sunday week, a "Your week" sheet shows LAST week (`aiWeekRecapMaybe` -> `aiOpenWeekRecap`), once: the Monday of the last recap shown is saved in
+`progress.wk` (synced, merged by max). It can be reopened any time from "My progress" -> "Last week's recap", and a week with no practice is not shown
+automatically. Numbers come from data that already exists (`practiceWeekRecap` in practice.js): days practised + week strip, messages/words
+(`progress.days`), clean focus-area uses and areas mastered (`progress.skills`), saved words (`.t` timestamps), streak/freeze, minutes from
+`practice_sessions` (`ended_at - started_at`, capped at 45 min per session; a session with no end time counts about a minute per message, shown as "~"), "up from N
+messages" only when higher, and the encouragement line is the existing `report.student_recap.went_well` of the week's latest session (no extra AI call).
+The student session load now selects `ended_at` and 40 sessions (was 15).
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

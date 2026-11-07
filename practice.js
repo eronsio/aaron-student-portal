@@ -153,13 +153,14 @@ function practiceDayShift(key, delta) {
 }
 
 // prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words,
-//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated }
+//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated, wk: Monday of the last recap shown }
 function practiceProgressNormalize(prog) {
     const p = prog && typeof prog === 'object' ? prog : {};
     const out = { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
     if (p.skills && typeof p.skills === 'object') out.skills = p.skills;
     if (p.mission && typeof p.mission === 'object' && p.mission.day && p.mission.key) out.mission = { day: String(p.mission.day), key: String(p.mission.key) };
     if (+p.cel > 0) out.cel = +p.cel;   // highest streak milestone already celebrated
+    if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
     return out;
 }
 // Adds one message of `words` words to `dayKey`; returns a new object (old days beyond the cap are dropped).
@@ -248,6 +249,8 @@ function practiceMergeState(local, remote) {
     if (missions[0]) progress.mission = missions[0];
     const cel = Math.max(lp.cel || 0, rp.cel || 0);
     if (cel) progress.cel = cel;
+    const wk = [lp.wk, rp.wk].filter(Boolean).sort().pop();
+    if (wk) progress.wk = wk;
     return { words, del, progress };
 }
 
@@ -369,6 +372,57 @@ function practiceStripHits(text) {
         .replace(/\{\{[^}]*$/, '')
         .replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').trim();
     return { text: clean, keys };
+}
+
+// ---- weekly recap: what the student did in one Monday-to-Sunday week ----
+const PRACTICE_SESSION_MINUTES_CAP = 45;   // one session counts for at most this long (a chat left open overnight is not 9 hours of Spanish)
+
+function practiceWeekStart(dayKey) {   // the Monday of the week containing dayKey
+    const [y, m, d] = dayKey.split('-').map(Number);
+    return practiceDayShift(dayKey, -((new Date(y, m - 1, d).getDay() + 6) % 7));
+}
+// The Monday of last week when its recap has not been shown yet, else ''.
+function practiceWeekDue(prog, todayKey) {
+    const last = practiceDayShift(practiceWeekStart(todayKey), -7);
+    return practiceProgressNormalize(prog).wk === last ? '' : last;
+}
+// Numbers for the week starting `o.weekStart`. `o` = { sessions, focus, words (saved-word list with .t in ms), weekStart, todayKey }.
+function practiceWeekRecap(prog, o) {
+    const p = practiceProgressNormalize(prog);
+    const start = o.weekStart, end = practiceDayShift(start, 6), prevStart = practiceDayShift(start, -7);
+    const keys = Array.from({ length: 7 }, (_, i) => practiceDayShift(start, i));
+    const inWeek = k => k >= start && k <= end;
+    const sum = (ks, f) => ks.reduce((n, k) => n + (p.days[k] ? (+p.days[k][f] || 0) : 0), 0);
+    const prevKeys = Array.from({ length: 7 }, (_, i) => practiceDayShift(prevStart, i));
+    const streak = practiceStreakInfo(p, o.todayKey);
+    const frozen = new Set(streak.frozen);
+    const days = keys.map(k => ({ key: k, label: 'SMTWTFS'[new Date(...k.split('-').map((v, i) => i === 1 ? v - 1 : +v)).getDay()], on: !!(p.days[k] && p.days[k].m >= PRACTICE_DAY_GOAL), frozen: frozen.has(k), some: !!(p.days[k] && p.days[k].m > 0) }));
+    const sessions = (o.sessions || []).filter(x => x && x.started_at && inWeek(practiceDayKey(new Date(x.started_at))));
+    const minutes = Math.round(sessions.reduce((n, x) => {
+        const t0 = Date.parse(x.started_at), t1 = Date.parse(x.ended_at);
+        const m = t1 > t0 ? (t1 - t0) / 60000 : Math.min(30, x.student_turns || 0);   // no end time saved: about a minute per message
+        return n + Math.min(PRACTICE_SESSION_MINUTES_CAP, Math.max(0, m));
+    }, 0));
+    const areaByKey = {}; (o.focus || []).forEach(f => { areaByKey[f.key] = f.area; });
+    let cleanUses = 0; const mastered = [];
+    Object.keys(p.skills || {}).forEach(id => {
+        const s = p.skills[id] || {}, key = id.split('|').pop();
+        Object.keys(s.d || {}).forEach(k => { if (inWeek(k)) cleanUses += +s.d[k] || 0; });
+        if (s.m && inWeek(s.m) && areaByKey[key]) mastered.push({ key, area: areaByKey[key] });
+    });
+    const startMs = Date.parse(start + 'T00:00:00'), endMs = Date.parse(practiceDayShift(end, 1) + 'T00:00:00');
+    const savedWords = (o.words || []).filter(w => w && (+w.t || 0) >= startMs && (+w.t || 0) < endMs).length;
+    const quoted = sessions.filter(x => x.report && x.report.student_recap && x.report.student_recap.went_well).sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at))[0];
+    const plan = practiceSessionPlan(o.focus || [], o.sessions || [], p, o.todayKey);
+    return {
+        start, end, days,
+        practiced: days.filter(d => d.some).length, goalDays: days.filter(d => d.on).length, frozenDays: days.filter(d => d.frozen).length,
+        messages: sum(keys, 'm'), words: sum(keys, 'w'), minutes, cleanUses, mastered, savedWords,
+        prev: { messages: sum(prevKeys, 'm'), words: sum(prevKeys, 'w') },
+        streak: { current: streak.current, best: streak.best },
+        quote: quoted ? quoted.report.student_recap.went_well : '',
+        next: plan.targets[0] ? plan.targets[0].area : ''
+    };
 }
 
 // ---- tap a word in a tutor message ----
@@ -815,7 +869,7 @@ async function practiceLoadAdminPreviewContext(force) {
         loadedFor: p.uid, loadedAt: Date.now(),
         focus: arr(focus).filter(f => f.user_id === p.uid && f.status !== 'resolved'),
         profile: arr(settings).find(x => x.user_id === p.uid) || null,
-        sessions: arr(sessions).map(x => ({ id: x.id, started_at: x.started_at, student_turns: x.student_turns, targets: x.targets, report: x.report }))
+        sessions: arr(sessions).map(x => ({ id: x.id, started_at: x.started_at, ended_at: x.ended_at, student_turns: x.student_turns, targets: x.targets, report: x.report }))
     };
     if (seq === practiceLoadSeq) practiceCtx = ctx;
     return practiceCtx;
@@ -830,7 +884,7 @@ async function practiceLoadContext(force) {
     const [focus, prof, sessions] = await Promise.all([
         practiceRest(`student_focus?user_id=eq.${uid}&select=*&order=priority.desc,created_at.asc`),
         practiceRest(`student_practice_profile?user_id=eq.${uid}&select=*`),
-        practiceRest(`practice_sessions?user_id=eq.${uid}&select=id,started_at,student_turns,targets,report&order=started_at.desc&limit=15`)
+        practiceRest(`practice_sessions?user_id=eq.${uid}&select=id,started_at,ended_at,student_turns,targets,report&order=started_at.desc&limit=40`)
     ]);
     // Two loads can overlap (e.g. leaving a session and re-opening the tab). Responses can
     // arrive out of order, so a slower, older load must never overwrite a newer one.
@@ -1650,7 +1704,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
-        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, PRACTICE_STREAK_MILESTONES,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, PRACTICE_STREAK_MILESTONES,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
