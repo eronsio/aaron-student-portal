@@ -2766,6 +2766,7 @@ async function startAiMode(mode, context) {
         saveConversationTurn('assistant', opening);
         if (!opening.startsWith('⚠️')) practiceRecordTurn('assistant', opening);
     }
+    aiFreezeNotice();
 }
 
 // There is no menu of activities any more: opening the tab goes straight into the chat (the student's practice
@@ -2802,6 +2803,8 @@ function leaveAiChat() {
     document.getElementById('aiRecapView').classList.add('hidden');
     aiConversationHistory = [];
     aiLessonLog = [];
+    aiPending = null;
+    document.getElementById('aiCelebrate')?.remove();
     aiCloseSheet();
     aiUpdateProgress();
     currentAiMode = null;
@@ -3139,8 +3142,75 @@ function aiRecordProgress(text) {
     const words = String(text || '').split(/\s+/).filter(Boolean).length;
     const was = aiStreakNow().doneToday;
     aiProgressSave(practiceProgressAdd(aiProgressLoad(), practiceDayKey(), words));
-    aiRefreshStreak(!was && aiStreakNow().doneToday);
+    const reached = !was && aiStreakNow().doneToday;
+    aiRefreshStreak(reached);
     aiSyncSoon();
+    // Shown after the tutor's reply (see aiShowPending), so it never covers a correction.
+    if (reached) { const cur = aiStreakNow().current; aiPending = { current: cur, milestone: practiceMilestoneFor(cur, aiProgressLoad().cel) }; }
+}
+
+// ---- celebrations: today's goal reached, streak milestones, streak freeze (calm: a card in the chat, a quiet overlay for milestones) ----
+let aiPending = null;   // { current, milestone } waiting for the tutor's reply to be on screen
+const AI_MILESTONE_TEXT = {
+    3: ['Three days in a row', 'The hardest part of any habit is the first few days. You are through them.'],
+    7: ['A full week', 'Seven days of Spanish. This is starting to stick.'],
+    14: ['Two weeks strong', 'Two weeks of showing up. Your Spanish is better for every one of them.'],
+    30: ['One month', 'Thirty days. This is not a streak any more, it is a habit.'],
+    60: ['Sixty days', 'Two months of steady practice. Few people get this far.'],
+    100: ['One hundred days', 'A hundred days of Spanish. Remarkable.']
+};
+function aiDayName(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' });
+}
+function aiShortDate(key) {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function aiShowPending() {
+    const pend = aiPending;
+    aiPending = null;
+    if (!pend || !pend.current) return;
+    if (pend.milestone) {
+        aiProgressSave({ ...aiProgressLoad(), cel: pend.milestone });
+        aiSyncSoon();
+        aiCelebrate(pend.milestone, pend.current);
+    } else {
+        aiNote('goal', `<i class="fas fa-fire"></i><div><b>Daily goal done</b><span>${pend.current}-day streak</span></div>`);
+    }
+}
+function aiCelebrate(milestone, current) {
+    const shell = document.querySelector('#aiChatView .ai-shell');
+    if (!shell) return;
+    document.getElementById('aiCelebrate')?.remove();
+    const t = AI_MILESTONE_TEXT[milestone] || [current + ' days in a row', 'Keep it going.'];
+    const el = document.createElement('div');
+    el.id = 'aiCelebrate'; el.className = 'ai-celebrate';
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', t[0]);
+    const burst = Array.from({ length: 14 }, (_, i) => `<s style="--a:${Math.round(i * 360 / 14)}deg;--d:${i % 2 ? 78 : 104}px;--c:${['#c9a96a', '#8fb09f', '#8aa0bd', '#d8c9a3'][i % 4]};--w:${(i % 3) * 0.06}s"></s>`).join('');
+    el.innerHTML = `<div class="ai-cel-card"><div class="ai-cel-burst" aria-hidden="true">${burst}</div>
+        <div class="ai-cel-flame"><i class="fas fa-fire"></i></div>
+        <div class="ai-cel-num">${current}</div><div class="ai-cel-label">day streak</div>
+        <h4>${escapeHtml(t[0])}</h4><p>${escapeHtml(t[1])}</p>
+        <button type="button" class="ai-cel-btn">Keep going</button></div>`;
+    shell.appendChild(el);
+    const close = () => { el.classList.remove('is-open'); setTimeout(() => el.remove(), 250); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    el.addEventListener('click', e => { if (e.target === el) close(); });
+    el.querySelector('.ai-cel-btn').addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => { el.classList.add('is-open'); el.querySelector('.ai-cel-btn').focus({ preventScroll: true }); });
+}
+// When a streak freeze covered a missed day, say so the next time the student opens the chat (once per frozen day, on this device).
+function aiFreezeNotice() {
+    const info = aiStreakNow();
+    const last = info.frozen[info.frozen.length - 1];
+    if (!last || !info.current || info.current < 1) return;
+    if (practiceDayNumber(practiceDayKey()) - practiceDayNumber(last) > 2) return;
+    const key = 'aiFreezeSeen_' + ((currentUser && currentUser.id) || 'guest');
+    try { if (localStorage.getItem(key) === last) return; localStorage.setItem(key, last); } catch (e) { return; }
+    const back = info.freezeBack ? practiceDayNumber(info.freezeBack) - practiceDayNumber(practiceDayKey()) : 0;
+    aiNote('freeze', `<i class="fas fa-snowflake"></i><div><b>Streak freeze used</b><span>You missed ${aiDayName(last)}, so a freeze kept your ${info.current}-day streak alive.${back > 0 ? ` The next one is ready in ${back} day${back === 1 ? '' : 's'}.` : ''}</span></div>`);
 }
 // The little flame in the chat header: the streak count; lit once today's goal is done. `bump` = just reached it.
 function aiRefreshStreak(bump) {
@@ -3205,6 +3275,13 @@ async function aiSyncPush() {
     } catch (e) { /* offline: the next change tries again */ }
 }
 
+function aiFreezeLineHtml(i) {
+    if (!i.current && !i.frozen.length) return '';
+    const text = i.freezeReady
+        ? 'Streak freeze ready: if you miss one day, your streak is safe.'
+        : `Freeze used on ${aiShortDate(i.lastFreeze)}. The next one is ready on ${aiShortDate(i.freezeBack)}.`;
+    return `<p class="ai-pr-freeze${i.freezeReady ? '' : ' is-used'}"><i class="fas fa-snowflake"></i> ${text}</p>`;
+}
 function aiMissionCardHtml() {
     const m = aiMissionNow();
     if (m.kind !== 'skill') return '';
@@ -3241,7 +3318,8 @@ function aiOpenProgress() {
             <div class="ai-pr-num">${i.current}</div>
             <div class="ai-pr-label">day streak</div>
         </div>
-        <div class="ai-pr-week" aria-label="The last 7 days">${i.week.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.today ? ' is-today' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div>
+        <div class="ai-pr-week" aria-label="The last 7 days">${i.week.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.frozen ? ' is-frozen' : ''}${d.today ? ' is-today' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : d.frozen ? '<i class="fas fa-snowflake"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div>
+        ${aiFreezeLineHtml(i)}
         ${aiMissionCardHtml()}
         <div class="ai-pr-goal">
             <div class="ai-pr-goal-top"><span>Today</span><b>${Math.min(i.todayM, i.goal)} / ${i.goal} messages</b></div>
@@ -3417,6 +3495,7 @@ async function submitAiMessage(message, opts) {
         appendAiMessage('bot', practiceFormatReply(shown), failed ? '' : shown);
         spoken = speakText(shown);
         aiApplyHits(hits);
+        aiShowPending();
     } finally {
         aiBusy = false;
         setAiBusyUI(false);

@@ -195,6 +195,17 @@ Gamification that is tied to what the student is actually learning. Logic is in 
   (per-day max, earliest mastered day). No new SQL. Admin preview keeps marks under `<studentUid>|<key>` locally and never syncs them.
 - Not visible to the teacher yet except through the transcript marks; a mastery view in Admin → Speaking Practice would need a server-readable copy.
 
+### Streak freeze + celebrations (2026-11-07)
+- **Freeze (`practiceStreakInfo`):** one missed day is forgiven automatically when the day before it was a goal-day, and the next freeze is available 7 days later
+  (`PRACTICE_FREEZE_GAP`). Two misses in a row, or a second miss within 7 days of the last freeze, end the streak. A frozen day keeps the streak alive but
+  does not add to the count. It is computed by replaying the saved `progress.days` in order, so there is no stored freeze state and devices always agree.
+  Old gaps in existing students' history are forgiven the same way (streaks can only go up). The week strip shows a snowflake on frozen days, "My progress"
+  says when the freeze is ready/back, and `aiFreezeNotice` shows a card once per frozen day when the chat opens.
+- **Celebrations:** reaching the daily goal queues `aiPending`, shown after the tutor's reply (`aiShowPending`) so it never covers a correction: a small
+  "Daily goal done" card, or for streak milestones 3/7/14/30/60/100 (`PRACTICE_STREAK_MILESTONES`) a quiet overlay card with a soft burst
+  (`aiCelebrate`). The highest celebrated milestone is stored as `progress.cel` (synced, merged by max), so a student with a long streak sees the largest
+  uncelebrated milestone once, not all of them. Reduced-motion users get no animation. Mastery/mission cards got a one-off soft ring.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

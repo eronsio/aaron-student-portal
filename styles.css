@@ -3792,3 +3792,41 @@ body.kb-bar #ai-companion .ai-footer { padding-bottom: 60px; }
 @media (prefers-reduced-motion: reduce) {
     #ai-companion .ai-milestone { animation: none; }
 }
+
+/* ---- streak freeze + celebrations ---- */
+#ai-companion .ai-pr-day.is-frozen > i { background: #b6c4d8; }
+#ai-companion .ai-pr-day.is-frozen > i .fa-snowflake { font-size: 13px; }
+#ai-companion .ai-pr-freeze { margin: -4px 0 14px; text-align: center; font-size: 13px; color: var(--ai-muted); }
+#ai-companion .ai-pr-freeze i { color: #8aa0bd; margin-right: 4px; }
+#ai-companion .ai-pr-freeze.is-used i { color: #6f88a8; }
+#ai-companion .ai-milestone-freeze { background: #eef2f8; border-color: #d5deeb; color: #3f5878; }
+#ai-companion .ai-milestone-freeze > i { color: #6f88a8; }
+#ai-companion .ai-milestone-freeze span { color: #5b7594; }
+#ai-companion .ai-milestone-goal { background: #f7f1e6; border-color: #eadcc2; color: #7a5a24; }
+#ai-companion .ai-milestone-goal > i { color: #a9742f; }
+#ai-companion .ai-milestone-goal span { color: #8a6b34; }
+/* a quiet ring that pulses once when a milestone card appears */
+#ai-companion .ai-milestone-mastered, #ai-companion .ai-milestone-mission { animation: ai-milestone-in .5s ease both, ai-milestone-ring 1.4s .2s ease-out 1; }
+@keyframes ai-milestone-ring { from { box-shadow: 0 0 0 0 rgba(143, 176, 159, .45); } to { box-shadow: 0 0 0 16px rgba(143, 176, 159, 0); } }
+
+/* streak milestone: a calm overlay card with a soft burst */
+#ai-companion .ai-celebrate { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(31, 41, 55, .32); opacity: 0; transition: opacity .25s ease; }
+#ai-companion .ai-celebrate.is-open { opacity: 1; }
+#ai-companion .ai-cel-card { position: relative; width: min(100%, 340px); padding: 26px 24px 22px; border-radius: 22px; background: #fff; text-align: center; box-shadow: 0 18px 50px rgba(31, 41, 55, .22); transform: translateY(10px) scale(.97); transition: transform .35s cubic-bezier(.2, .9, .3, 1.1); }
+#ai-companion .ai-celebrate.is-open .ai-cel-card { transform: none; }
+#ai-companion .ai-cel-flame { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: #fbf6ec; color: #a9742f; font-size: 24px; }
+#ai-companion .ai-cel-num { font-size: 60px; line-height: 1.05; font-weight: 650; letter-spacing: -.03em; color: var(--ai-ink); margin-top: 6px; }
+#ai-companion .ai-cel-label { font-size: 14px; color: var(--ai-muted); }
+#ai-companion .ai-cel-card h4 { margin: 14px 0 6px; font-size: 18px; font-weight: 600; color: var(--ai-ink); }
+#ai-companion .ai-cel-card p { margin: 0 0 18px; font-size: 14.5px; line-height: 1.5; color: var(--ai-ink-soft); }
+#ai-companion .ai-cel-btn { width: 100%; height: 44px; border: 0; border-radius: 12px; background: var(--ai-user); color: #fff; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+#ai-companion .ai-cel-btn:hover { background: #3a485d; }
+#ai-companion .ai-cel-burst { position: absolute; left: 50%; top: 56px; width: 0; height: 0; pointer-events: none; }
+#ai-companion .ai-cel-burst s { position: absolute; width: 7px; height: 7px; margin: -3.5px; border-radius: 50%; background: var(--c); opacity: 0; transform: rotate(var(--a)) translateY(0); }
+#ai-companion .ai-celebrate.is-open .ai-cel-burst s { animation: ai-cel-burst 1.3s var(--w, 0s) cubic-bezier(.15, .8, .3, 1) both; }
+@keyframes ai-cel-burst { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(.6); } 15% { opacity: .95; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(-1 * var(--d))) scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+    #ai-companion .ai-celebrate, #ai-companion .ai-cel-card { transition: none; }
+    #ai-companion .ai-celebrate.is-open .ai-cel-burst s { animation: none; }
+    #ai-companion .ai-milestone-mastered, #ai-companion .ai-milestone-mission { animation: none; }
+}

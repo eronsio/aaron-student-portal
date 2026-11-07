@@ -153,12 +153,13 @@ function practiceDayShift(key, delta) {
 }
 
 // prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words,
-//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key } }
+//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated }
 function practiceProgressNormalize(prog) {
     const p = prog && typeof prog === 'object' ? prog : {};
     const out = { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
     if (p.skills && typeof p.skills === 'object') out.skills = p.skills;
     if (p.mission && typeof p.mission === 'object' && p.mission.day && p.mission.key) out.mission = { day: String(p.mission.day), key: String(p.mission.key) };
+    if (+p.cel > 0) out.cel = +p.cel;   // highest streak milestone already celebrated
     return out;
 }
 // Adds one message of `words` words to `dayKey`; returns a new object (old days beyond the cap are dropped).
@@ -172,23 +173,48 @@ function practiceProgressAdd(prog, dayKey, words) {
     return { ...p, days, m: p.m + 1, w: p.w + Math.max(0, words | 0) };
 }
 // Streak = consecutive goal-days ending today (or yesterday, so the streak is still alive until today is over).
+// Streak freeze: one single missed day (the day before it was a goal-day) is forgiven automatically, and the next freeze is available 7 days later.
+// It is worked out by replaying the saved days in order, so it needs no stored state and two devices always agree. Frozen days keep the streak
+// alive but do not add to its count; two missed days in a row, or a second miss within 7 days of the last freeze, end it.
+const PRACTICE_FREEZE_GAP = 7;
+const PRACTICE_STREAK_MILESTONES = [3, 7, 14, 30, 60, 100];
 function practiceStreakInfo(prog, todayKey) {
     const p = practiceProgressNormalize(prog);
     const ok = k => (p.days[k] && p.days[k].m >= PRACTICE_DAY_GOAL);
     const doneToday = !!ok(todayKey);
-    let current = 0, k = doneToday ? todayKey : practiceDayShift(todayKey, -1);
-    while (ok(k)) { current++; k = practiceDayShift(k, -1); }
     const goalDays = Object.keys(p.days).filter(ok).sort();
-    let best = 0, run = 0, prev = null;
-    goalDays.forEach(d => { run = prev && practiceDayShift(prev, 1) === d ? run + 1 : 1; best = Math.max(best, run); prev = d; });
+    const frozen = [];
+    let run = 0, best = 0, lastFreeze = '';
+    if (goalDays.length) {
+        const yesterday = practiceDayShift(todayKey, -1);
+        for (let d = goalDays[0]; d <= yesterday; d = practiceDayShift(d, 1)) {
+            if (ok(d)) run++;
+            else if (run > 0 && ok(practiceDayShift(d, -1)) && (!lastFreeze || practiceDayNumber(d) - practiceDayNumber(lastFreeze) >= PRACTICE_FREEZE_GAP)) { frozen.push(d); lastFreeze = d; }
+            else run = 0;
+            best = Math.max(best, run);
+        }
+        if (doneToday) { run++; best = Math.max(best, run); }
+    }
+    const current = run;
     const todayM = p.days[todayKey] ? p.days[todayKey].m : 0;
+    const frozenSet = new Set(frozen);
     const week = [];
     for (let i = 6; i >= 0; i--) {
         const key = practiceDayShift(todayKey, -i);
         const [y, mo, d] = key.split('-').map(Number);
-        week.push({ key, label: 'SMTWTFS'[new Date(y, mo - 1, d).getDay()], on: !!ok(key), today: i === 0 });
+        week.push({ key, label: 'SMTWTFS'[new Date(y, mo - 1, d).getDay()], on: !!ok(key), frozen: frozenSet.has(key), today: i === 0 });
     }
-    return { current, best, doneToday, todayM, goal: PRACTICE_DAY_GOAL, days: goalDays.length, messages: p.m, words: p.w, week };
+    // The freeze can cover a miss today when the last one was at least a week ago; otherwise `freezeBack` is the day it returns.
+    const freezeReady = !lastFreeze || practiceDayNumber(todayKey) - practiceDayNumber(lastFreeze) >= PRACTICE_FREEZE_GAP;
+    const freezeBack = freezeReady ? '' : practiceDayShift(lastFreeze, PRACTICE_FREEZE_GAP);
+    return { current, best, doneToday, todayM, goal: PRACTICE_DAY_GOAL, days: goalDays.length, messages: p.m, words: p.w, week, frozen, lastFreeze, freezeReady, freezeBack };
+}
+
+// The streak milestone to celebrate now (the largest one reached that has not been celebrated yet), or 0.
+function practiceMilestoneFor(current, celebrated) {
+    let hit = 0;
+    PRACTICE_STREAK_MILESTONES.forEach(m => { if (current >= m && m > (celebrated || 0)) hit = m; });
+    return hit;
 }
 
 // ---- merging a student's saved words + progress between devices ----
@@ -220,6 +246,8 @@ function practiceMergeState(local, remote) {
     if (Object.keys(skills).length) progress.skills = skills;
     const missions = [lp.mission, rp.mission].filter(Boolean).sort((a, b) => b.day.localeCompare(a.day) || a.key.localeCompare(b.key));
     if (missions[0]) progress.mission = missions[0];
+    const cel = Math.max(lp.cel || 0, rp.cel || 0);
+    if (cel) progress.cel = cel;
     return { words, del, progress };
 }
 
@@ -1622,7 +1650,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
-        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, PRACTICE_STREAK_MILESTONES,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
