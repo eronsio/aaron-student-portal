@@ -235,7 +235,9 @@ The student session load now selects `ended_at` and 40 sessions (was 15).
 - **Quiz feedback:** a quiz question may carry `explanation` (why the right answer is right) and `why` (array aligned with `options`: why each WRONG option is wrong).
   After answering, `checkAnswer` shows "Why not X?" (the chosen option) and "Why Y?" (the right one); a correct answer shows the explanation. Both are optional, so old
   quizzes behave as before. All three quiz editors (inline, visual, lesson modal) have a "why wrong" box per option and an explanation box per question; saved quiz
-  objects keep any extra fields. Spanish 101's 26 questions were filled in 2026-11-07.
+  objects keep any extra fields. Spanish 101's 26 questions are explained by the built-in file `quiz-explanations.json` (keyed by lesson id; each entry stores the question,
+  options and correct index it was written for and is used only while those still match; anything written in the quiz editor wins). It is applied at answer time by
+  `quizWithExtras`, so it needs no course-data edit; copying the text into the course through the editor/admin RPC later is optional.
 - **Lesson page on phones:** the Previous / Mark as Complete / Next row is `.lesson-nav-row`; it used to be one non-wrapping line, so long module titles pushed it past the
   screen edge and the lesson panel scrolled sideways. At <=700px it wraps (Complete full width on top, Previous/Next side by side), `.course-content-area` no longer
   scrolls sideways, and the lesson's own border/padding are dropped on phones (cards inside cards used to eat a third of the width).

@@ -5093,10 +5093,30 @@ function youtubeToEmbed(url) {
     } catch { return null; }
 }
 
-const _quizData = {};   // quiz id -> its questions, so checkAnswer can show each question's explanation
+const _quizData = {};   // quiz id -> { lessonId, questions }, so checkAnswer can show each question's explanation
+// Built-in explanations (quiz-explanations.json, keyed by lesson id) fill in for questions that have none of their own, so they work without
+// editing the course data. Anything written in the quiz editor wins; a built-in one is used only while the question text, options and
+// correct answer still match what it was written for.
+let _quizExtras = null;
+async function loadQuizExtras() {
+    if (_quizExtras) return;
+    _quizExtras = {};
+    try {
+        const r = await fetch('quiz-explanations.json?v=' + (window.APP_BUILD || ''));
+        if (r.ok) _quizExtras = await r.json();
+    } catch (e) {}
+}
+function quizWithExtras(lessonId, q) {
+    if (q.explanation || (Array.isArray(q.why) && q.why.some(Boolean))) return q;
+    const norm = t => String(t == null ? '' : t).trim().toLowerCase().replace(/\s+/g, ' ');
+    const sameOptions = (a, b) => JSON.stringify((a || []).map(norm)) === JSON.stringify((b || []).map(norm));
+    const x = ((_quizExtras && _quizExtras[lessonId]) || []).find(e => norm(e.q) === norm(q.question) && e.correct === q.correct && sameOptions(e.options, q.options));
+    return x ? { ...q, explanation: x.explanation, why: x.why } : q;
+}
 function renderQuiz(questions, courseId, lessonId) {
     const quizId = 'quiz_' + courseId + '_' + lessonId;
-    _quizData[quizId] = questions;
+    _quizData[quizId] = { lessonId, questions };
+    loadQuizExtras();
     let html = `<div class="lesson-quiz-section" id="${quizId}">`;
     html += `<h4><i class="fas fa-question-circle"></i> Quick Quiz</h4>`;
     questions.forEach((q, qi) => {
@@ -5127,7 +5147,8 @@ function checkAnswer(quizId, qi, selected, correct) {
         else if (i === selected) btn.classList.add('incorrect');
     });
     feedbackEl.classList.remove('hidden');
-    const q = (_quizData[quizId] || [])[qi] || {};
+    const qd = _quizData[quizId];
+    const q = qd ? quizWithExtras(qd.lessonId, qd.questions[qi] || {}) : {};
     const letter = i => String.fromCharCode(65 + i);
     const clean = v => escapeHtml(String(v == null ? '' : v).trim());
     const why = clean((q.why || [])[selected]);      // why the chosen answer does not work

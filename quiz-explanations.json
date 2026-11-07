@@ -1,0 +1,458 @@
+{
+ "sp101-m1": [
+  {
+   "q": "How do you say \"Good afternoon\" in Spanish?",
+   "options": [
+    "Buenos días",
+    "Buenas noches",
+    "Buenas tardes",
+    "Hasta luego"
+   ],
+   "correct": 2,
+   "explanation": "“Tarde” means afternoon, and greetings are plural: Buenas tardes. Use it from midday until it gets dark.",
+   "why": [
+    "“Buenos días” is “good morning” (días = days).",
+    "“Buenas noches” is “good evening / good night”, used once it is dark.",
+    "",
+    "“Hasta luego” means “see you later”. It is a goodbye, not a greeting."
+   ]
+  },
+  {
+   "q": "What does \"¿Cómo te llamas?\" mean?",
+   "options": [
+    "How are you?",
+    "Where are you from?",
+    "What is your name?",
+    "How old are you?"
+   ],
+   "correct": 2,
+   "explanation": "Literally “how do you call yourself?”. It is how Spanish asks your name, and you answer “Me llamo…”.",
+   "why": [
+    "“How are you?” is “¿Cómo estás?”. It starts the same way but ends differently.",
+    "“Where are you from?” is “¿De dónde eres?”.",
+    "",
+    "“How old are you?” is “¿Cuántos años tienes?”."
+   ]
+  },
+  {
+   "q": "How do you say \"I am 28 years old\" in Spanish?",
+   "options": [
+    "Soy 28 años",
+    "Tengo 28 años",
+    "Estoy 28 años",
+    "Me llamo 28 años"
+   ],
+   "correct": 1,
+   "explanation": "Spanish uses tener (to have) for age: “I have 28 years”. It is never ser or estar.",
+   "why": [
+    "“Soy” (ser) says who or what you are (“Soy profesor”). Age uses tener.",
+    "",
+    "“Estoy” (estar) is for location or temporary states, not for age.",
+    "“Me llamo” means “my name is”, so this would say “my name is 28 years”."
+   ]
+  }
+ ],
+ "sp101-m2": [
+  {
+   "q": "What is the Spanish word for Wednesday?",
+   "options": [
+    "martes",
+    "jueves",
+    "miércoles",
+    "viernes"
+   ],
+   "correct": 2,
+   "explanation": "Miércoles is Wednesday. The week: lunes, martes, miércoles, jueves, viernes, sábado, domingo.",
+   "why": [
+    "“Martes” is Tuesday.",
+    "“Jueves” is Thursday.",
+    "",
+    "“Viernes” is Friday."
+   ]
+  },
+  {
+   "q": "How do you say \"On Monday I'm going to the beach\"?",
+   "options": [
+    "El lunes voy a la playa",
+    "El lunes estoy la playa",
+    "Lunes voy playa",
+    "El martes voy a la playa"
+   ],
+   "correct": 0,
+   "explanation": "“El lunes” is “on Monday” (el + the day, no “en”). “Voy a la playa” is “I'm going to the beach”: ir + a + the place.",
+   "why": [
+    "",
+    "“Estoy” (I am) does not say you are going somewhere; “voy a” (ir) does. The sentence is also missing the “a” before “la playa”.",
+    "Too much is missing: you need “el” before the day, “a” after “voy” and “la” before “playa”.",
+    "The structure is right, but “el martes” is Tuesday. The sentence says Monday (lunes)."
+   ]
+  },
+  {
+   "q": "Which is the correct combination of \"a\" + \"el\"?",
+   "options": [
+    "a el",
+    "al",
+    "el a",
+    "ale"
+   ],
+   "correct": 1,
+   "explanation": "“A” + “el” always joins into “al”: voy al parque. It only happens with “el”, not with la, los or las.",
+   "why": [
+    "Spanish does not leave “a el” apart; the two words contract.",
+    "",
+    "The order is wrong, and “el a” is not a form we use.",
+    "“Ale” is not a Spanish word. The contraction is “al”."
+   ]
+  },
+  {
+   "q": "How do you say \"In August I'm going skiing\"?",
+   "options": [
+    "El agosto voy a esquiar",
+    "En agosto voy a esquiar",
+    "Agosto voy esquiar",
+    "En agosto estoy esquiar"
+   ],
+   "correct": 1,
+   "explanation": "Months take “en”: en agosto = in August. Then “voy a” + an infinitive means “I'm going to ski”.",
+   "why": [
+    "Months do not take “el”. Days do (el lunes), months use “en”.",
+    "",
+    "Two things are missing: “en” before the month and “a” in “voy a esquiar”.",
+    "“Estoy esquiar” mixes estar with an infinitive. “I'm going to ski” is “voy a esquiar”."
+   ]
+  }
+ ],
+ "sp101-m3": [
+  {
+   "q": "What is the correct definite article for \"niñas\" (girls)?",
+   "options": [
+    "el",
+    "los",
+    "la",
+    "las"
+   ],
+   "correct": 3,
+   "explanation": "Niñas is feminine and plural (it ends in -as), so the article is “las”. Article, gender and number must match: la niña → las niñas.",
+   "why": [
+    "“El” is masculine singular.",
+    "“Los” is masculine plural. Niñas is feminine.",
+    "“La” is feminine but singular. Niñas is plural.",
+    ""
+   ]
+  },
+  {
+   "q": "How do you say \"a boy\" in Spanish?",
+   "options": [
+    "el niño",
+    "un niño",
+    "unos niños",
+    "la niño"
+   ],
+   "correct": 1,
+   "explanation": "“A boy” uses the indefinite article (a/an): “un” for masculine singular, so “un niño”.",
+   "why": [
+    "“El niño” means “the boy”, a definite article, not “a boy”.",
+    "",
+    "“Unos niños” means “some boys”, which is plural.",
+    "“La” is feminine and niño is masculine. They must match: el niño, la niña."
+   ]
+  },
+  {
+   "q": "Which sentence is correct in Spanish?",
+   "options": [
+    "Soy un doctor",
+    "Soy doctor",
+    "Estoy un doctor",
+    "El soy doctor"
+   ],
+   "correct": 1,
+   "explanation": "After ser with a profession, Spanish drops un/una: “Soy doctor”, “Es profesora”. You only add the article when you add an adjective: “Soy un buen doctor”.",
+   "why": [
+    "English says “I am a doctor”, but Spanish leaves out “un” before a profession.",
+    "",
+    "“Estoy” (estar) is for location or state. Professions use ser, and still no article.",
+    "“El” goes with a noun, and here it sits in front of a verb (“el soy”), which makes no sense."
+   ]
+  },
+  {
+   "q": "How do you say \"I don't have a car\" in Spanish?",
+   "options": [
+    "No tengo un coche",
+    "No tengo coche",
+    "No soy un coche",
+    "No estoy coche"
+   ],
+   "correct": 1,
+   "explanation": "After a negative “no tengo”, Spanish usually drops un/una when you mean “any” of something: “No tengo coche”, “No tengo hermanos”.",
+   "why": [
+    "It is grammatical, but it stresses “not even one car”. The everyday way, and the pattern this module teaches, drops the article after a negative.",
+    "",
+    "“Soy” (ser) means “I am”, so this says “I am not a car”. To talk about having something, use tener.",
+    "“Estoy” means “I am” (a place or a state), not “I have”. Possession uses tener."
+   ]
+  }
+ ],
+ "sp101-m4": [
+  {
+   "q": "What is the correct \"yo\" form of \"hablar\"?",
+   "options": [
+    "hablas",
+    "habla",
+    "hablo",
+    "hablamos"
+   ],
+   "correct": 2,
+   "explanation": "For regular -AR verbs, drop -ar and add the ending. For yo the ending is -o: hablo.",
+   "why": [
+    "“Hablas” is the tú form (you speak).",
+    "“Habla” is the él / ella / usted form (he, she speaks).",
+    "",
+    "“Hablamos” is the nosotros form (we speak)."
+   ]
+  },
+  {
+   "q": "How do you say \"She lives in Barcelona\"?",
+   "options": [
+    "Ella vivo en Barcelona",
+    "Ella vives en Barcelona",
+    "Ella vive en Barcelona",
+    "Ella vivir en Barcelona"
+   ],
+   "correct": 2,
+   "explanation": "“Ella” takes the él / ella ending. For the -IR verb vivir that ending is -e: vive.",
+   "why": [
+    "“Vivo” is the yo form (I live).",
+    "“Vives” is the tú form (you live).",
+    "",
+    "“Vivir” is the infinitive. The verb has to be conjugated to match “ella”."
+   ]
+  },
+  {
+   "q": "Which ending do -ER verbs take for \"tú\"?",
+   "options": [
+    "-as",
+    "-es",
+    "-is",
+    "-os"
+   ],
+   "correct": 1,
+   "explanation": "Regular -ER verbs take -es for tú: comes, bebes, aprendes. (-AR verbs take -as: hablas.)",
+   "why": [
+    "“-as” is the tú ending for -AR verbs (hablas), not for -ER.",
+    "",
+    "“-is” is not a tú ending. It only shows up inside vosotros forms such as vivís.",
+    "“-os” is not a tú ending either. Tú always ends in -s: hablas, comes, vives."
+   ]
+  },
+  {
+   "q": "How do you say \"They eat at the restaurant\"?",
+   "options": [
+    "Ellos come en el restaurante",
+    "Ellos comen en el restaurante",
+    "Ellos comer en el restaurante",
+    "Ellos comemos en el restaurante"
+   ],
+   "correct": 1,
+   "explanation": "“Ellos” (they) with an -ER verb takes -en: ellos comen.",
+   "why": [
+    "“Come” is the él / ella form. “Ellos” needs the plural ending -en.",
+    "",
+    "“Comer” is the infinitive. It has to be conjugated.",
+    "“Comemos” is the nosotros form (we eat)."
+   ]
+  }
+ ],
+ "sp101-m5": [
+  {
+   "q": "How do you ask \"Where is the hotel?\" in Spanish?",
+   "options": [
+    "¿Dónde está el hotel?",
+    "¿Puedo el hotel?",
+    "¿Tienes el hotel?",
+    "¿Dónde es el hotel?"
+   ],
+   "correct": 0,
+   "explanation": "The location of a place uses estar: “¿Dónde está…?” means “Where is…?”.",
+   "why": [
+    "",
+    "“¿Puedo el hotel?” is “Can I the hotel?”. “Puedo” (can I) needs another verb after it.",
+    "“¿Tienes el hotel?” means “Do you have the hotel?”.",
+    "“¿Dónde es…?” is for where an event happens (“¿Dónde es la fiesta?”). For where a place is, use “está”."
+   ]
+  },
+  {
+   "q": "How do you say \"Can I pay by card?\"",
+   "options": [
+    "Necesito pagar con tarjeta",
+    "¿Debería pagar con tarjeta?",
+    "¿Puedo pagar con tarjeta?",
+    "Vamos pagar con tarjeta"
+   ],
+   "correct": 2,
+   "explanation": "“¿Puedo…?” means “Can I…?” and takes an infinitive: ¿Puedo pagar con tarjeta?",
+   "why": [
+    "“Necesito pagar” is “I need to pay”. It is a statement, not a question about whether you can.",
+    "“¿Debería…?” means “Should I…?”. It asks what is advisable, not what is allowed.",
+    "",
+    "“Vamos pagar” is not correct Spanish. “Vamos a pagar” means “let's pay”, and it is not a question either."
+   ]
+  },
+  {
+   "q": "What does \"¿Tienes tiempo?\" mean?",
+   "options": [
+    "Do you have money?",
+    "What time is it?",
+    "Do you have time?",
+    "Should I wait?"
+   ],
+   "correct": 2,
+   "explanation": "“Tener tiempo” means “to have time”, so “¿Tienes tiempo?” is “Do you have time?”.",
+   "why": [
+    "“Tiempo” is time (or weather), not money. Money is “dinero”.",
+    "“What time is it?” is “¿Qué hora es?”. Hora is the time on the clock, tiempo is time in general.",
+    "",
+    "“Should I wait?” would be “¿Debo esperar?”."
+   ]
+  },
+  {
+   "q": "How do you say \"Where are the taxis?\"",
+   "options": [
+    "¿Dónde está los taxis?",
+    "¿Dónde están los taxis?",
+    "¿Dónde son los taxis?",
+    "¿Tienes los taxis?"
+   ],
+   "correct": 1,
+   "explanation": "“Los taxis” is plural, so the verb must be plural too: están. Locations use estar.",
+   "why": [
+    "“Está” is singular. The taxis are plural, so it has to be “están”.",
+    "",
+    "“Son” (ser) is not used for location, so “¿Dónde son…?” is wrong here.",
+    "“¿Tienes los taxis?” means “Do you have the taxis?”."
+   ]
+  }
+ ],
+ "sp101-m6": [
+  {
+   "q": "How do you say \"It's sunny\" in Spanish?",
+   "options": [
+    "Hay sol",
+    "Está sol",
+    "Hace sol",
+    "Es sol"
+   ],
+   "correct": 2,
+   "explanation": "Spanish uses hacer for many weather conditions: hace sol, hace calor, hace frío, hace viento.",
+   "why": [
+    "In this module “hay” is for things you can see in the air, like fog or clouds. Sunshine uses hacer.",
+    "“Está sol” is not used. Estar goes with ongoing actions like “está lloviendo”.",
+    "",
+    "“Es sol” would say “it is sun”. Ser does not describe the weather."
+   ]
+  },
+  {
+   "q": "Which verb do you use for \"It's raining\" (ongoing)?",
+   "options": [
+    "hacer",
+    "haber",
+    "estar",
+    "tener"
+   ],
+   "correct": 2,
+   "explanation": "Weather that is happening right now uses estar + -ando/-iendo: está lloviendo, está nevando.",
+   "why": [
+    "“Hacer” goes with conditions such as sol, viento, calor and frío.",
+    "“Haber” (hay) goes with things present in the air, like fog or clouds.",
+    "",
+    "“Tener” is for having, age and feelings (“tengo frío” = I feel cold), not for the weather itself."
+   ]
+  },
+  {
+   "q": "How do you say \"It's foggy\" in Spanish?",
+   "options": [
+    "Hace niebla",
+    "Está niebla",
+    "Hay niebla",
+    "Es niebla"
+   ],
+   "correct": 2,
+   "explanation": "Fog is something that is there in the air, so Spanish uses “hay” (there is): hay niebla, hay nubes.",
+   "why": [
+    "“Hace” is for sol, calor, frío and viento. Niebla uses “hay”.",
+    "“Está niebla” is not used. “Está” needs an adjective, like “está nublado”.",
+    "",
+    "“Es niebla” would say “it is fog”. Ser does not describe the weather."
+   ]
+  },
+  {
+   "q": "Which of these uses the verb \"hacer\"?",
+   "options": [
+    "Está nublado",
+    "Hay niebla",
+    "Hace viento",
+    "Está lloviendo"
+   ],
+   "correct": 2,
+   "explanation": "“Hace viento” (it's windy) uses hacer, which covers sol, viento, calor and frío.",
+   "why": [
+    "“Está nublado” uses estar (it's cloudy).",
+    "“Hay niebla” uses haber.",
+    "",
+    "“Está lloviendo” uses estar."
+   ]
+  }
+ ],
+ "sp101-m7": [
+  {
+   "q": "What is the main goal of the Module 7 speaking exercise?",
+   "options": [
+    "Memorising new vocabulary",
+    "Translating written sentences",
+    "Describing a picture using everything learned so far",
+    "Writing an essay about Spain"
+   ],
+   "correct": 2,
+   "explanation": "Module 7 is a speaking exercise: you describe a picture using everything you have learned so far (greetings, numbers, places, verbs, weather).",
+   "why": [
+    "The vocabulary comes from the earlier modules. Here you use what you already know.",
+    "You speak about a picture, you do not translate sentences.",
+    "",
+    "It is about describing pictures out loud, not writing essays."
+   ]
+  },
+  {
+   "q": "Which would you use to describe weather in a picture?",
+   "options": [
+    "Me llamo…",
+    "Hace sol / Está lloviendo",
+    "Voy a la playa",
+    "Tengo 25 años"
+   ],
+   "correct": 1,
+   "explanation": "“Hace sol” and “Está lloviendo” are the weather phrases from Module 6, which is what you need to describe the weather in a picture.",
+   "why": [
+    "“Me llamo…” means “my name is…”. It belongs to introductions.",
+    "",
+    "“Voy a la playa” is “I'm going to the beach”: a plan or a place, not the weather.",
+    "“Tengo 25 años” is “I'm 25”. That is age."
+   ]
+  },
+  {
+   "q": "What happens to the picture practice as you advance?",
+   "options": [
+    "It gets easier",
+    "It stays exactly the same",
+    "It gets replaced with grammar tests",
+    "Expectations increase as your vocabulary grows"
+   ],
+   "correct": 3,
+   "explanation": "The practice gets more demanding as you learn more: with a bigger vocabulary you are expected to describe more, in more detail.",
+   "why": [
+    "It does not get easier. It asks more of you as you progress.",
+    "It does not stay the same: more is expected over time.",
+    "The picture practice is not replaced. It continues, with higher expectations.",
+    ""
+   ]
+  }
+ ]
+}
