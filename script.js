@@ -1512,6 +1512,9 @@ async function enterStudentView(id) {
     if (!adminReturnUser && currentUser?.isAdmin) adminReturnUser = currentUser;
     if (!adminReturnUser) return;
     leaveAiChat();   // the admin's own AI chat must not carry over to the student's page
+    // The student's tutor can be tried from their page: it runs as the admin preview with this student's plan (nothing is saved).
+    practiceAdminPreview = (s.type || 'spanish') === 'spanish' ? { uid: s.id, name: s.name || 'Student' } : null;
+    practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [], path: [] };
     document.getElementById('adminStudentsOverlay')?.classList.add('hidden');
     currentUser = { id: s.id, name: s.name || 'Student', type: s.type || 'spanish', driveFolder: s.drive_folder || '', thisWeek: s.this_week || '', isPreview: true };
     await showMainApp();
@@ -1522,6 +1525,8 @@ function exitStudentView() {
     if (!adminReturnUser) return;
     currentUser = adminReturnUser;
     adminReturnUser = null;
+    practiceAdminPreview = null;
+    practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [], path: [] };
     leaveAiChat();
     showMainApp();
 }
@@ -2652,7 +2657,7 @@ function toggleTTS() {
 }
 
 async function loadStudentInsight() {
-    if (!currentUser || currentUser.isAdmin || currentUser.id === 'admin-preview') return null;
+    if (!currentUser || currentUser.isAdmin || currentUser.isPreview || currentUser.id === 'admin-preview') return null;
     try {
         const r = await fetch(`${SUPABASE_URL}/rest/v1/student_insights?user_id=eq.${currentUser.id}&select=*`, {
             headers: _headers(_accessToken)
@@ -2663,7 +2668,7 @@ async function loadStudentInsight() {
 }
 
 async function saveConversationTurn(role, content) {
-    if (!currentUser || currentUser.isAdmin || currentUser.id === 'admin-preview' || !_accessToken) return;
+    if (!currentUser || currentUser.isAdmin || currentUser.isPreview || currentUser.id === 'admin-preview' || !_accessToken) return;
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/conversations`, {
             method: 'POST',
@@ -2776,7 +2781,7 @@ async function startAiMode(mode, context) {
 let aiStarting = false;
 async function startAiChat() {
     if (aiStarting || currentAiMode) return;
-    if (currentUser?.isAdmin && !_accessToken) return;   // the admin bar asks for the preview sign-in first
+    if ((currentUser?.isAdmin || currentUser?.isPreview) && !_accessToken) return;   // the admin bar asks for the preview sign-in first
     aiStarting = true;
     try {
         await practiceLoadContext(true);
@@ -5049,7 +5054,8 @@ function renderInlineQuiz() {
                 <div class="quiz-option-editor">
                     <input type="radio" name="ilq_${qi}" ${q.correct===oi?'checked':''} onchange="inlineQuizQuestions[${qi}].correct=${oi}" title="Correct answer">
                     <input type="text" value="${escapeAttr(opt)}" oninput="inlineQuizQuestions[${qi}].options[${oi}]=this.value" placeholder="Option ${String.fromCharCode(65+oi)}">
-                </div>`).join('')}
+                </div>${quizWhyInput('inlineQuizQuestions', qi, oi, q)}`).join('')}
+            ${quizExplanationInput('inlineQuizQuestions', qi, q)}
         </div>`).join('');
 }
 
@@ -5087,8 +5093,10 @@ function youtubeToEmbed(url) {
     } catch { return null; }
 }
 
+const _quizData = {};   // quiz id -> its questions, so checkAnswer can show each question's explanation
 function renderQuiz(questions, courseId, lessonId) {
     const quizId = 'quiz_' + courseId + '_' + lessonId;
+    _quizData[quizId] = questions;
     let html = `<div class="lesson-quiz-section" id="${quizId}">`;
     html += `<h4><i class="fas fa-question-circle"></i> Quick Quiz</h4>`;
     questions.forEach((q, qi) => {
@@ -5119,9 +5127,27 @@ function checkAnswer(quizId, qi, selected, correct) {
         else if (i === selected) btn.classList.add('incorrect');
     });
     feedbackEl.classList.remove('hidden');
-    feedbackEl.innerHTML = selected === correct
-        ? '<span class="quiz-correct-msg"><i class="fas fa-check"></i> Correct!</span>'
-        : `<span class="quiz-wrong-msg"><i class="fas fa-times"></i> Not quite — the right answer is <strong>${String.fromCharCode(65 + correct)}</strong></span>`;
+    const q = (_quizData[quizId] || [])[qi] || {};
+    const letter = i => String.fromCharCode(65 + i);
+    const clean = v => escapeHtml(String(v == null ? '' : v).trim());
+    const why = clean((q.why || [])[selected]);      // why the chosen answer does not work
+    const expl = clean(q.explanation);               // why the right answer works
+    if (selected === correct) {
+        feedbackEl.innerHTML = '<span class="quiz-correct-msg"><i class="fas fa-check"></i> Correct!</span>' + (expl ? `<div class="quiz-why is-right"><p>${expl}</p></div>` : '');
+    } else {
+        feedbackEl.innerHTML = `<span class="quiz-wrong-msg"><i class="fas fa-times"></i> Not quite — the right answer is <strong>${letter(correct)}</strong></span>`
+            + (why || expl ? `<div class="quiz-why is-wrong">${why ? `<p><b>Why not ${letter(selected)}?</b> ${why}</p>` : ''}${expl ? `<p><b>Why ${letter(correct)}?</b> ${expl}</p>` : ''}</div>` : '');
+    }
+}
+
+// Editors: optional explanation per question and a "why it is wrong" note per option (shown to the student after answering).
+function quizArr(name) { return name === 'inlineQuizQuestions' ? inlineQuizQuestions : name === 'visualEditorQuizQuestions' ? visualEditorQuizQuestions : pendingQuizQuestions; }
+function quizSetWhy(name, qi, oi, v) { const q = quizArr(name)[qi]; if (!Array.isArray(q.why)) q.why = []; q.why[oi] = v; }
+function quizWhyInput(name, qi, oi, q) {
+    return `<input type="text" class="quiz-extra-input" value="${escapeAttr((q.why || [])[oi] || '')}" oninput="quizSetWhy('${name}',${qi},${oi},this.value)" placeholder="Why this answer is wrong (optional, shown if the student picks it)">`;
+}
+function quizExplanationInput(name, qi, q) {
+    return `<label class="quiz-expl-label">Explanation (optional, shown after the student answers)</label><input type="text" class="quiz-extra-input" style="margin-left:0;width:100%;" value="${escapeAttr(q.explanation || '')}" oninput="quizArr('${name}')[${qi}].explanation=this.value" placeholder="Why the right answer is right">`;
 }
 
 async function toggleComplete(courseId, lessonId) {
@@ -5574,7 +5600,8 @@ function renderVisualQuiz() {
                 <div class="quiz-option-editor">
                     <input type="radio" name="vq_correct_${qi}" ${q.correct===oi?'checked':''} onchange="visualEditorQuizQuestions[${qi}].correct=${oi}" title="Correct answer">
                     <input type="text" value="${escapeAttr(opt)}" oninput="visualEditorQuizQuestions[${qi}].options[${oi}]=this.value" placeholder="Option ${String.fromCharCode(65+oi)}">
-                </div>`).join('')}
+                </div>${quizWhyInput('visualEditorQuizQuestions', qi, oi, q)}`).join('')}
+            ${quizExplanationInput('visualEditorQuizQuestions', qi, q)}
             <p style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Select the radio button next to the correct answer</p>
         </div>`).join('');
 }
@@ -5714,8 +5741,9 @@ function renderQuizEditor() {
                     <input type="radio" name="correct_${qi}" ${q.correct === oi ? 'checked' : ''}
                         onchange="pendingQuizQuestions[${qi}].correct=${oi}" title="Mark as correct answer">
                     <input type="text" value="${escapeAttr(opt)}" oninput="pendingQuizQuestions[${qi}].options[${oi}]=this.value" placeholder="Option ${String.fromCharCode(65 + oi)}">
-                </div>
+                </div>${quizWhyInput('pendingQuizQuestions', qi, oi, q)}
             `).join('')}
+            ${quizExplanationInput('pendingQuizQuestions', qi, q)}
             <p style="font-size:11px;color:var(--text-secondary);">Select the radio button next to the correct answer</p>
         </div>
     `).join('');

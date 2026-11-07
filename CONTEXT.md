@@ -231,6 +231,18 @@ The student session load now selects `ended_at` and 40 sessions (was 15).
   (`opts.unit`), so questions lean on that unit's topics.
 - No paths are pre-filled: units come from the teacher (a student's school syllabus / the lesson notes), nothing is invented.
 
+### Quiz explanations, lesson page on phones, AI tab in "View as" (2026-11-07)
+- **Quiz feedback:** a quiz question may carry `explanation` (why the right answer is right) and `why` (array aligned with `options`: why each WRONG option is wrong).
+  After answering, `checkAnswer` shows "Why not X?" (the chosen option) and "Why Y?" (the right one); a correct answer shows the explanation. Both are optional, so old
+  quizzes behave as before. All three quiz editors (inline, visual, lesson modal) have a "why wrong" box per option and an explanation box per question; saved quiz
+  objects keep any extra fields. Spanish 101's 26 questions were filled in 2026-11-07.
+- **Lesson page on phones:** the Previous / Mark as Complete / Next row is `.lesson-nav-row`; it used to be one non-wrapping line, so long module titles pushed it past the
+  screen edge and the lesson panel scrolled sideways. At <=700px it wraps (Complete full width on top, Previous/Next side by side), `.course-content-area` no longer
+  scrolls sideways, and the lesson's own border/padding are dropped on phones (cards inside cards used to eat a third of the width).
+- **"View as" a student now shows the AI tab** (Spanish students). It runs as the admin preview for that student: the admin's own login reaches the AI, that student's
+  focus/profile/sessions/path come through the admin RPCs (`practiceAdminPreview` is set in `enterStudentView`, cleared in `exitStudentView`), and NOTHING is saved
+  (`practiceActive()` is false while `isPreview`; insights/conversations/state sync skip it). The tab shows even if practice is switched off for that student.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

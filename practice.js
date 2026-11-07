@@ -870,12 +870,13 @@ let practiceVoiceFlag = false;    // true when the text currently in the box cam
 let practiceSyncChain = Promise.resolve();
 
 function practiceActive() {
-    return !!(currentUser && !currentUser.isAdmin && currentUser.id !== 'admin' && currentUser.id !== 'admin-preview' && _accessToken);
+    return !!(currentUser && !currentUser.isAdmin && !currentUser.isPreview && currentUser.id !== 'admin' && currentUser.id !== 'admin-preview' && _accessToken);
 }
 
-// The admin tests the tool with a real sign-in (only to reach the AI); nothing from that is saved.
+// The admin tests the tool with a real sign-in (only to reach the AI); nothing from that is saved. Also true while the admin is
+// viewing a student's page ("View as"): that is the same preview, with that student's plan.
 function practiceAdminTesting() {
-    return !!(currentUser && currentUser.isAdmin && _accessToken);
+    return !!(currentUser && (currentUser.isAdmin || currentUser.isPreview) && _accessToken);
 }
 
 function practicePromptName() {
@@ -931,7 +932,7 @@ async function practiceLoadAdminPreviewContext(force) {
 }
 
 async function practiceLoadContext(force) {
-    if (currentUser && currentUser.isAdmin) return practiceLoadAdminPreviewContext(force);
+    if (currentUser && (currentUser.isAdmin || currentUser.isPreview)) return practiceLoadAdminPreviewContext(force);
     if (!practiceActive()) { practiceCtx = { loadedFor: null, loadedAt: 0, focus: [], profile: null, sessions: [] }; return practiceCtx; }
     const uid = currentUser.id;
     if (!force && practiceCtx.loadedFor === uid && Date.now() - practiceCtx.loadedAt < 60000) return practiceCtx;
@@ -952,7 +953,9 @@ async function practiceLoadContext(force) {
 
 // The Speaking Practice tab only appears for Spanish students Aaron has switched on.
 async function practiceMaybeShowTab() {
-    if (currentUser.isPreview) return;   // the admin looking at a student's page: the AI is previewed from the admin's own AI tab
+    // The admin looking at a student's page ("View as"): the tab is shown for Spanish students so the admin can try that student's tutor.
+    // It runs as the admin preview (the admin's own login reaches the AI, that student's plan drives it, nothing is saved).
+    if (currentUser.isPreview) { if (currentUser.type === 'spanish' && _accessToken) aiCompanionTab.style.display = ''; return; }
     if (!practiceActive() || currentUser.type !== 'spanish') return;
     await practiceLoadContext(true);
     if (practiceCtx.profile && practiceCtx.profile.enabled) aiCompanionTab.style.display = '';
@@ -1023,7 +1026,7 @@ function practiceRenderChips() {
     const wrap = document.getElementById('aiTargetChips');
     if (!wrap) return;
     const targets = practiceSessionTargets();
-    const admin = !!(currentUser && currentUser.isAdmin);
+    const admin = !!(currentUser && (currentUser.isAdmin || currentUser.isPreview));
     if (!targets.length && !admin) { wrap.classList.add('hidden'); wrap.innerHTML = ''; return; }
     const label = currentAiMode === 'plan' ? 'Practising today' : 'On the plan';
     const preview = admin ? `<span class="ai-chip ai-chip-preview">👁 Admin preview${practiceAdminPreview ? ' as ' + practiceEsc(practiceAdminPreview.name) : ''} — nothing is saved</span>` : '';

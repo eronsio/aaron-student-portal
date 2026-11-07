@@ -3888,3 +3888,27 @@ body.kb-bar #ai-companion .ai-footer { padding-bottom: 60px; }
 #ai-companion .ai-path-skill .fa-check { color: #5f9378; font-size: 10px; }
 #ai-companion .ai-path-go { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 99px; background: var(--ai-user); color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 #ai-companion .ai-path-go:hover { background: #3a485d; }
+
+/* ---- lesson page on phones: the Previous / Complete / Next row must fit the screen (long module titles used to push it sideways) ---- */
+.course-content-area { overflow-x: hidden; }
+.lesson-nav-row > div { min-width: 0; }
+.lesson-nav-row .back-btn { margin-bottom: 0; max-width: 100%; text-align: left; white-space: normal; line-height: 1.3; }
+@media (max-width: 700px) {
+    .lesson-nav-row { flex-wrap: wrap; }
+    .lesson-nav-row .mark-complete-btn { order: -1; width: 100%; justify-content: center; }
+    .lesson-nav-row > div { flex: 1 1 calc(50% - 6px); }
+    .lesson-nav-row .back-btn { width: 100%; }
+    /* cards inside cards inside cards ate a third of a phone screen: the lesson page itself needs no frame of its own */
+    .lesson-view-content { border: 0; border-radius: 0; padding: 0; background: transparent; }
+    .course-content-area { padding: 14px 12px 92px; }   /* room to scroll the last buttons clear of the floating Book button */
+}
+
+/* ---- quiz: why an answer is right or wrong ---- */
+.quiz-why { margin-top: 8px; padding: 10px 12px; border-left: 3px solid #cbd5e1; background: #f8fafc; border-radius: 0 var(--radius-md) var(--radius-md) 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+.quiz-why p { margin: 0 0 6px; }
+.quiz-why p:last-child { margin-bottom: 0; }
+.quiz-why b { color: var(--text-primary); font-weight: 600; }
+.quiz-why.is-wrong { border-left-color: #f87171; background: #fef7f7; }
+.quiz-why.is-right { border-left-color: #22c55e; background: #f4fbf6; }
+.quiz-extra-input { width: 100%; margin: 2px 0 8px 30px; width: calc(100% - 30px); font-size: 12px; }
+.quiz-expl-label { display: block; font-size: 11px; font-weight: 600; color: var(--text-secondary); margin: 6px 0 2px; }
