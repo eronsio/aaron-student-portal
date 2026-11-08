@@ -1654,6 +1654,7 @@ async function handleLogout() {
 function showLoginModal() {
     bootSplashHide();
     loginModal.classList.remove('hidden');
+    document.body.classList.add('on-login');   // the floating Book button is for signed-in students only
     mainApp.classList.add('hidden');
     document.getElementById('adminFloatingBar')?.classList.add('hidden');
     document.body.style.overflow = 'hidden';
@@ -1688,6 +1689,7 @@ function maybeShowInstallTip() {
 async function showMainApp() {
     bootSplashHide();
     loginModal.classList.add('hidden');
+    document.body.classList.remove('on-login');
     mainApp.classList.remove('hidden');
     document.body.style.overflow = 'auto';
 
