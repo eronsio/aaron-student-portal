@@ -218,7 +218,7 @@ The student session load now selects `ended_at` and 40 sessions (was 15).
 
 ### Learning path / "My path" map (2026-11-07)
 - **Data:** table `student_path` (user_id, position, title, detail, status `upcoming|current|done`, `focus_keys text[]`), created by `supabase/student_path.sql`
-  (run once; needs admin_auth.sql + speaking_practice.sql first). Students can read only their own rows; admin RPCs `admin_list_path` / `admin_set_path`
+  (run once; needs admin_auth.sql + speaking_practice.sql first). **Applied to the live database 2026-11-08**; checked from outside: anon cannot read the table, `admin_list_path`/`admin_set_path` reject null and wrong secrets, and the insert logic was tested inside a self-rolling-back block. Students can read only their own rows; admin RPCs `admin_list_path` / `admin_set_path`
   (replaces a student's whole path from a JSON array) use `admin_ok()`. Before the SQL is run the portal behaves as before: no path for students, and the admin
   box shows a setup callout.
 - **Teacher editor** (Admin -> Speaking Practice -> student card -> "Learning path"): plain text, one unit per line: `[x]` done, `[>]` current, no prefix upcoming,
