@@ -245,6 +245,14 @@ The student session load now selects `ended_at` and 40 sessions (was 15).
   focus/profile/sessions/path come through the admin RPCs (`practiceAdminPreview` is set in `enterStudentView`, cleared in `exitStudentView`), and NOTHING is saved
   (`practiceActive()` is false while `isPreview`; insights/conversations/state sync skip it). The tab shows even if practice is switched off for that student.
 
+### Start-up with no connection (2026-11-09)
+A student reported "Can't reach the server right now… you are still signed in" on top of the sign-in form. That message means the saved login exists but the start-up
+token renewal could not reach Supabase (offline / blocked network / VPN / the 15 s timeout). Now `restoreSavedLogin()` returns `'offline'` and `startReconnect()` shows a
+waiting screen instead of the sign-in form: the saved login is kept, it retries by itself (4 s, 7 s, 12 s, 20 s, then every 30 s), immediately on the browser's `online` event and
+when the app returns to the foreground, has a "Try again now" button and a "Sign in with a different account" link. It first pings `/auth/v1/health` and only spends the saved
+refresh token once the server answers (so a dead connection never burns it). An expired/rejected login still goes to the normal sign-in form. Other callers of
+`loadUserFromSession` (sign-in, sign-up) keep the old behaviour; only start-up passes `{retryable: true}`.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

@@ -3915,3 +3915,13 @@ body.kb-bar #ai-companion .ai-footer { padding-bottom: 60px; }
 
 /* no floating Book button behind the sign-in box */
 body.on-login .floating-book-btn { display: none; }
+
+/* ---- start-up with no connection: waiting screen instead of a sign-in form ---- */
+.reconnect-panel { text-align: center; padding: 8px 4px 4px; }
+.reconnect-panel .reconnect-spin { font-size: 28px; color: var(--accent-color, #3d5a80); margin: 4px 0 10px; }
+.reconnect-panel h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+.reconnect-panel p { margin: 0 0 12px; font-size: 14.5px; line-height: 1.5; color: var(--text-secondary); }
+.reconnect-panel .reconnect-status { font-size: 13.5px; color: var(--text-secondary); min-height: 20px; }
+.reconnect-panel .login-btn { width: 100%; margin-top: 4px; }
+.reconnect-panel .reconnect-link { display: block; width: 100%; margin: 12px 0 8px; padding: 6px; border: 0; background: none; color: var(--accent-color, #2563eb); font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; }
+.reconnect-panel .reconnect-tip { margin-top: 10px; font-size: 13px; }

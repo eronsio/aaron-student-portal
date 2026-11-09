@@ -1156,40 +1156,98 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Restore session from localStorage / sessionStorage
+    if (await restoreSavedLogin() === 'offline') startReconnect();
+});
+
+// Signs the saved login back in. Returns 'done' (the app or the login form is showing) or 'offline' (the saved login is kept but the
+// server could not be reached: the caller shows the reconnect screen and tries again).
+async function restoreSavedLogin() {
     const session = sbLoadSession();
     if (session) {
         // Try to refresh the token first (avoids expired token errors)
         if (session.refresh_token) {
             const refreshed = await sbRefreshSession(session.refresh_token);
-            if (refreshed.access_token) {
-                await loadUserFromSession(refreshed);
-                return;
-            }
-            if (refreshed.offline) {
-                // Can't reach the server right now: keep the saved login and let them retry.
-                showLoginModal();
-                setTimeout(() => showError('loginError', "Can't reach the server right now. Check your connection and reload — you are still signed in."), 100);
-                return;
-            }
+            if (refreshed.access_token) return loadUserFromSession(refreshed, { retryable: true });
+            // Can't reach the server right now: keep the saved login and try again later.
+            if (refreshed.offline) return 'offline';
             // rejected: usually this login has really expired. But a refresh code can only be used once, so if another
             // page/tab (or an earlier load cut short by a reload) renewed it first, the saved session now holds a newer
             // code: try that before giving up, so an update-reload never signs anybody out.
             const latest = sbLoadSession();
             if (latest && latest.refresh_token && latest.refresh_token !== session.refresh_token) {
                 const again = await sbRefreshSession(latest.refresh_token);
-                if (again.access_token) { await loadUserFromSession(again); return; }
+                if (again.access_token) return loadUserFromSession(again, { retryable: true });
+                if (again.offline) return 'offline';
             }
             await sbSignOut();
             showLoginModal();
-            return;
+            return 'done';
         }
-        await loadUserFromSession(session);
-    } else {
-        showLoginModal();
+        return loadUserFromSession(session, { retryable: true });
     }
-});
+    showLoginModal();
+    return 'done';
+}
 
-async function loadUserFromSession(session) {
+// ---- no connection at start-up: keep the saved login, say so plainly, and keep trying (no reload needed) ----
+let _reconnect = null;
+async function serverReachable() {
+    try {
+        const r = await fetch(`${SUPABASE_URL}/auth/v1/health`, { headers: { apikey: SUPABASE_KEY }, signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(6000) : undefined });
+        return r.status < 500;
+    } catch (e) { return false; }
+}
+function stopReconnect() {
+    if (!_reconnect) return;
+    clearTimeout(_reconnect.timer); clearInterval(_reconnect.tick);
+    window.removeEventListener('online', _reconnect.onWake); document.removeEventListener('visibilitychange', _reconnect.onVis);
+    document.getElementById('reconnectPanel')?.remove();
+    ['mainToggle', 'loginForm', 'signupForm'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });   // (the class names still decide which are shown)
+    _reconnect = null;
+}
+function startReconnect() {
+    if (_reconnect) return;
+    showLoginModal();   // hides the loading screen and gives us the box to put the message in
+    ['mainToggle', 'loginForm', 'signupForm'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    clearErrors();
+    const panel = document.createElement('div');
+    panel.id = 'reconnectPanel'; panel.className = 'reconnect-panel'; panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
+    panel.innerHTML = `<div class="reconnect-spin"><i class="fas fa-circle-notch fa-spin"></i></div>
+        <h3>Can't reach the server</h3>
+        <p>You are still signed in. We'll keep trying and open the portal as soon as your connection is back.</p>
+        <p class="reconnect-status" id="reconnectStatus">Trying again…</p>
+        <button type="button" class="login-btn" id="reconnectNow">Try again now</button>
+        <button type="button" class="reconnect-link" id="reconnectOther">Sign in with a different account</button>
+        <p class="reconnect-tip">Still stuck? Check your Wi-Fi or mobile data, turn off any VPN, or try another network.</p>`;
+    document.querySelector('#loginModal .modal-content').appendChild(panel);
+    const st = _reconnect = { tries: 0, busy: false, timer: null, tick: null, nextAt: 0 };
+    const status = document.getElementById('reconnectStatus');
+    const delay = () => Math.min(30000, 4000 * Math.pow(1.7, st.tries));   // 4s, 7s, 12s, 20s, 30s, 30s...
+    const schedule = () => { clearTimeout(st.timer); const d = delay(); st.nextAt = Date.now() + d; st.timer = setTimeout(attempt, d); };
+    const attempt = async () => {
+        if (_reconnect !== st || st.busy) return;
+        st.busy = true; clearTimeout(st.timer); status.textContent = 'Trying now…';
+        let result = 'offline';
+        if (await serverReachable()) result = await restoreSavedLogin();   // only spends the saved login once the server answers
+        if (_reconnect !== st) return;
+        st.busy = false; st.tries++;
+        if (result === 'done') { stopReconnect(); return; }
+        schedule();
+    };
+    st.onWake = () => attempt();
+    st.onVis = () => { if (!document.hidden) attempt(); };
+    window.addEventListener('online', st.onWake); document.addEventListener('visibilitychange', st.onVis);
+    st.tick = setInterval(() => { if (!st.busy && st.nextAt) status.textContent = `Trying again in ${Math.max(1, Math.ceil((st.nextAt - Date.now()) / 1000))}s…`; }, 1000);
+    document.getElementById('reconnectNow').addEventListener('click', attempt);
+    document.getElementById('reconnectOther').addEventListener('click', () => {
+        stopReconnect();
+        showLoginModal();
+    });
+    attempt();
+}
+
+// `opts.retryable`: a network failure is reported back as 'offline' (the caller keeps trying) instead of showing the login box.
+async function loadUserFromSession(session, opts) {
     try {
         let profile = await sbGetProfile(session.user.id);
 
@@ -1217,7 +1275,7 @@ async function loadUserFromSession(session) {
         if (adminLogin) {
             currentUser = { ...newAdminUser(), email: session.user.email || '', authed: true };
             showMainApp();
-            return;
+            return 'done';
         }
 
         currentUser = {
@@ -1230,17 +1288,20 @@ async function loadUserFromSession(session) {
         aiApplyRemoteVoice(session.user);
         showMainApp();
         aiSyncPull();
+        return 'done';
     } catch(err) {
         console.error('loadUserFromSession error:', err);
         if (err instanceof TypeError) {
             // A network failure, not a bad login: keep the saved session so the next reload signs straight in.
+            if (opts && opts.retryable) return 'offline';
             showLoginModal();
             setTimeout(() => showError('loginError', "Can't reach the server right now. Check your connection and reload — you are still signed in."), 100);
-            return;
+            return 'done';
         }
         await sbSignOut();
         showLoginModal();
         setTimeout(() => showError('loginError', 'Could not load your profile. Please try again.'), 100);
+        return 'done';
     }
 }
 
