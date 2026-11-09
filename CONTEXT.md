@@ -365,6 +365,12 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
   The system prompt gets a "WHAT <NAME> HAS BEEN WORKING ON LATELY" block in every mode: the teacher's this-week note (`currentUser.thisWeek`)
   plus the last 3 analysed sessions' summaries (`practiceRecentSessionsNote`); plan mode still adds the targets + last-session continuity.
 
+### Adult mode: tutor styles and age safety (added 2026-11-09)
+- `student_practice_profile.adult` (boolean, default false) is set ONLY by the teacher (Admin -> Speaking Practice -> student card checkbox "Adult (18+)", through `admin_upsert_practice_profile(..., p_adult)`). Students can read it, never write it. SQL: `supabase/adult_mode.sql` (must be run once; until then the checkbox is disabled and nobody counts as an adult).
+- The browser sends the whole system prompt, so it cannot be trusted for age limits. `ai-companion` reads the caller's `adult` flag with their own token and appends a platform block AFTER the capped prompt: a clean/age-appropriate block for anyone not confirmed adult, a short fixed list of limits (no sexual content, no hate slurs, no threats/harassment of real people, no self-harm encouragement, no illegal/dangerous help) for adults. Reports are not affected. Admins count as adult; an admin can send `x-test-adult: 0|1` (the client does this automatically while "View as" a student) to test either mode.
+- Client: adult students (or the admin) get a "Tutor style" block in the chat's gear menu: Friendly (default) / Direct / Unfiltered plus a free-text instruction box (400 chars). Stored in the student's progress as `sty: {s, p, t}` (newest `t` wins when merging devices; a timestamped Friendly entry is a deliberate reset). `buildAISystemPrompt` appends `practiceStyleBlock(sty)` only when `practiceAdultAllowed()`.
+- "No limits" is not literal: the model itself and the fixed list above still apply. Swearing, insults, rude role-play, arguing and blunt sarcasm are allowed on request for adults, without moralising.
+
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.
   iPhone students open the site in Safari → Share → Add to Home Screen; it then opens full-screen with its own icon (name "Aaron Learning").

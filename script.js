@@ -2745,6 +2745,12 @@ async function saveConversationTurn(role, content) {
 
 // buildAISystemPrompt() lives in practice.js (persona + rules + the teacher's per-student plan).
 
+// While the teacher previews a student, ask the server to apply THAT student's age mode (it ignores this header for anyone who is not an admin).
+function aiTutorHeaders() {
+    const h = { ..._headers(_accessToken) };
+    if (currentUser && currentUser.isAdmin && typeof practiceAdminPreview !== 'undefined' && practiceAdminPreview) h['x-test-adult'] = practiceAdultAllowed() ? '1' : '0';
+    return h;
+}
 const AI_COMPANION_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai-companion`;
 
 let aiAuthRetried = false;
@@ -2757,7 +2763,7 @@ async function callAnthropicAPI(messages, systemPrompt) {
     try {
         const r = await fetch(AI_COMPANION_FUNCTION_URL, {
             method: 'POST',
-            headers: _headers(_accessToken),
+            headers: aiTutorHeaders(),
             body: JSON.stringify({ messages: messages.slice(-20), systemPrompt }),
             signal: controller.signal
         });
@@ -3445,6 +3451,42 @@ async function aiPushOffer() {
         if (res === 'on') { aiFx('goal', 'success'); pushRefreshSettings(); }
     });
 }
+// ---- tutor style (adults only): the "Tutor style" block in the ⚙ settings menu ----
+// Shown only when the teacher marked the student as an adult (practiceAdultAllowed). The choice is saved in the student's progress and sent
+// to the tutor by buildAISystemPrompt; the ai-companion function enforces the same adult flag on the server.
+function aiStyleBuild(menu) {
+    if (menu.querySelector('#aiStyleRow')) return;
+    const row = document.createElement('div');
+    row.id = 'aiStyleRow'; row.className = 'ai-pop-section hidden';
+    row.innerHTML = `<div class="ai-pop-row"><span>Tutor style</span></div>
+        <div class="ai-seg" id="aiStyleSeg" role="group" aria-label="Tutor style">
+            <button type="button" data-style="friendly">Friendly</button><button type="button" data-style="direct">Direct</button><button type="button" data-style="unfiltered">Unfiltered</button></div>
+        <textarea id="aiStylePersona" class="ai-style-persona" rows="3" maxlength="${PRACTICE_PERSONA_MAX}" placeholder="Anything else? e.g. Be a rude taxi driver in Madrid and insult me when I get it wrong."></textarea>
+        <p class="ai-push-note">Unfiltered means swearing, insults and rude role-play when you ask for it. Nothing sexual, hateful or threatening, ever.</p>`;
+    const anchor = menu.querySelector('#aiPushRow');
+    (anchor || menu.lastElementChild).before(row);
+    const save = (patch) => {
+        const prog = aiProgressLoad();
+        const cur = prog.sty || { s: 'friendly', p: '' };
+        const next = practiceStyleNormalize({ s: cur.s, p: cur.p, ...patch, t: Date.now() });
+        const out = { ...prog };
+        if (next) out.sty = next; else out.sty = { s: 'friendly', p: '', t: Date.now() };   // keep a timestamped "reset" so it wins over older copies on other devices
+        aiProgressSave(out); aiSyncSoon(); aiStyleRefresh();
+    };
+    row.querySelectorAll('#aiStyleSeg button').forEach(b => b.addEventListener('click', () => save({ s: b.dataset.style })));
+    row.querySelector('#aiStylePersona').addEventListener('change', (e) => save({ p: e.target.value }));
+}
+function aiStyleRefresh() {
+    const row = document.getElementById('aiStyleRow');
+    if (!row) return;
+    const ok = practiceAdultAllowed();
+    row.classList.toggle('hidden', !ok);
+    if (!ok) return;
+    const sty = aiProgressLoad().sty || { s: 'friendly', p: '' };
+    row.querySelectorAll('#aiStyleSeg button').forEach(b => b.classList.toggle('active', b.dataset.style === sty.s));
+    const ta = row.querySelector('#aiStylePersona');
+    if (document.activeElement !== ta) ta.value = sty.p || '';
+}
 // The "Practice reminders" block inside the ⚙ settings menu (built hidden; shown only when reminders exist on the server).
 async function pushRefreshSettings() {
     const box = document.getElementById('aiPushRow');
@@ -4083,6 +4125,7 @@ function ensureAiExtras() {
         if (sel) { sel.addEventListener('change', () => chooseTtsVoice(sel.value)); fillTtsVoiceSelect(); }
         setSlowTTS(ttsSlow);
         pushBuildSettings(menu);
+        aiStyleBuild(menu);
         const sfxBox = menu.querySelector('#aiSfxOn');
         if (sfxBox) { sfxBox.checked = aiSfx.on; sfxBox.addEventListener('change', () => { aiSfx.on = sfxBox.checked; try { localStorage.setItem('aiSfx', aiSfx.on ? '1' : '0'); } catch (e) {} aiPlaySfx('perfect'); }); }
         const hapBox = menu.querySelector('#aiHapticsOn');
@@ -4314,6 +4357,7 @@ function aiTogglePopover(id, trigger) {
     if (willOpen) {
         menu.classList.remove('hidden');
         if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        if (id === 'aiSettingsMenu' && typeof aiStyleRefresh === 'function') aiStyleRefresh();
     }
 }
 function aiClosePopovers() {

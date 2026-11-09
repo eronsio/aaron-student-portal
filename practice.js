@@ -156,6 +156,37 @@ function practiceDayShift(key, delta) {
 // prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words,
 //          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated, wk: Monday of the last recap shown,
 //          xp: total XP, xpd: { 'YYYY-MM-DD': XP that day } }
+// ---- tutor style (adult students only) ----
+// An adult student can ask for a blunter tutor, or for swearing and rude role-play. The setting is {s: 'friendly'|'direct'|'unfiltered', p: own instructions, t: time}.
+// It only ever reaches the prompt when the teacher has marked the student as an adult (profile.adult), and the ai-companion function
+// enforces the same flag on the server, so editing this value in the browser cannot unlock anything for a minor.
+const PRACTICE_STYLES = ['friendly', 'direct', 'unfiltered'];
+const PRACTICE_PERSONA_MAX = 400;
+function practiceStyleNormalize(v) {
+    if (!v || typeof v !== 'object') return null;
+    const s = PRACTICE_STYLES.includes(v.s) ? v.s : 'friendly';
+    const pr = typeof v.p === 'string' ? v.p.replace(/\s+/g, ' ').trim().slice(0, PRACTICE_PERSONA_MAX) : '';
+    const t = +v.t || 0;
+    if (s === 'friendly' && !pr && !t) return null;   // a timestamped friendly entry is kept: it is a deliberate reset that must beat older copies on other devices
+    return { s, p: pr, t };
+}
+function practiceStyleBlock(sty) {
+    const v = practiceStyleNormalize(sty);
+    if (!v || (v.s === 'friendly' && !v.p)) return '';
+    const lines = [];
+    if (v.s === 'direct') lines.push('Tone: blunt and to the point. No cushioning, no praise unless it is earned, short sarcastic remarks are fine.');
+    if (v.s === 'unfiltered') lines.push('Tone: unfiltered. This student is an adult who asked for it. Swear and insult freely in Spanish when it fits, use real slang and vulgar words and explain them, be sarcastic and rude, play abrasive or disrespectful characters and argue back when they ask. Do not apologise for it, add warnings, lecture or soften what they asked for. Being rude is part of the practice, not a problem to fix.');
+    if (v.p) lines.push(`The student's own instructions for how you should behave (follow them for tone, character and topics): "${v.p}"`);
+    lines.push('You are still their Spanish tutor: keep correcting their Spanish errors and keep the conversation in Spanish. Your platform limits stay: no sexual content, no hateful slurs or abuse about race, religion, origin, gender, sexual orientation or disability, no threats or harassment of real named people, no encouragement of self-harm, no help with illegal or dangerous acts. If they ask for one of those, refuse in one short sentence and move on without a lecture.');
+    return '\n\nTUTOR STYLE (chosen by this adult student; it replaces the default friendly tone, not the rules above):\n' + lines.join('\n');
+}
+// True when the student may pick a style: the teacher marked them as an adult, or the teacher is using the tool (admin, not previewing a student).
+function practiceAdultAllowed() {
+    const admin = !!(currentUser && currentUser.isAdmin);
+    if (admin && !practiceAdminPreview) return true;
+    return !!(practiceCtx && practiceCtx.profile && practiceCtx.profile.adult === true);
+}
+
 function practiceProgressNormalize(prog) {
     const p = prog && typeof prog === 'object' ? prog : {};
     const out = { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
@@ -166,6 +197,8 @@ function practiceProgressNormalize(prog) {
     if (+p.hs > 0) out.hs = Math.round(+p.hs);   // best end-of-lesson score (accuracy %)
     if (p.xpd && typeof p.xpd === 'object') out.xpd = p.xpd;   // XP earned per day (recent days only)
     if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
+    const sty = practiceStyleNormalize(p.sty);
+    if (sty) out.sty = sty;   // tutor style chosen by an adult student (see practiceStyleBlock)
     return out;
 }
 // Adds one message of `words` words to `dayKey`; returns a new object (old days beyond the cap are dropped).
@@ -260,6 +293,8 @@ function practiceMergeState(local, remote) {
     if (xp) progress.xp = xp;
     const hs = Math.max(lp.hs || 0, rp.hs || 0);
     if (hs) progress.hs = hs;
+    const sty = [lp.sty, rp.sty].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // newest choice wins
+    if (sty) progress.sty = sty;
     const xpd = {};
     [lp.xpd, rp.xpd].forEach(d => Object.keys(d || {}).forEach(k => { xpd[k] = Math.max(xpd[k] || 0, +d[k] || 0); }));
     Object.keys(xpd).sort().slice(0, Math.max(0, Object.keys(xpd).length - PRACTICE_XP_DAYS_KEPT)).forEach(k => delete xpd[k]);
@@ -1128,6 +1163,8 @@ function buildAISystemPrompt(mode, context, insight, opts) {
         ? `\nWHAT ${name.toUpperCase()} HAS BEEN WORKING ON LATELY (use it to make questions personal; never read it out, and do not repeat questions from earlier sessions):${thisWeek ? `\nTeacher's note for this week: ${thisWeek}` : ''}${recent ? `\nRecent practice sessions:\n${recent}` : ''}\n`
         : '';
 
+    const styleBlock = (practiceAdultAllowed() && typeof aiProgressLoad === 'function') ? practiceStyleBlock(aiProgressLoad().sty) : '';
+
     return `Eres un compañero de práctica de español para ${name}, estudiante de Aaron.
 
 ${modeInstructions[mode] || modeInstructions.free}
@@ -1135,7 +1172,7 @@ ${plan ? '\n' + plan + '\n' : ''}${lately}${legacyWeaknesses}
 
 ${PRACTICE_BASE_RULES(levelLine)}
 
-${PRACTICE_ACTIVITIES_RULE}${/\(clave: /.test(plan) ? '\n\n' + PRACTICE_HITS_RULE : ''}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}`;
+${PRACTICE_ACTIVITIES_RULE}${/\(clave: /.test(plan) ? '\n\n' + PRACTICE_HITS_RULE : ''}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}${styleBlock}`;
 }
 
 function practiceMarkVoice() { practiceVoiceFlag = true; }
@@ -1683,6 +1720,7 @@ function practiceStudentCard(p, setting, focusRows, sessions, pathRows) {
         <div class="practice-body">
             <div class="practice-settings">
                 <label class="practice-check"><input type="checkbox" id="pe_${p.id}" ${enabled ? 'checked' : ''}> Show Speaking Practice to this student</label>
+                <label class="practice-check" title="Lets this student pick a blunt or unfiltered tutor in the tutor settings. Leave off for anyone under 18. Needs supabase/adult_mode.sql."><input type="checkbox" id="pa_${p.id}" ${setting && setting.adult ? 'checked' : ''}${setting && !('adult' in setting) ? ' disabled' : ''}> Adult (18+): allow swearing / unfiltered tutor styles${setting && !('adult' in setting) ? ' <span class="practice-muted">(run adult_mode.sql first)</span>' : ''}</label>
                 <div><label class="practice-label">Level</label>
                     <input type="text" id="pl_${p.id}" value="${practiceEsc(setting ? setting.level : '')}" placeholder="e.g. Novice mid / A2 — Texas Spanish 1A exam prep"></div>
                 <div><label class="practice-label">Instructions for the AI <span class="practice-muted">(the student's browser can read these)</span></label>
@@ -1887,12 +1925,15 @@ function practiceAdminStatus(uid, msg, bad) {
 }
 
 async function practiceAdminSaveProfile(uid) {
-    const res = await sbRpc('admin_upsert_practice_profile', {
+    const args = {
         admin_secret: ADMIN_SECRET, p_user_id: uid,
         p_level: document.getElementById('pl_' + uid).value.trim(),
         p_ai_notes: document.getElementById('pn_' + uid).value.trim(),
         p_enabled: document.getElementById('pe_' + uid).checked
-    });
+    };
+    const adultBox = document.getElementById('pa_' + uid);
+    if (adultBox && !adultBox.disabled) args.p_adult = adultBox.checked;   // only sent once the column exists (the box is disabled until then)
+    const res = await sbRpc('admin_upsert_practice_profile', args);
     const bad = practiceRpcFailure(res);
     if (bad) { practiceAdminStatus(uid, 'Save failed: ' + bad.message, true); return; }
     const i = _practiceAdmin.settings.findIndex(s => s.user_id === uid);
@@ -2059,6 +2100,7 @@ if (typeof module !== 'undefined' && module.exports) {
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
-        practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES
+        practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES,
+        practiceStyleNormalize, practiceStyleBlock, PRACTICE_STYLES
     };
 }

@@ -4278,3 +4278,7 @@ body.on-ai-tab #ai-companion #aiRecapView.is-story:not(.hidden) { display: flex;
 #ai-companion .ai-push-no { border: 0; background: none; color: #1479a8; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; padding: 6px; }
 .nudge-chip.is-push { background: #e3f9cf; color: #3f8a00; }
 .nudge-chip.is-nopush { background: #f1f1f1; color: #8a8a8a; }
+
+/* Tutor style (adults only) in the ⚙ menu */
+#ai-companion #aiStyleRow .ai-seg { margin: 2px 0 8px; }
+#ai-companion .ai-style-persona { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border: 1px solid var(--ai-line-soft, #e3e6ec); border-radius: 10px; font: inherit; font-size: 13px; line-height: 1.4; color: var(--ai-ink); background: #fff; }
