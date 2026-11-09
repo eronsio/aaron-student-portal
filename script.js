@@ -3462,7 +3462,7 @@ function aiStyleBuild(menu) {
         <div class="ai-seg" id="aiStyleSeg" role="group" aria-label="Tutor style">
             <button type="button" data-style="friendly">Friendly</button><button type="button" data-style="direct">Direct</button><button type="button" data-style="unfiltered">Unfiltered</button></div>
         <textarea id="aiStylePersona" class="ai-style-persona" rows="3" maxlength="${PRACTICE_PERSONA_MAX}" placeholder="Anything else? e.g. Be a rude taxi driver in Madrid and insult me when I get it wrong."></textarea>
-        <p class="ai-push-note">Unfiltered means swearing, insults and rude role-play when you ask for it. Nothing sexual, hateful or threatening, ever.</p>`;
+        <p class="ai-push-note">Unfiltered means swearing, insults, flirting and rude role-play when you ask for it. Nothing explicit, hateful or threatening.</p>`;
     const anchor = menu.querySelector('#aiPushRow');
     (anchor || menu.lastElementChild).before(row);
     const save = (patch) => {
