@@ -1581,12 +1581,13 @@ function practiceRpcFailure(result) {
 async function loadAdminPractice() {
     const root = document.getElementById('adminPracticeContent');
     root.innerHTML = '<p style="color:var(--text-secondary);">Loading...</p>';
-    const [profiles, focus, settings, sessions, path] = await Promise.all([
+    const [profiles, focus, settings, sessions, path, push] = await Promise.all([
         sbRpc('admin_list_profiles', { admin_secret: ADMIN_SECRET }),
         sbRpc('admin_list_focus', { admin_secret: ADMIN_SECRET }),
         sbRpc('admin_list_practice_profiles', { admin_secret: ADMIN_SECRET }),
         sbRpc('admin_list_practice_sessions', { admin_secret: ADMIN_SECRET, p_limit: 300 }),
-        sbRpc('admin_list_path', { admin_secret: ADMIN_SECRET })
+        sbRpc('admin_list_path', { admin_secret: ADMIN_SECRET }),
+        sbRpc('admin_list_push', { admin_secret: ADMIN_SECRET })   // before supabase/push.sql is run this is an error object: no push info
     ]);
     const failure = practiceRpcFailure(focus) || practiceRpcFailure(settings) || practiceRpcFailure(sessions) || practiceRpcFailure(profiles);
     if (failure) {
@@ -1597,7 +1598,7 @@ async function loadAdminPractice() {
         return;
     }
     // The path box works only after supabase/student_path.sql has been run; until then the rest of the panel is unaffected.
-    _practiceAdmin = { profiles: profiles.filter(p => p.type === 'spanish'), focus, settings, sessions, path: Array.isArray(path) ? path : [], pathReady: Array.isArray(path), error: null };
+    _practiceAdmin = { profiles: profiles.filter(p => p.type === 'spanish'), focus, settings, sessions, path: Array.isArray(path) ? path : [], pathReady: Array.isArray(path), pushReady: Array.isArray(push), pushMap: Array.isArray(push) ? Object.fromEntries(push.map(x => [x.user_id, x])) : {}, error: null };
     renderAdminPractice();
 }
 
@@ -1815,11 +1816,19 @@ function practiceNudgeData() {
     return practiceNudgeList({ profiles: a.profiles, settings: a.settings, sessions: a.sessions, now: new Date(), nudged: practiceNudgedLoad() });
 }
 const PRACTICE_NUDGE_LABEL = { streak: ['🔥 Streak at risk', 'is-streak'], inactive: ['💤 Gone quiet', 'is-inactive'], new: ['👋 Not started', 'is-new'] };
+// 🔔 = this student turned push reminders on (the system already nudges them once a day when it helps), so a WhatsApp is the extra push.
+function practiceNudgePushChip(uid) {
+    const pm = _practiceAdmin.pushMap || {};
+    const x = pm[uid];
+    if (!x) return Object.keys(pm).length || _practiceAdmin.pushReady ? ' <span class="nudge-chip is-nopush" title="No reminders on this student\'s devices">no push</span>' : '';
+    const last = x.last_sent ? `, last: ${practiceEsc(x.last_kind || '')} ${practiceFmtDate(x.last_sent)}` : '';
+    return ` <span class="nudge-chip is-push" title="Push reminders are on${last}">🔔 push on${x.enabled ? '' : ' (paused)'}</span>`;
+}
 function practiceNudgeRow(n) {
     const lab = PRACTICE_NUDGE_LABEL[n.kind];
     const v = _practiceNudgeVariant[n.id] || 0;
     return `<div class="nudge-row" id="nr_${n.id}">
-        <div class="nudge-head"><b>${practiceEsc(n.name)}</b> <span class="nudge-chip ${lab[1]}">${lab[0]}</span></div>
+        <div class="nudge-head"><b>${practiceEsc(n.name)}</b> <span class="nudge-chip ${lab[1]}">${lab[0]}</span>${practiceNudgePushChip(n.id)}</div>
         <div class="practice-muted">${practiceEsc(n.detail)}</div>
         <textarea class="nudge-text" id="nt_${n.id}" rows="3">${practiceEsc(practiceNudgeText(n.kind, n.name, n.streak, n.since, v))}</textarea>
         <div class="nudge-actions">

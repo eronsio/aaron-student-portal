@@ -284,6 +284,17 @@ What was copied (flows and layout, not Loora's art/name/mascot):
 - **Vibration** = `navigator.vibrate` (Android Chrome). iPhone Safari has no vibration API, so on iPhone it is sound only (the hidden-`<input switch>` haptic trick was deliberately not used: unverifiable here and it needs a user gesture).
 - **Voice-first dock:** hold-to-talk is the default EVERY time the tutor opens. The keyboard choice is no longer saved on the device (`aiDockChoice`, in memory; old `aiDockMode` key is deleted); `startAiMode` resets it to voice. Browsers that cannot record still get the text box.
 
+### Push notifications (practice reminders, 2026-11-09)
+Web Push, free. Three server steps, in order (until all are done the portal shows no reminder option and nothing changes): (1) `supabase/push.sql` (tables `push_config`, `push_subscriptions`, `push_log`, RPC `admin_list_push`),
+(2) deploy the Edge Function `supabase/functions/send-push/index.ts` with JWT verification ON, (3) `supabase/push_cron.sql` (pg_cron + pg_net: calls the function at :05 every hour with the public anon key as Bearer and the shared secret from `push_config` in `x-cron-secret`).
+- **No secrets to handle:** the function generates the VAPID key pair on first use (`webpush.generateVAPIDKeys()`) and stores it in `push_config` (service role only); the cron secret is created by push.sql in the same table. `GET send-push?vapid=1` returns the public key; the client hides every reminder option when that is missing.
+- **Client** (script.js "practice reminders" block + `sw.js`): `sw.js` is push-only (no fetch handler, caches nothing) and shows the notification; tap opens `/?open=practice` (`pushMaybeOpenPractice`). Opt-in is per device: a one-time "Want a reminder?" card after the first daily goal (`aiPushOffer`, re-asked no sooner than 14 days after "Not now"),
+  and a "Practice reminders" switch + hour (6 AM-10 PM, default 6 PM) + "Send me a test" in the ⚙ settings (`pushBuildSettings`). Subscription row = endpoint/keys + time zone + hour in `push_subscriptions` (own rows only; one endpoint = one row). Android Chrome works in the browser; iPhone only from the installed Home-Screen app (iOS 16.4+), where the settings explain how to install first (`pushNeedsInstall`).
+- **Rules** (`planPush`, between the RULES markers in index.ts, plain JS so they are unit-tested in Node: extract the block and run it): the student's local time zone decides everything; quiet hours 22:00-08:00; at most ONE push per local day; nothing if today's goal is done or the student never practised (the teacher nudges those on WhatsApp);
+  Monday 9-13: weekly recap; at/after their reminder hour: streak >= 2 -> "streak at risk"; practised in the last 2 days -> daily reminder; 3-21 days quiet -> gentle comeback every 3 days, stopping after 3 unanswered. 3-4 wordings per kind (picked by user+date). Streaks are read from `student_app_state.progress` (the function mirrors `practiceStreakInfo`).
+  Dead addresses (404/410) are deleted; every send is logged in `push_log`. `POST {dry:true, now:"<ISO>"}` with the cron secret returns the plan without sending.
+- **Admin:** the WhatsApp nudge list shows "🔔 push on / no push" per student (`admin_list_push`).
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

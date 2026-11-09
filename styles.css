@@ -4266,3 +4266,15 @@ body.on-ai-tab #ai-companion #aiRecapView.is-story:not(.hidden) { display: flex;
 #ai-companion #aiRecapView.is-story .ai-recap-card { margin: 0; min-height: 0; }
 #ai-companion .ai-story { padding-top: max(16px, env(safe-area-inset-top, 0px)); padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)); }
 #ai-companion .ai-sticker-big i { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: #ff8a00; filter: none; text-shadow: -2px -2px 0 #3a2300, 2px -2px 0 #3a2300, -2px 2px 0 #3a2300, 2px 2px 0 #3a2300, 0 3px 0 #3a2300; }
+
+/* ---- practice reminders (push) ---- */
+#ai-companion .ai-pop-section { padding-top: 6px; margin-top: 4px; border-top: 1px solid var(--ai-line-soft, #eef0f4); }
+#ai-companion .ai-push-note { margin: 4px 0 6px; font-size: 12px; line-height: 1.4; color: var(--ai-muted); }
+#ai-companion .ai-milestone-push { background: var(--g-blue-soft); border-color: var(--g-blue-line); color: var(--g-blue-d); align-items: flex-start; }
+#ai-companion .ai-milestone-push > i { color: var(--g-blue); margin-top: 2px; }
+#ai-companion .ai-milestone-push span { color: #1479a8; }
+#ai-companion .ai-push-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+#ai-companion .ai-push-actions .ai-gbtn { background: var(--g-green); color: #fff; padding: 9px 16px; font-size: 14px; box-shadow: 0 3px 0 var(--g-green-d); }
+#ai-companion .ai-push-no { border: 0; background: none; color: #1479a8; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; padding: 6px; }
+.nudge-chip.is-push { background: #e3f9cf; color: #3f8a00; }
+.nudge-chip.is-nopush { background: #f1f1f1; color: #8a8a8a; }

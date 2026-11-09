@@ -1288,6 +1288,8 @@ async function loadUserFromSession(session, opts) {
         aiApplyRemoteVoice(session.user);
         showMainApp();
         aiSyncPull();
+        pushSync();
+        pushMaybeOpenPractice();
         return 'done';
     } catch(err) {
         console.error('loadUserFromSession error:', err);
@@ -3332,6 +3334,180 @@ function aiLevelCardHtml() {
     </div>`;
 }
 
+// ---- practice reminders (Web Push): opt-in, per device ----
+// Needs the server side (supabase/push.sql, the send-push function, supabase/push_cron.sql). Until that exists pushGetKey() finds no public key and
+// every reminder option stays hidden. Android Chrome works in the browser; iPhone only from the installed home-screen app (iOS 16.4+), and only
+// after a tap. The service worker (sw.js) does nothing but show notifications.
+const PUSH_URL = SUPABASE_URL + '/functions/v1/send-push';
+const aiPush = { key: undefined, busy: false };
+function pushSupported() { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; }
+function pushIsIos() { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+function pushStandalone() { return !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches)); }
+function pushNeedsInstall() { return pushIsIos() && !pushStandalone(); }
+function pushB64ToBytes(b64) {
+    const pad = '='.repeat((4 - b64.length % 4) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, ch => ch.charCodeAt(0));
+}
+function pushBytesToB64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+// The server's public key; null when reminders are not set up on the server (then no reminder UI is shown at all).
+async function pushGetKey() {
+    if (aiPush.key !== undefined) return aiPush.key;
+    aiPush.key = null;
+    try {
+        const r = await fetch(PUSH_URL + '?vapid=1', { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }, signal: (AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined) });
+        if (r.ok) { const d = await r.json(); if (d && d.key) aiPush.key = d.key; }
+    } catch (e) {}
+    return aiPush.key;
+}
+async function pushRegistration() {
+    await navigator.serviceWorker.register('/sw.js');
+    return navigator.serviceWorker.ready;
+}
+async function pushCurrent() {
+    if (!pushSupported() || !navigator.serviceWorker) return null;
+    try { const reg = await navigator.serviceWorker.getRegistration('/'); return reg ? await reg.pushManager.getSubscription() : null; } catch (e) { return null; }
+}
+function pushHour() { try { const h = parseInt(localStorage.getItem('aiPushHour'), 10); return h >= 6 && h <= 22 ? h : 18; } catch (e) { return 18; } }
+async function pushSaveRow(sub, hour, enabled) {
+    if (!sub || !_accessToken || !currentUser || !currentUser.id || currentUser.isAdmin || currentUser.isPreview) return false;
+    const json = sub.toJSON();
+    const row = { user_id: currentUser.id, endpoint: sub.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth, tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        remind_hour: hour, enabled: enabled !== false, ua: (navigator.userAgent || '').slice(0, 160), updated_at: new Date().toISOString() };
+    try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?on_conflict=endpoint`, { method: 'POST', headers: { ..._headers(_accessToken), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
+        return r.ok;
+    } catch (e) { return false; }
+}
+// Turn reminders on (must be called from a tap). Returns 'on' | 'denied' | 'unsupported' | 'install' | 'error'.
+async function pushEnable() {
+    if (!pushSupported()) return pushNeedsInstall() ? 'install' : 'unsupported';
+    if (pushNeedsInstall()) return 'install';
+    const key = await pushGetKey();
+    if (!key) return 'unsupported';
+    try {
+        const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+        if (perm !== 'granted') return 'denied';
+        const reg = await pushRegistration();
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushB64ToBytes(key) });
+        const ok = await pushSaveRow(sub, pushHour(), true);
+        try { localStorage.setItem('aiPushOn', ok ? '1' : '0'); } catch (e) {}
+        return ok ? 'on' : 'error';
+    } catch (e) { console.warn('push enable failed', e); return 'error'; }
+}
+async function pushDisable() {
+    try {
+        const sub = await pushCurrent();
+        if (sub) {
+            if (_accessToken) await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(sub.endpoint)}`, { method: 'DELETE', headers: { ..._headers(_accessToken), Prefer: 'return=minimal' } }).catch(() => {});
+            await sub.unsubscribe();
+        }
+    } catch (e) {}
+    try { localStorage.setItem('aiPushOn', '0'); } catch (e) {}
+}
+async function pushSendTest() {
+    try {
+        const r = await fetch(PUSH_URL, { method: 'POST', headers: _headers(_accessToken), body: JSON.stringify({ action: 'test' }) });
+        return r.ok;
+    } catch (e) { return false; }
+}
+// On start-up for a student who already allowed reminders: keep the saved address, time zone and hour current (they change when the
+// browser renews its push address or the student travels).
+async function pushSync() {
+    if (!pushSupported() || Notification.permission !== 'granted' || !currentUser || currentUser.isAdmin || currentUser.isPreview) return;
+    if (!(await pushGetKey())) return;
+    const sub = await pushCurrent();
+    if (sub) pushSaveRow(sub, pushHour(), true);
+}
+// One-time "want a reminder?" card in the chat, shown after a good moment (today's goal reached), never to someone who said no recently.
+async function aiPushOffer() {
+    if (!pushSupported() || pushNeedsInstall() || Notification.permission !== 'default' || !practiceActive()) return;
+    try { const t = parseInt(localStorage.getItem('aiPushAsked') || '0', 10); if (t && Date.now() - t < 14 * 86400000) return; } catch (e) { return; }
+    if (!(await pushGetKey()) || await pushCurrent()) return;
+    try { localStorage.setItem('aiPushAsked', String(Date.now())); } catch (e) {}
+    const box = document.getElementById('aiChatMessages');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.className = 'ai-milestone ai-milestone-push';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<i class="fas fa-bell"></i><div><b>Want a reminder?</b><span>We'll nudge you once a day, only when it helps your streak.</span>
+        <span class="ai-push-actions"><button type="button" class="ai-gbtn" data-push-yes>Turn on reminders</button><button type="button" class="ai-push-no" data-push-no>Not now</button></span></div>`;
+    box.appendChild(el);
+    aiScrollToEnd(box);
+    el.querySelector('[data-push-no]').addEventListener('click', () => el.remove());
+    el.querySelector('[data-push-yes]').addEventListener('click', async (e) => {
+        e.target.disabled = true;
+        const res = await pushEnable();
+        el.querySelector('div').innerHTML = res === 'on' ? '<b>Reminders are on 🎉</b><span>You can change the time or turn them off in the ⚙ settings.</span>'
+            : res === 'denied' ? "<b>Reminders are blocked</b><span>Your browser blocked notifications. You can allow them in the site settings.</span>"
+            : '<b>Could not turn on reminders</b><span>Try again from the ⚙ settings.</span>';
+        if (res === 'on') { aiFx('goal', 'success'); pushRefreshSettings(); }
+    });
+}
+// The "Practice reminders" block inside the ⚙ settings menu (built hidden; shown only when reminders exist on the server).
+async function pushRefreshSettings() {
+    const box = document.getElementById('aiPushRow');
+    if (!box) return;
+    if (!pushSupported() && !pushNeedsInstall()) { box.classList.add('hidden'); return; }
+    if (!(await pushGetKey())) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const sw = box.querySelector('#aiPushOn'), sel = box.querySelector('#aiPushHour'), note = box.querySelector('#aiPushNote'), test = box.querySelector('#aiPushTest');
+    if (pushNeedsInstall()) {
+        sw.disabled = true; sw.checked = false; sel.classList.add('hidden'); test.classList.add('hidden');
+        note.textContent = 'On iPhone, add the portal to your Home Screen first (Share → Add to Home Screen), then open it from there to turn on reminders.';
+        return;
+    }
+    const sub = await pushCurrent();
+    const on = !!sub && Notification.permission === 'granted';
+    sw.disabled = false; sw.checked = on;
+    sel.classList.toggle('hidden', !on); test.classList.toggle('hidden', !on);
+    sel.value = String(pushHour());
+    note.textContent = Notification.permission === 'denied' ? 'Notifications are blocked for this site. Allow them in your browser settings to use reminders.' : on ? 'One reminder a day at most, only when it helps your streak.' : '';
+}
+function pushBuildSettings(menu) {
+    if (menu.querySelector('#aiPushRow')) return;
+    const hours = Array.from({ length: 17 }, (_, i) => 6 + i).map(h => `<option value="${h}">${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? 'AM' : 'PM'}</option>`).join('');
+    const row = document.createElement('div');
+    row.id = 'aiPushRow'; row.className = 'ai-pop-section hidden';
+    row.innerHTML = `<label class="ai-pop-row ai-pop-check"><span>Practice reminders</span><input type="checkbox" id="aiPushOn"></label>
+        <div class="ai-pop-row"><label for="aiPushHour">Remind me around</label><select id="aiPushHour" class="tts-voice-select hidden">${hours}</select></div>
+        <div class="ai-pop-row"><button type="button" id="aiPushTest" class="ai-pop-link hidden">Send me a test</button></div>
+        <p class="ai-push-note" id="aiPushNote"></p>`;
+    const anchor = menu.querySelector('#aiHandsFree');
+    (anchor ? anchor.closest('label') : menu.lastElementChild).before(row);
+    row.querySelector('#aiPushOn').addEventListener('change', async (e) => {
+        const box = e.target; box.disabled = true;
+        if (box.checked) {
+            const res = await pushEnable();
+            const note = row.querySelector('#aiPushNote');
+            if (res === 'denied') note.textContent = 'Notifications are blocked for this site. Allow them in your browser settings to use reminders.';
+            else if (res !== 'on') note.textContent = 'Could not turn on reminders on this device.';
+        } else await pushDisable();
+        box.disabled = false;
+        pushRefreshSettings();
+    });
+    row.querySelector('#aiPushHour').addEventListener('change', async (e) => {
+        try { localStorage.setItem('aiPushHour', e.target.value); } catch (er) {}
+        const sub = await pushCurrent(); if (sub) pushSaveRow(sub, pushHour(), true);
+    });
+    row.querySelector('#aiPushTest').addEventListener('click', async (e) => {
+        const b = e.target; b.textContent = 'Sending…';
+        const ok = await pushSendTest();
+        b.textContent = ok ? 'Sent! Check your notifications' : 'Could not send. Try again in a minute';
+        setTimeout(() => { b.textContent = 'Send me a test'; }, 4000);
+    });
+    pushRefreshSettings();
+}
+// A tap on a reminder opens the portal with ?open=practice: go straight to the practice tab once signed in.
+let pushOpenPractice = false;
+try { const q = new URLSearchParams(location.search); if (q.get('open') === 'practice') { pushOpenPractice = true; history.replaceState(null, '', location.pathname); } } catch (e) {}
+function pushMaybeOpenPractice() {
+    if (!pushOpenPractice) return;
+    pushOpenPractice = false;
+    setTimeout(() => { const tab = document.getElementById('aiCompanionTab'); if (tab && tab.style.display !== 'none') tab.click(); }, 700);
+}
+
 // ---- weekly recap: the first time the chat opens in a new week, last week's numbers (students can reopen it from "My progress") ----
 function aiWeekRecapMaybe() {
     if (!practiceActive()) return;
@@ -3380,6 +3556,7 @@ function aiShowPending() {
     if (!pend || !pend.current) return;
     aiAwardXp(PRACTICE_XP.goal);
     aiFx(pend.milestone ? 'streak' : 'goal', pend.milestone ? 'big' : 'success');
+    setTimeout(aiPushOffer, 2500);
     if (pend.milestone) {
         aiProgressSave({ ...aiProgressLoad(), cel: pend.milestone });
         aiSyncSoon();
@@ -3905,6 +4082,7 @@ function ensureAiExtras() {
         const sel = menu.querySelector('#ttsVoiceSelect');
         if (sel) { sel.addEventListener('change', () => chooseTtsVoice(sel.value)); fillTtsVoiceSelect(); }
         setSlowTTS(ttsSlow);
+        pushBuildSettings(menu);
         const sfxBox = menu.querySelector('#aiSfxOn');
         if (sfxBox) { sfxBox.checked = aiSfx.on; sfxBox.addEventListener('change', () => { aiSfx.on = sfxBox.checked; try { localStorage.setItem('aiSfx', aiSfx.on ? '1' : '0'); } catch (e) {} aiPlaySfx('perfect'); }); }
         const hapBox = menu.querySelector('#aiHapticsOn');
