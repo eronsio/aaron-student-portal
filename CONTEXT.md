@@ -259,6 +259,15 @@ Aaron asked for Loora/Duolingo-style brighter colours on the gamification layer 
 - **XP + levels** (`practiceXpAdd/Info/LevelInfo`, `PRACTICE_XP` in practice.js; `aiAwardXp`/`aiFlushXp` in script.js): +10 per real message (>= 3 words, help messages earn nothing), +5 "Perfect response" (no corrections; flame badge like Loora's microwin), +10 per clean focus-area use, +20 daily goal, +30 mission, +50 mastery, +25 lesson complete. Level n starts at 50*n*(n-1) XP. Stored in `progress.xp` / `progress.xpd` (per-day, last 30 days) in `student_app_state.progress`, merged by max like the rest. Shown as a gold "+N XP" pill on the student's message, a star+XP number next to the flame in the header, a Level card in "My progress", a purple "Level N!" card on level-up, XP tile in the weekly recap, a line on the end-of-lesson screen.
 - The header flame turns red and shakes faster when the streak is alive but today's goal is not done and it is after 17:00 (Duolingo's "at risk" behaviour). The "Práctica de español" title is hidden on phones to make room.
 
+### WhatsApp nudge list (admin, 2026-11-09)
+Top of Admin -> Speaking Practice ("Nudge students on WhatsApp"). The portal has no way to send WhatsApp/push/email, so this lists who is worth a message today and opens a
+prefilled `https://wa.me/<number>?text=...` link that Aaron sends himself. Logic: `practiceNudgeList` (practice.js), card = `practiceNudgeCardHtml`. Only students with practice
+switched on. Kinds: **streak** (>= 2 consecutive days with a real session ending yesterday, none today), **inactive** (last session >= 3 days ago), **new** (switched on, never practised,
+account older than a day); anyone who practised today is left out. Streaks/XP live on the student's device (RLS), so "consecutive days" is derived from `practice_sessions`
+(>= 2 student turns) in the admin's time zone. Several wordings per kind (`PRACTICE_NUDGE_TEXT`; shuffle button), editable before sending; phone must have a country code
+(`practiceWhatsAppNumber`: leading + or 00, 8-15 digits). "Open in WhatsApp" / "Not today" store a timestamp in the admin browser's localStorage `practiceNudged` and the student moves
+to "Messaged in the last day" for 20 h. No server writes, no new SQL.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

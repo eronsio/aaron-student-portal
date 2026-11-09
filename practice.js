@@ -464,6 +464,85 @@ function practiceXpInfo(prog, todayKey) {
     return { ...practiceLevelInfo(p.xp || 0), today: (p.xpd && +p.xpd[todayKey]) || 0, week };
 }
 
+// ---- WhatsApp nudges (admin): who is worth a message today, with ready-to-send wording ----
+// Built from what the admin side can see: practice switched on, the saved practice sessions and the phone number. (Streaks and XP live on the
+// student's own device, so "practised on consecutive days" is worked out from sessions.) Aaron presses Send himself in WhatsApp.
+const PRACTICE_NUDGE_LINK = 'aaron-learning.com';
+const PRACTICE_NUDGE_COOLDOWN_MS = 20 * 3600 * 1000;   // someone nudged within this window moves to "sent recently"
+const PRACTICE_NUDGE_INACTIVE_DAYS = 3;
+const PRACTICE_NUDGE_TEXT = {
+    // {n} = first name, {k} = streak days, {d} = days since the last practice. Several wordings per kind: repeated copy stops working.
+    streak: [
+        "Hi {n}! You've practised {k} days in a row 🔥 Don't let the streak break: 5 minutes with your Spanish tutor today keeps it alive. " + PRACTICE_NUDGE_LINK,
+        "{n}, quick one: your {k}-day streak is waiting for today's practice. Five messages is all it takes 🔥 " + PRACTICE_NUDGE_LINK,
+        "Hey {n}, {k} days in a row, nice! Come say a few sentences today and keep the flame going 🔥 " + PRACTICE_NUDGE_LINK
+    ],
+    inactive: [
+        "Hi {n}! It's been {d} days since your last practice session. How about a quick 5-minute chat today? Your tutor already has something ready for you 😊 " + PRACTICE_NUDGE_LINK,
+        "{n}, your Spanish practice partner misses you! Even 5 minutes today gets you back on track. " + PRACTICE_NUDGE_LINK,
+        "Hey {n}, small steps count: one short chat with your tutor today and you're back in the rhythm 💪 " + PRACTICE_NUDGE_LINK
+    ],
+    new: [
+        "Hi {n}! Your Spanish practice partner is ready for you. It knows your level and what we're working on in our lessons. Want to try a 5-minute chat today? " + PRACTICE_NUDGE_LINK,
+        "{n}, have you tried the practice tab yet? It's like a short conversation class that remembers what we study together. " + PRACTICE_NUDGE_LINK
+    ]
+};
+function practiceNudgeText(kind, name, k, d, variant) {
+    const list = PRACTICE_NUDGE_TEXT[kind] || PRACTICE_NUDGE_TEXT.inactive;
+    return list[((variant || 0) % list.length + list.length) % list.length]
+        .replace(/\{n\}/g, practiceDisplayName(name)).replace(/\{k\}/g, String(k || 0)).replace(/\{d\}/g, String(d || 0));
+}
+// wa.me needs the number as digits with the country code. Returns '' when the number cannot be used (no "+" / "00" country code).
+function practiceWhatsAppNumber(phone) {
+    const raw = String(phone == null ? '' : phone).trim();
+    if (!/^(\+|00)/.test(raw)) return '';
+    const digits = raw.replace(/\D/g, '').replace(/^00/, '');
+    return digits.length >= 8 && digits.length <= 15 ? digits : '';
+}
+function practiceWhatsAppUrl(phone, text) {
+    const n = practiceWhatsAppNumber(phone);
+    return n ? `https://wa.me/${n}?text=${encodeURIComponent(text)}` : '';
+}
+// opts = { profiles, settings, sessions, now (Date), nudged: { userId: ms } }. Returns { nudges: [...most useful first], recent: [...] }.
+function practiceNudgeList(opts) {
+    const now = opts.now || new Date();
+    const today = practiceDayKey(now);
+    const enabled = new Set((opts.settings || []).filter(x => x && x.enabled).map(x => x.user_id));
+    const daysBy = {};
+    (opts.sessions || []).forEach(x => {
+        if (!x || !x.user_id || !x.started_at || (x.student_turns || 0) < PRACTICE_MIN_TURNS_FOR_REPORT) return;
+        (daysBy[x.user_id] = daysBy[x.user_id] || new Set()).add(practiceDayKey(new Date(x.started_at)));
+    });
+    const nudged = opts.nudged || {};
+    const nudges = [], recent = [];
+    (opts.profiles || []).forEach(p => {
+        if (!p || !enabled.has(p.id)) return;
+        const days = daysBy[p.id] || new Set();
+        if (days.has(today)) return;   // already practised today
+        const last = [...days].sort().pop() || '';
+        const since = last ? practiceDayNumber(today) - practiceDayNumber(last) : null;
+        let streak = 0;
+        for (let k = practiceDayShift(today, -1); days.has(k); k = practiceDayShift(k, -1)) streak++;
+        let kind = '', detail = '', priority = 0;
+        if (!last) {
+            const age = p.created_at ? (now - new Date(p.created_at)) / 86400000 : 99;
+            if (age < 1) return;   // signed up today: too early
+            kind = 'new'; priority = 3; detail = 'has practice switched on but has not tried it yet';
+        } else if (streak >= 2) {
+            kind = 'streak'; priority = 1; detail = `practised ${streak} days in a row, not yet today (best sent after 5 pm their time)`;
+        } else if (since >= PRACTICE_NUDGE_INACTIVE_DAYS) {
+            kind = 'inactive'; priority = 2; detail = `last practised ${since} days ago`;
+        } else return;
+        const item = { id: p.id, name: p.name, phone: p.phone || '', wa: practiceWhatsAppNumber(p.phone), kind, priority, streak, since: since || 0, detail, variants: 0 };
+        item.variants = (PRACTICE_NUDGE_TEXT[kind] || []).length;
+        item.text = practiceNudgeText(kind, p.name, streak, since, 0);
+        const at = +nudged[p.id] || 0;
+        if (at && now - at < PRACTICE_NUDGE_COOLDOWN_MS) { item.sentAt = at; recent.push(item); } else nudges.push(item);
+    });
+    nudges.sort((a, b) => a.priority - b.priority || (b.since || 0) - (a.since || 0) || String(a.name).localeCompare(String(b.name)));
+    return { nudges, recent };
+}
+
 // ---- weekly recap: what the student did in one Monday-to-Sunday week ----
 const PRACTICE_SESSION_MINUTES_CAP = 45;   // one session counts for at most this long (a chat left open overnight is not 9 hours of Spanish)
 
@@ -1502,6 +1581,8 @@ function renderAdminPractice() {
         </div>
     </div>`;
 
+    html += `<div id="practiceNudgeBox">${practiceNudgeCardHtml()}</div>`;
+
     // --- Digest: what to look at before the next lesson ---
     const digestUsers = profiles.filter(p => (sessionsByUser[p.id] || []).some(s => real(s) && !s.reviewed_at));
     html += `<h3 class="practice-h">Since you last reviewed</h3>`;
@@ -1675,6 +1756,73 @@ async function practiceAdminAdvancePath(uid) {
     const units = practicePathAdvance(practicePathParse(ta ? ta.value : ''));
     if (units.length) await practiceAdminWritePath(uid, units);
 }
+
+// ---- admin: the WhatsApp nudge card (top of Speaking Practice) ----
+const PRACTICE_NUDGED_KEY = 'practiceNudged';
+let _practiceNudgeVariant = {};   // userId -> which wording is showing
+function practiceNudgedLoad() { try { const o = JSON.parse(localStorage.getItem(PRACTICE_NUDGED_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+function practiceNudgedMark(uid) { try { const o = practiceNudgedLoad(); o[uid] = Date.now(); localStorage.setItem(PRACTICE_NUDGED_KEY, JSON.stringify(o)); } catch (e) {} }
+function practiceNudgeData() {
+    const a = _practiceAdmin;
+    return practiceNudgeList({ profiles: a.profiles, settings: a.settings, sessions: a.sessions, now: new Date(), nudged: practiceNudgedLoad() });
+}
+const PRACTICE_NUDGE_LABEL = { streak: ['🔥 Streak at risk', 'is-streak'], inactive: ['💤 Gone quiet', 'is-inactive'], new: ['👋 Not started', 'is-new'] };
+function practiceNudgeRow(n) {
+    const lab = PRACTICE_NUDGE_LABEL[n.kind];
+    const v = _practiceNudgeVariant[n.id] || 0;
+    return `<div class="nudge-row" id="nr_${n.id}">
+        <div class="nudge-head"><b>${practiceEsc(n.name)}</b> <span class="nudge-chip ${lab[1]}">${lab[0]}</span></div>
+        <div class="practice-muted">${practiceEsc(n.detail)}</div>
+        <textarea class="nudge-text" id="nt_${n.id}" rows="3">${practiceEsc(practiceNudgeText(n.kind, n.name, n.streak, n.since, v))}</textarea>
+        <div class="nudge-actions">
+            ${n.wa ? `<button class="admin-btn small nudge-send" onclick="practiceNudgeSend('${n.id}')"><i class="fab fa-whatsapp"></i> Open in WhatsApp</button>`
+                   : `<span class="practice-muted">No usable phone (needs a number with country code, e.g. +34…).</span>`}
+            <button class="admin-btn small" onclick="practiceNudgeShuffle('${n.id}')" title="Another wording"><i class="fas fa-shuffle"></i></button>
+            <button class="admin-btn small" onclick="practiceNudgeCopy('${n.id}')" title="Copy the message"><i class="fas fa-copy"></i> Copy</button>
+            <button class="admin-btn small" onclick="practiceNudgeSkip('${n.id}')" title="Hide for today">Not today</button>
+            <span class="practice-muted" id="nst_${n.id}"></span>
+        </div>
+    </div>`;
+}
+function practiceNudgeCardHtml() {
+    const { nudges, recent } = practiceNudgeData();
+    const skipped = practiceNudgedLoad();
+    const sentLine = recent.length ? `<p class="practice-muted" style="margin:8px 0 0;">Messaged in the last day: ${recent.map(r => practiceEsc(practiceDisplayName(r.name))).join(', ')}.</p>` : '';
+    return `<h3 class="practice-h">Nudge students on WhatsApp</h3>
+        <div class="practice-card nudge-card">
+            <p class="practice-muted" style="margin:0 0 10px;">Students with practice on who are worth a message today: a streak about to break, gone quiet for ${PRACTICE_NUDGE_INACTIVE_DAYS}+ days, or never started. Edit the text if you like, then "Open in WhatsApp"; you press send. Days are counted in your time zone.</p>
+            ${nudges.length ? nudges.map(practiceNudgeRow).join('') : `<p class="practice-empty">Nobody needs a nudge right now.</p>`}
+            ${sentLine}
+        </div>`;
+}
+function practiceNudgeRefresh() {
+    const box = document.getElementById('practiceNudgeBox');
+    if (box) box.innerHTML = practiceNudgeCardHtml();
+}
+function practiceNudgeFind(uid) { return practiceNudgeData().nudges.find(n => n.id === uid); }
+function practiceNudgeShuffle(uid) {
+    const n = practiceNudgeFind(uid); if (!n) return;
+    _practiceNudgeVariant[uid] = ((_practiceNudgeVariant[uid] || 0) + 1) % Math.max(1, n.variants);
+    const ta = document.getElementById('nt_' + uid);
+    if (ta) ta.value = practiceNudgeText(n.kind, n.name, n.streak, n.since, _practiceNudgeVariant[uid]);
+}
+function practiceNudgeSend(uid) {
+    const n = practiceNudgeFind(uid); const ta = document.getElementById('nt_' + uid);
+    if (!n || !ta || !n.wa) return;
+    const url = practiceWhatsAppUrl(n.phone, ta.value.trim());
+    if (!url) return;
+    window.open(url, '_blank', 'noopener');
+    practiceNudgedMark(uid);
+    practiceNudgeRefresh();
+}
+async function practiceNudgeCopy(uid) {
+    const ta = document.getElementById('nt_' + uid); const st = document.getElementById('nst_' + uid);
+    if (!ta) return;
+    try { await navigator.clipboard.writeText(ta.value); if (st) st.textContent = 'Copied'; }
+    catch (e) { ta.select(); if (st) st.textContent = 'Select all + copy'; }
+}
+// "Not today": counts as handled for the day without claiming a message was sent.
+function practiceNudgeSkip(uid) { practiceNudgedMark(uid); practiceNudgeRefresh(); }
 
 function practiceAdminStatus(uid, msg, bad) {
     const el = document.getElementById('pstatus_' + uid);
@@ -1850,7 +1998,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
-        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, practiceXpAdd, practiceXpInfo, practiceLevelInfo, practiceXpForLevel, PRACTICE_XP, PRACTICE_XP_MIN_WORDS, PRACTICE_STREAK_MILESTONES,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, practiceXpAdd, practiceXpInfo, practiceLevelInfo, practiceXpForLevel, PRACTICE_XP, PRACTICE_XP_MIN_WORDS, practiceNudgeList, practiceNudgeText, practiceWhatsAppNumber, practiceWhatsAppUrl, PRACTICE_STREAK_MILESTONES,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
