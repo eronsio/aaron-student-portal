@@ -253,6 +253,12 @@ when the app returns to the foreground, has a "Try again now" button and a "Sign
 refresh token once the server answers (so a dead connection never burns it). An expired/rejected login still goes to the normal sign-in form. Other callers of
 `loadUserFromSession` (sign-in, sign-up) keep the old behaviour; only start-up passes `{retryable: true}`.
 
+### Bright gamification + XP/levels (2026-11-09)
+Aaron asked for Loora/Duolingo-style brighter colours on the gamification layer ("muted ... not dopamine stimulating enough"). The rule is now: **gamification is bright, everything else stays calm.**
+- **Palette** (CSS variables `--g-*` on `#ai-companion`, block at the end of styles.css): flame orange `#ff9600`, XP gold `#ffc800`, success green `#58cc02` (edge `#58a700`), blue `#1cb0f6` (missions, path "current"), purple `#ce82ff` (level cards), red only for urgency. Cards/buttons are "chunky" (2px border + 4px darker bottom edge; primary buttons press down 3px).
+- **XP + levels** (`practiceXpAdd/Info/LevelInfo`, `PRACTICE_XP` in practice.js; `aiAwardXp`/`aiFlushXp` in script.js): +10 per real message (>= 3 words, help messages earn nothing), +5 "Perfect response" (no corrections; flame badge like Loora's microwin), +10 per clean focus-area use, +20 daily goal, +30 mission, +50 mastery, +25 lesson complete. Level n starts at 50*n*(n-1) XP. Stored in `progress.xp` / `progress.xpd` (per-day, last 30 days) in `student_app_state.progress`, merged by max like the rest. Shown as a gold "+N XP" pill on the student's message, a star+XP number next to the flame in the header, a Level card in "My progress", a purple "Level N!" card on level-up, XP tile in the weekly recap, a line on the end-of-lesson screen.
+- The header flame turns red and shakes faster when the streak is alive but today's goal is not done and it is after 17:00 (Duolingo's "at risk" behaviour). The "Práctica de español" title is hidden on phones to make room.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

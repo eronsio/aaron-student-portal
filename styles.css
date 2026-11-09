@@ -3925,3 +3925,174 @@ body.on-login .floating-book-btn { display: none; }
 .reconnect-panel .login-btn { width: 100%; margin-top: 4px; }
 .reconnect-panel .reconnect-link { display: block; width: 100%; margin: 12px 0 8px; padding: 6px; border: 0; background: none; color: var(--accent-color, #2563eb); font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; }
 .reconnect-panel .reconnect-tip { margin-top: 10px; font-size: 13px; }
+
+/* =====================================================================================================================
+   BRIGHT GAMIFICATION THEME (2026-11-09, Aaron: "brighter colors like Loora ... muted is not dopamine stimulating enough")
+   Only the points / streak / mission / level / mastery / path / recap layer is bright; the chat itself stays calm.
+   Palette follows Duolingo/Loora conventions: flame orange, XP gold, success green with a darker chunky bottom edge, blue, purple.
+   ===================================================================================================================== */
+#ai-companion {
+    --g-flame: #ff9600; --g-flame-d: #d97f00; --g-flame-soft: #fff0d4; --g-flame-line: #ffd38a;
+    --g-xp: #ffc800; --g-xp-d: #b78600; --g-xp-soft: #fff6c7; --g-xp-line: #ffe27a;
+    --g-green: #58cc02; --g-green-d: #58a700; --g-green-soft: #e3f9cf; --g-green-line: #a6e36a;
+    --g-blue: #1cb0f6; --g-blue-d: #1899d6; --g-blue-soft: #ddf4ff; --g-blue-line: #9bd9f9;
+    --g-purple: #ce82ff; --g-purple-d: #8e4fc7; --g-purple-soft: #f3e4ff; --g-purple-line: #e0bbff;
+    --g-track: #e5e5e5;
+}
+@keyframes g-flame { 0%, 100% { transform: scale(1) rotate(0); } 50% { transform: scale(1.12) rotate(-4deg); } }
+@keyframes g-flame-risk { 0%, 100% { transform: scale(1) rotate(0); } 25% { transform: scale(1.2) rotate(-9deg); } 75% { transform: scale(1.2) rotate(9deg); } }
+@keyframes g-pop { 0% { opacity: 0; transform: scale(.4); } 60% { opacity: 1; transform: scale(1.22); } 100% { opacity: 1; transform: scale(1); } }
+
+/* header pill: flame streak + star XP */
+#ai-companion .ai-streak {
+    height: 34px; padding: 0 12px; border: 2px solid var(--g-track); border-bottom-width: 4px; border-radius: 14px; background: #fff; color: #afafaf; font-weight: 800; gap: 6px;
+}
+#ai-companion .ai-streak i { font-size: 14px; }
+#ai-companion .ai-streak .ai-streak-sep { width: 2px; height: 16px; border-radius: 2px; background: var(--g-track); }
+#ai-companion .ai-streak .ai-streak-star { color: var(--g-xp); }
+#ai-companion .ai-streak .ai-streak-xpn { color: var(--g-xp-d); }
+#ai-companion .ai-streak.is-lit { color: var(--g-flame-d); border-color: var(--g-flame-line); background: var(--g-flame-soft); }
+#ai-companion .ai-streak.is-lit .ai-streak-flame { color: var(--g-flame); animation: g-flame 2.2s ease-in-out infinite; transform-origin: 50% 90%; }
+#ai-companion .ai-streak.is-risk { border-color: #ffb3b3; background: #fff1f1; color: #e03a3a; }
+#ai-companion .ai-streak.is-risk .ai-streak-flame { color: var(--g-red, #ff4b4b); animation: g-flame-risk .8s ease-in-out infinite; transform-origin: 50% 90%; }
+@media (max-width: 340px) { #ai-companion .ai-streak .ai-streak-sep, #ai-companion .ai-streak .ai-streak-star, #ai-companion .ai-streak .ai-streak-xpn { display: none; } }
+
+/* lesson bar: yellow while going, green when the lesson is complete (as in Loora) */
+#ai-companion .ai-progress { height: 12px; background: var(--g-track); }
+#ai-companion .ai-progress-fill { background: linear-gradient(180deg, #ffd84d, var(--g-xp)); }
+#ai-companion .ai-progress.is-complete .ai-progress-fill { background: linear-gradient(180deg, #7ee02a, var(--g-green)); }
+#ai-companion .ai-end-btn.is-ready { background: var(--g-green); border-color: var(--g-green-d); color: #fff; border-bottom-width: 4px; font-weight: 800; }
+
+/* mission strip */
+#ai-companion .ai-mission { background: var(--g-blue-soft); border: 2px solid var(--g-blue-line); border-bottom-width: 4px; border-radius: 16px; color: #4b4b4b; }
+#ai-companion .ai-mission:hover { background: #cfeefd; }
+#ai-companion .ai-mission-icon { color: var(--g-blue); }
+#ai-companion .ai-mission-text small { color: var(--g-blue-d); font-weight: 800; }
+#ai-companion .ai-mission-dots i { background: #fff; border: 2px solid var(--g-blue-line); width: 12px; height: 12px; box-sizing: border-box; }
+#ai-companion .ai-mission-dots i.is-on { background: var(--g-green); border-color: var(--g-green-d); transform: scale(1.15); }
+#ai-companion .ai-mission.is-complete { background: var(--g-green-soft); border-color: var(--g-green-line); }
+#ai-companion .ai-mission.is-complete .ai-mission-icon { color: var(--g-green-d); }
+#ai-companion .ai-mission.is-complete .ai-mission-text small { color: var(--g-green-d); }
+
+/* feedback line on the student's message: perfect response, used correctly, XP pill */
+#ai-companion .ai-fb { font-weight: 800; }
+#ai-companion .ai-fb.is-ok { color: var(--g-green-d); }
+#ai-companion .ai-fb.is-hit { color: var(--g-green-d); }
+#ai-companion .ai-fb.is-perfect { color: var(--g-flame-d); }
+#ai-companion .ai-fb.is-perfect i { color: var(--g-flame); }
+#ai-companion .ai-fb.has-fix { color: #e58700; }
+#ai-companion .ai-xp { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 1px 9px; border-radius: 99px; background: var(--g-xp-soft); border: 1.5px solid var(--g-xp-line); color: var(--g-xp-d); font-size: 12px; font-weight: 800; animation: g-pop .45s ease both; }
+#ai-companion .ai-xp i { color: var(--g-xp); margin: 0; font-size: 11px; }
+
+/* milestone cards: chunky, one colour per kind */
+#ai-companion .ai-milestone { border: 2px solid; border-bottom-width: 4px; border-radius: 16px; padding: 12px 18px; }
+#ai-companion .ai-milestone > i { font-size: 22px; }
+#ai-companion .ai-milestone b { font-size: 15px; font-weight: 800; }
+#ai-companion .ai-milestone-mastered { background: var(--g-xp-soft); border-color: var(--g-xp-line); color: var(--g-xp-d); }
+#ai-companion .ai-milestone-mastered > i { color: var(--g-xp); } #ai-companion .ai-milestone-mastered span { color: #8a6800; }
+#ai-companion .ai-milestone-mission { background: var(--g-green-soft); border-color: var(--g-green-line); color: var(--g-green-d); }
+#ai-companion .ai-milestone-mission > i { color: var(--g-green); } #ai-companion .ai-milestone-mission span { color: #3f8a00; }
+#ai-companion .ai-milestone-goal { background: var(--g-flame-soft); border-color: var(--g-flame-line); color: var(--g-flame-d); }
+#ai-companion .ai-milestone-goal > i { color: var(--g-flame); } #ai-companion .ai-milestone-goal span { color: #b86b00; }
+#ai-companion .ai-milestone-freeze { background: var(--g-blue-soft); border-color: var(--g-blue-line); color: var(--g-blue-d); }
+#ai-companion .ai-milestone-freeze > i { color: var(--g-blue); } #ai-companion .ai-milestone-freeze span { color: #1479a8; }
+#ai-companion .ai-milestone-level { background: var(--g-purple-soft); border-color: var(--g-purple-line); color: var(--g-purple-d); }
+#ai-companion .ai-milestone-level > i { color: var(--g-purple); } #ai-companion .ai-milestone-level span { color: #7a43b0; }
+@keyframes ai-milestone-ring-g { from { box-shadow: 0 0 0 0 rgba(255, 200, 0, .55); } to { box-shadow: 0 0 0 18px rgba(255, 200, 0, 0); } }
+#ai-companion .ai-milestone-mastered, #ai-companion .ai-milestone-mission, #ai-companion .ai-milestone-level { animation: ai-milestone-in .5s ease both, ai-milestone-ring-g 1.4s .2s ease-out 1; }
+
+/* streak milestone overlay */
+#ai-companion .ai-celebrate { background: rgba(31, 41, 55, .5); }
+#ai-companion .ai-cel-card { border-radius: 24px; box-shadow: 0 6px 0 rgba(0,0,0,.08), 0 22px 60px rgba(31, 41, 55, .3); }
+#ai-companion .ai-cel-flame { width: 76px; height: 76px; font-size: 38px; background: var(--g-flame-soft); color: var(--g-flame); box-shadow: 0 0 0 6px #fff7e6, 0 0 30px rgba(255, 150, 0, .45); animation: g-flame 1.6s ease-in-out infinite; }
+#ai-companion .ai-cel-num { font-size: 72px; font-weight: 800; color: var(--g-flame); }
+#ai-companion .ai-cel-label { font-weight: 800; color: var(--g-flame-d); text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+#ai-companion .ai-cel-card h4 { font-size: 20px; font-weight: 800; color: #4b4b4b; }
+#ai-companion .ai-cel-btn { height: 50px; border-radius: 16px; background: var(--g-green); border-bottom: 4px solid var(--g-green-d); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; transition: transform .08s ease, border-bottom-width .08s ease; }
+#ai-companion .ai-cel-btn:hover { background: #61d605; }
+#ai-companion .ai-cel-btn:active { transform: translateY(3px); border-bottom-width: 1px; }
+
+/* "My progress" sheet */
+#ai-companion .ai-pr-flame { background: #f1f1f1; color: #c4c4c4; }
+#ai-companion .ai-pr-flame.is-lit { background: var(--g-flame-soft); color: var(--g-flame); box-shadow: 0 0 22px rgba(255, 150, 0, .4); }
+#ai-companion .ai-pr-flame.is-lit i { animation: g-flame 2s ease-in-out infinite; }
+#ai-companion .ai-pr-num { color: var(--g-flame); font-weight: 800; }
+#ai-companion .ai-pr-label { font-weight: 700; color: #afafaf; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+#ai-companion .ai-pr-day > i { background: #f1f1f1; border: 2px solid var(--g-track); }
+#ai-companion .ai-pr-day.is-on > i { background: var(--g-flame); border-color: var(--g-flame-d); }
+#ai-companion .ai-pr-day.is-frozen > i { background: var(--g-blue); border-color: var(--g-blue-d); }
+#ai-companion .ai-pr-day.is-some > i { background: var(--g-flame-soft); border-color: var(--g-flame-line); }
+#ai-companion .ai-pr-day.is-today > i { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--g-flame); }
+#ai-companion .ai-pr-day b { font-weight: 800; color: #afafaf; }
+#ai-companion .ai-pr-freeze i { color: var(--g-blue); }
+#ai-companion .ai-pr-bar { height: 12px; background: var(--g-track); }
+#ai-companion .ai-pr-bar div { background: var(--g-green); }
+#ai-companion .ai-pr-goal { background: #fff; border: 2px solid var(--g-track); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-pr-goal-top b { color: var(--g-green-d); font-weight: 800; }
+#ai-companion .ai-pr-mission { background: var(--g-blue-soft); border: 2px solid var(--g-blue-line); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-pr-mission .ai-pr-bar { background: #fff; } #ai-companion .ai-pr-mission .ai-pr-bar div { background: var(--g-blue); }
+#ai-companion .ai-pr-mission.is-complete { background: var(--g-green-soft); border-color: var(--g-green-line); }
+#ai-companion .ai-pr-mission.is-complete .ai-pr-bar div { background: var(--g-green); }
+#ai-companion .ai-pr-path { background: var(--g-green-soft); border: 2px solid var(--g-green-line); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-pr-path .ai-pr-bar { background: #fff; } #ai-companion .ai-pr-path .ai-pr-bar div { background: var(--g-green); }
+#ai-companion .ai-pr-skill .ai-pr-bar div { background: var(--g-green); }
+#ai-companion .ai-pr-skill.is-mastered .ai-pr-bar div { background: var(--g-xp); }
+#ai-companion .ai-pr-skill.is-mastered .fa-check { color: var(--g-xp-d); }
+#ai-companion .ai-pr-grid div { border: 2px solid var(--g-track); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-pr-grid b { font-weight: 800; }
+#ai-companion .ai-wk-link { border: 2px solid var(--g-track); border-bottom-width: 4px; border-radius: 14px; font-weight: 800; color: var(--g-blue-d); }
+#ai-companion .ai-wk-link i { color: var(--g-blue); }
+/* level + XP card */
+#ai-companion .ai-pr-level { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; padding: 12px 14px; background: var(--g-xp-soft); border: 2px solid var(--g-xp-line); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-pr-level-badge { position: relative; flex: none; width: 56px; height: 56px; border-radius: 50%; background: var(--g-xp); border-bottom: 4px solid #e6a800; display: grid; place-items: center; color: #fff; }
+#ai-companion .ai-pr-level-badge i { position: absolute; font-size: 38px; opacity: .35; color: #fff; }
+#ai-companion .ai-pr-level-badge b { position: relative; font-size: 22px; font-weight: 800; color: #7a5a00; }
+#ai-companion .ai-pr-level-main { flex: 1; min-width: 0; }
+#ai-companion .ai-pr-level-top { display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; color: #7a5a00; }
+#ai-companion .ai-pr-level-top b { color: var(--g-xp-d); }
+#ai-companion .ai-pr-xpbar { height: 12px; margin: 7px 0 6px; border-radius: 99px; background: #fff; overflow: hidden; }
+#ai-companion .ai-pr-xpbar div { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--g-xp), var(--g-flame)); transition: width .5s ease; }
+#ai-companion .ai-pr-level-main p { margin: 0; font-size: 12.5px; font-weight: 700; color: #8a6800; }
+
+/* learning path map */
+#ai-companion .ai-path::before { background: var(--g-track); width: 4px; left: 14px; border-radius: 4px; }
+#ai-companion .ai-path-dot { border: 3px solid var(--g-track); color: #afafaf; font-weight: 800; }
+#ai-companion .ai-path-node.is-done .ai-path-dot { background: var(--g-green); border-color: var(--g-green-d); }
+#ai-companion .ai-path-node.is-current .ai-path-dot { background: var(--g-blue); border-color: var(--g-blue-d); box-shadow: 0 0 0 6px rgba(28, 176, 246, .22); }
+#ai-companion .ai-path-node.is-current .ai-path-card { background: var(--g-blue-soft); border: 2px solid var(--g-blue-line); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-path-node.is-done .ai-path-card b { color: var(--g-green-d); }
+#ai-companion .ai-path-skill .ai-pr-bar { background: #fff; height: 10px; }
+#ai-companion .ai-path-skill .ai-pr-bar div { background: var(--g-blue); }
+#ai-companion .ai-path-skill.is-mastered .ai-pr-bar div { background: var(--g-xp); }
+#ai-companion .ai-path-go, #ai-companion .ai-story-btn, #ai-companion .ai-wk-close {
+    background: var(--g-green); color: #fff; border: 0; border-bottom: 4px solid var(--g-green-d); border-radius: 16px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; transition: transform .08s ease, border-bottom-width .08s ease;
+}
+#ai-companion .ai-path-go:hover, #ai-companion .ai-story-btn:hover { background: #61d605; }
+#ai-companion .ai-path-go:active, #ai-companion .ai-story-btn:active, #ai-companion .ai-wk-close:active { transform: translateY(3px); border-bottom-width: 1px; }
+#ai-companion .ai-path-go { padding: 11px 18px; font-size: 13.5px; }
+#ai-companion .ai-story-btn { border-radius: 16px; height: 52px; font-size: 15px; }
+
+/* weekly recap + end-of-lesson screens */
+#ai-companion .ai-wk-big { color: var(--g-flame); font-weight: 800; }
+#ai-companion .ai-wk-note { color: var(--g-green-d); font-weight: 800; }
+#ai-companion .ai-wk-card { background: var(--g-flame-soft); border: 2px solid var(--g-flame-line); border-bottom-width: 4px; border-radius: 16px; }
+#ai-companion .ai-wk-card > i { color: var(--g-flame); }
+#ai-companion .ai-wk-card.is-mastered { background: var(--g-xp-soft); border-color: var(--g-xp-line); }
+#ai-companion .ai-wk-card.is-mastered > i { color: var(--g-xp); }
+#ai-companion .ai-wk-quote { border-left-color: var(--g-blue); background: var(--g-blue-soft); }
+#ai-companion .ai-ring-fill { stroke: var(--g-green); }
+#ai-companion .ai-ring-track { stroke: var(--g-track); }
+#ai-companion .ai-story-big { color: var(--g-flame); font-weight: 800; }
+#ai-companion .ai-story-list li i { color: var(--g-green); }
+#ai-companion .ai-story-list li .fa-star { color: var(--g-xp); }
+#ai-companion .ai-story-list li .fa-fire { color: var(--g-flame); }
+#ai-companion .ai-chip.is-mastered { background: var(--g-xp-soft); color: var(--g-xp-d); }
+#ai-companion .ai-chip-bar i { background: var(--g-green); }
+@media (prefers-reduced-motion: reduce) {
+    #ai-companion .ai-streak.is-lit .ai-streak-flame, #ai-companion .ai-streak.is-risk .ai-streak-flame, #ai-companion .ai-pr-flame.is-lit i, #ai-companion .ai-cel-flame, #ai-companion .ai-xp,
+    #ai-companion .ai-milestone-mastered, #ai-companion .ai-milestone-mission, #ai-companion .ai-milestone-level { animation: none; }
+}
+@media (max-width: 460px) { #ai-companion .ai-header .ai-title { display: none; } }   /* the streak + XP pill needs the room; the tab already says what this is */
+#ai-companion .ai-path-top .ai-pr-bar { background: var(--g-track); height: 14px; }
+#ai-companion .ai-path-top .ai-pr-bar div { background: linear-gradient(180deg, #7ee02a, var(--g-green)); }
+#ai-companion .ai-pr-skill .ai-pr-bar, #ai-companion .ai-pr-mission .ai-pr-bar, #ai-companion .ai-pr-path .ai-pr-bar { box-shadow: inset 0 -2px 0 rgba(0,0,0,.04); }

@@ -2792,6 +2792,7 @@ async function startAiMode(mode, context) {
     currentAiContext = context || null;
     aiConversationHistory = [];
     aiLessonLog = [];
+    aiXpLessonGiven = false;
     aiCloseSheet();
     aiUpdateProgress();
     aiRefreshStreak();
@@ -2874,6 +2875,7 @@ function leaveAiChat() {
     aiConversationHistory = [];
     aiLessonLog = [];
     aiPending = null;
+    aiXpLessonGiven = false;
     document.getElementById('aiCelebrate')?.remove();
     aiCloseSheet();
     aiUpdateProgress();
@@ -2942,8 +2944,9 @@ function aiRenderFeedback(entry) {
     const tag = entry.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '';
     const ok = !entry.fixes.length;
     const hit = ok && entry.hits && entry.hits.length;
-    const okLabel = hit ? `<i class="fas fa-bullseye"></i> ${escapeHtml(practiceClip(entry.hits.map(h => h.area).join(' · '), 70))} &mdash; used correctly` : '<i class="fas fa-check"></i> No corrections';
-    bubble.innerHTML = `<p>${tag}${body}</p><div class="ai-fb ${ok ? 'is-ok' : 'has-fix'}${hit ? ' is-hit' : ''}">${ok ? okLabel : '<i class="fas fa-pen"></i> See the fix'}</div>`;
+    const okLabel = hit ? `<i class="fas fa-bullseye"></i> ${escapeHtml(practiceClip(entry.hits.map(h => h.area).join(' · '), 70))} &mdash; used correctly`
+        : entry.perfect ? '<i class="fas fa-fire"></i> Perfect response' : '<i class="fas fa-check"></i> No corrections';
+    bubble.innerHTML = `<p>${tag}${body}</p><div class="ai-fb ${ok ? 'is-ok' : 'has-fix'}${hit ? ' is-hit' : ''}${entry.perfect && !hit ? ' is-perfect' : ''}">${ok ? okLabel : '<i class="fas fa-pen"></i> See the fix'}</div>`;
     bubble.setAttribute('role', 'button');
     bubble.tabIndex = 0;
     bubble.onclick = () => aiOpenFeedback(entry);
@@ -3174,13 +3177,14 @@ function aiApplyHits(hits) {
     const before = aiMissionNow();
     let prog = aiProgressLoad();
     const mastered = [];
-    hits.forEach(h => { const r = practiceSkillsAdd(prog, h.key, day); prog = r.progress; if (r.mastered) mastered.push(h); });
-    aiProgressSave(prog);
+    hits.forEach(h => { const r = practiceSkillsAdd(prog, h.key, day); prog = r.progress; aiAwardXp(PRACTICE_XP.clean); if (r.mastered) { mastered.push(h); aiAwardXp(PRACTICE_XP.mastery); } });
+    aiProgressSave(practiceProgressNormalize({ ...aiProgressLoad(), skills: prog.skills }));   // (aiAwardXp already saved the XP: keep it)
     aiSyncSoon();
     practiceRenderChips();
     aiRefreshMission();
     const after = aiMissionNow();
     mastered.forEach(h => aiNote('mastered', `<i class="fas fa-graduation-cap"></i><div><b>Skill mastered</b><span>${escapeHtml(h.area)}</span></div>`));
+    if (before.kind === 'skill' && !before.complete && after.complete) aiAwardXp(PRACTICE_XP.mission);
     if (before.kind === 'skill' && !before.complete && after.complete) aiNote('mission', `<i class="fas fa-flag-checkered"></i><div><b>Mission complete</b><span>${escapeHtml(after.area)} &mdash; ${after.goal} out of ${after.goal}</span></div>`);
 }
 // A small card in the conversation (not a message from anyone).
@@ -3233,6 +3237,40 @@ function aiDayName(key) {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' });
 }
+// ---- XP + levels (rules in practice.js: PRACTICE_XP) ----
+let aiXpTurn = 0;            // XP earned during the turn in progress; shown once, as a gold pill on the student's message
+let aiXpLessonGiven = false; // the "lesson complete" bonus is paid once per chat
+function aiXpNow() { return practiceXpInfo(aiProgressLoad(), practiceDayKey()); }
+function aiAwardXp(amount) {
+    const n = Math.round(amount || 0);
+    if (n <= 0) return;
+    aiProgressSave(practiceXpAdd(aiProgressLoad(), practiceDayKey(), n));
+    aiXpTurn += n;
+}
+// Ends a turn: one "+N XP" pill on the message, a level-up card if a level was crossed, header/progress refreshed, synced.
+function aiFlushXp(entry, levelBefore) {
+    const n = aiXpTurn;
+    aiXpTurn = 0;
+    if (!n) return;
+    aiSyncSoon();
+    aiRefreshStreak();
+    const fb = entry && entry.el && entry.el.querySelector('.ai-fb');
+    if (fb) { fb.querySelector('.ai-xp')?.remove(); fb.insertAdjacentHTML('beforeend', `<span class="ai-xp"><i class="fas fa-star"></i> +${n} XP</span>`); }
+    const now = aiXpNow();
+    if (now.level > levelBefore) aiNote('level', `<i class="fas fa-bolt"></i><div><b>Level ${now.level}!</b><span>${now.total} XP so far. ${now.toNext} to level ${now.level + 1}.</span></div>`);
+}
+function aiLevelCardHtml() {
+    const x = aiXpNow();
+    return `<div class="ai-pr-level">
+        <div class="ai-pr-level-badge"><i class="fas fa-star"></i><b>${x.level}</b></div>
+        <div class="ai-pr-level-main">
+            <div class="ai-pr-level-top"><span>Level ${x.level}</span><b>${x.total} XP</b></div>
+            <div class="ai-pr-xpbar"><div style="width:${Math.max(3, x.pct)}%"></div></div>
+            <p>${x.today ? `+${x.today} XP today · ` : ''}${x.toNext} XP to level ${x.level + 1}</p>
+        </div>
+    </div>`;
+}
+
 // ---- weekly recap: the first time the chat opens in a new week, last week's numbers (students can reopen it from "My progress") ----
 function aiWeekRecapMaybe() {
     if (!practiceActive()) return;
@@ -3257,7 +3295,7 @@ function aiOpenWeekRecap(start) {
     if (!r.practiced) {
         body.innerHTML = `<div class="ai-wk-hero"><div class="ai-wk-range">${range}</div><p class="ai-wk-empty">No practice that week. Today is a fresh start: ${PRACTICE_DAY_GOAL} messages begins a new streak.</p></div>${close}`;
     } else {
-        const tiles = [[r.minutes ? '~' + r.minutes : '–', 'minutes practising'], [r.messages, 'messages sent'], [r.words, 'words written'], [r.cleanUses, 'focus-area uses done right'], [r.savedWords, 'words saved'], [r.goalDays, 'days goal reached']];
+        const tiles = [[r.minutes ? '~' + r.minutes : '–', 'minutes practising'], [r.messages, 'messages sent'], [r.words, 'words written'], [r.cleanUses, 'focus-area uses done right'], [r.savedWords, 'words saved'], [r.xp ? '+' + r.xp : '–', 'XP earned']];
         const up = r.prev.messages > 0 && r.messages > r.prev.messages ? `<p class="ai-wk-note">Up from ${r.prev.messages} message${r.prev.messages === 1 ? '' : 's'} the week before.</p>` : '';
         const mastered = r.mastered.length ? `<div class="ai-wk-card is-mastered"><i class="fas fa-graduation-cap"></i><div><b>Mastered this week</b><span>${r.mastered.map(m => escapeHtml(practiceClip(m.area, 60))).join(', ')}</span></div></div>` : '';
         const streak = r.streak.current ? `<div class="ai-wk-card"><i class="fas fa-fire"></i><div><b>${r.streak.current}-day streak</b><span>${r.frozenDays ? `A streak freeze covered ${r.frozenDays === 1 ? 'a day' : r.frozenDays + ' days'} this week. ` : ''}Best so far: ${r.streak.best}.</span></div></div>` : '';
@@ -3279,6 +3317,7 @@ function aiShowPending() {
     const pend = aiPending;
     aiPending = null;
     if (!pend || !pend.current) return;
+    aiAwardXp(PRACTICE_XP.goal);
     if (pend.milestone) {
         aiProgressSave({ ...aiProgressLoad(), cel: pend.milestone });
         aiSyncSoon();
@@ -3295,7 +3334,7 @@ function aiCelebrate(milestone, current) {
     const el = document.createElement('div');
     el.id = 'aiCelebrate'; el.className = 'ai-celebrate';
     el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', t[0]);
-    const burst = Array.from({ length: 14 }, (_, i) => `<s style="--a:${Math.round(i * 360 / 14)}deg;--d:${i % 2 ? 78 : 104}px;--c:${['#c9a96a', '#8fb09f', '#8aa0bd', '#d8c9a3'][i % 4]};--w:${(i % 3) * 0.06}s"></s>`).join('');
+    const burst = Array.from({ length: 14 }, (_, i) => `<s style="--a:${Math.round(i * 360 / 14)}deg;--d:${i % 2 ? 78 : 104}px;--c:${['#ff9600', '#ffc800', '#58cc02', '#1cb0f6', '#ce82ff'][i % 5]};--w:${(i % 3) * 0.06}s"></s>`).join('');
     el.innerHTML = `<div class="ai-cel-card"><div class="ai-cel-burst" aria-hidden="true">${burst}</div>
         <div class="ai-cel-flame"><i class="fas fa-fire"></i></div>
         <div class="ai-cel-num">${current}</div><div class="ai-cel-label">day streak</div>
@@ -3326,7 +3365,11 @@ function aiRefreshStreak(bump) {
     const info = aiStreakNow();
     if (btn) {
         btn.querySelector('span').textContent = String(info.current);
+        const xpn = btn.querySelector('.ai-streak-xpn');
+        if (xpn) xpn.textContent = String(aiXpNow().total);
         btn.classList.toggle('is-lit', info.doneToday);
+        // Evening and today's goal not done yet: the flame gets restless (Duolingo does this too).
+        btn.classList.toggle('is-risk', info.current > 0 && !info.doneToday && new Date().getHours() >= 17);
         btn.title = info.doneToday ? `${info.current}-day streak — today's goal is done` : `${info.current}-day streak — ${info.goal - info.todayM} more message${info.goal - info.todayM === 1 ? '' : 's'} today keeps it going`;
         if (bump) { btn.classList.remove('is-bump'); void btn.offsetWidth; btn.classList.add('is-bump'); }
     }
@@ -3484,6 +3527,7 @@ function aiOpenProgress() {
         </div>
         <div class="ai-pr-week" aria-label="The last 7 days">${i.week.map(d => `<span class="ai-pr-day${d.on ? ' is-on' : ''}${d.frozen ? ' is-frozen' : ''}${d.today ? ' is-today' : ''}"><i>${d.on ? '<i class="fas fa-check"></i>' : d.frozen ? '<i class="fas fa-snowflake"></i>' : ''}</i><b>${d.label}</b></span>`).join('')}</div>
         ${aiFreezeLineHtml(i)}
+        ${aiLevelCardHtml()}
         ${aiPathCardHtml()}
         ${aiMissionCardHtml()}
         <div class="ai-pr-goal">
@@ -3617,6 +3661,8 @@ async function submitAiMessage(message, opts) {
     setAiBusyUI(true);
     if (convo.on) convoDetach();   // a typed message went out while the mic was open: the reply decides what happens next
     let spoken = null, reply = '', failed = false, entry = null;
+    const xpLevelBefore = aiXpNow().level;
+    aiXpTurn = 0;
     try {
         const userEl = appendAiMessage('user', (opts.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '') + escapeHtml(message));
         entry = { el: userEl, text: message, voice: !!opts.voice, help: !!opts.help, fixes: [], graded: false };
@@ -3656,6 +3702,12 @@ async function submitAiMessage(message, opts) {
                 // A clean use counts only when the whole message came back with no correction at all.
                 if (!entry.fixes.length) hits = aiValidHits(marked.keys);
                 entry.hits = hits;
+                // XP: every real message, a bonus for a perfect one (very short messages earn nothing, so "ok" cannot be farmed).
+                if (entry.text.split(/\s+/).filter(Boolean).length >= PRACTICE_XP_MIN_WORDS) {
+                    aiAwardXp(PRACTICE_XP.message);
+                    if (!entry.fixes.length) { aiAwardXp(PRACTICE_XP.perfect); entry.perfect = true; }
+                }
+                if (!aiXpLessonGiven && aiLessonLog.filter(e => !e.help).length >= PRACTICE_LESSON_TURNS) { aiXpLessonGiven = true; aiAwardXp(PRACTICE_XP.lesson); }
                 aiRenderFeedback(entry);
             }
         }
@@ -3664,6 +3716,7 @@ async function submitAiMessage(message, opts) {
         spoken = speakText(shown);
         aiApplyHits(hits);
         aiShowPending();
+        aiFlushXp(entry, xpLevelBefore);
     } finally {
         aiBusy = false;
         setAiBusyUI(false);
@@ -3716,7 +3769,7 @@ function ensureAiExtras() {
         const st = document.createElement('button');
         st.id = 'aiStreakBtn'; st.type = 'button'; st.className = 'ai-streak';
         st.setAttribute('aria-label', 'My progress and daily streak');
-        st.innerHTML = '<i class="fas fa-fire"></i><span>0</span>';
+        st.innerHTML = '<i class="fas fa-fire ai-streak-flame"></i><span>0</span><b class="ai-streak-sep" aria-hidden="true"></b><i class="fas fa-star ai-streak-star"></i><span class="ai-streak-xpn">0</span>';
         st.addEventListener('click', aiOpenProgress);
         actions.insertBefore(st, actions.firstChild);
         aiRefreshStreak();

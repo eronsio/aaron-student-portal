@@ -153,13 +153,16 @@ function practiceDayShift(key, delta) {
 }
 
 // prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words,
-//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated, wk: Monday of the last recap shown }
+//          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated, wk: Monday of the last recap shown,
+//          xp: total XP, xpd: { 'YYYY-MM-DD': XP that day } }
 function practiceProgressNormalize(prog) {
     const p = prog && typeof prog === 'object' ? prog : {};
     const out = { days: p.days && typeof p.days === 'object' ? p.days : {}, m: +p.m || 0, w: +p.w || 0 };
     if (p.skills && typeof p.skills === 'object') out.skills = p.skills;
     if (p.mission && typeof p.mission === 'object' && p.mission.day && p.mission.key) out.mission = { day: String(p.mission.day), key: String(p.mission.key) };
     if (+p.cel > 0) out.cel = +p.cel;   // highest streak milestone already celebrated
+    if (+p.xp > 0) out.xp = Math.round(+p.xp);   // total experience points
+    if (p.xpd && typeof p.xpd === 'object') out.xpd = p.xpd;   // XP earned per day (recent days only)
     if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
     return out;
 }
@@ -251,6 +254,12 @@ function practiceMergeState(local, remote) {
     if (cel) progress.cel = cel;
     const wk = [lp.wk, rp.wk].filter(Boolean).sort().pop();
     if (wk) progress.wk = wk;
+    const xp = Math.max(lp.xp || 0, rp.xp || 0);
+    if (xp) progress.xp = xp;
+    const xpd = {};
+    [lp.xpd, rp.xpd].forEach(d => Object.keys(d || {}).forEach(k => { xpd[k] = Math.max(xpd[k] || 0, +d[k] || 0); }));
+    Object.keys(xpd).sort().slice(0, Math.max(0, Object.keys(xpd).length - PRACTICE_XP_DAYS_KEPT)).forEach(k => delete xpd[k]);
+    if (Object.keys(xpd).length) progress.xpd = xpd;
     return { words, del, progress };
 }
 
@@ -426,6 +435,35 @@ function practicePathInfo(units, focus, prog, dayKey) {
     return { units: list, total: list.length, done, cur, current: cur >= 0 && list[cur].state === 'current' ? list[cur] : null, pct, complete: list.length > 0 && done === list.length };
 }
 
+// ---- XP and levels (the bright "points" layer: every real message, perfect responses, clean uses, goals, missions, mastery) ----
+const PRACTICE_XP = { message: 10, perfect: 5, clean: 10, goal: 20, mission: 30, mastery: 50, lesson: 25 };
+const PRACTICE_XP_MIN_WORDS = 3;     // a message must have this many words to earn XP (so "ok" cannot be farmed)
+const PRACTICE_XP_DAYS_KEPT = 30;
+// Level n starts at 50 * n * (n - 1) XP: level 2 = 100, 3 = 300, 4 = 600, 5 = 1000 ...
+function practiceXpForLevel(n) { return 50 * n * (n - 1); }
+function practiceLevelInfo(xp) {
+    const total = Math.max(0, Math.round(+xp || 0));
+    const level = Math.max(1, Math.floor((1 + Math.sqrt(1 + total / 12.5)) / 2));
+    const from = practiceXpForLevel(level), to = practiceXpForLevel(level + 1);
+    return { level, total, into: total - from, need: to - from, toNext: to - total, pct: Math.round(100 * (total - from) / (to - from)) };
+}
+// Adds XP for `dayKey`; returns the new progress object (the daily record keeps the last PRACTICE_XP_DAYS_KEPT days).
+function practiceXpAdd(prog, dayKey, amount) {
+    const p = practiceProgressNormalize(prog);
+    const n = Math.max(0, Math.round(+amount || 0));
+    if (!n) return p;
+    const xpd = { ...(p.xpd || {}) };
+    xpd[dayKey] = (+xpd[dayKey] || 0) + n;
+    Object.keys(xpd).sort().slice(0, Math.max(0, Object.keys(xpd).length - PRACTICE_XP_DAYS_KEPT)).forEach(k => delete xpd[k]);
+    return { ...p, xp: (p.xp || 0) + n, xpd };
+}
+function practiceXpInfo(prog, todayKey) {
+    const p = practiceProgressNormalize(prog);
+    const start = practiceWeekStart(todayKey);
+    const week = Object.keys(p.xpd || {}).filter(k => k >= start && k <= practiceDayShift(start, 6)).reduce((n, k) => n + (+p.xpd[k] || 0), 0);
+    return { ...practiceLevelInfo(p.xp || 0), today: (p.xpd && +p.xpd[todayKey]) || 0, week };
+}
+
 // ---- weekly recap: what the student did in one Monday-to-Sunday week ----
 const PRACTICE_SESSION_MINUTES_CAP = 45;   // one session counts for at most this long (a chat left open overnight is not 9 hours of Spanish)
 
@@ -470,6 +508,7 @@ function practiceWeekRecap(prog, o) {
         start, end, days,
         practiced: days.filter(d => d.some).length, goalDays: days.filter(d => d.on).length, frozenDays: days.filter(d => d.frozen).length,
         messages: sum(keys, 'm'), words: sum(keys, 'w'), minutes, cleanUses, mastered, savedWords,
+        xp: keys.reduce((n, k) => n + ((p.xpd && +p.xpd[k]) || 0), 0),
         prev: { messages: sum(prevKeys, 'm'), words: sum(prevKeys, 'w') },
         streak: { current: streak.current, best: streak.best },
         quote: quoted ? quoted.report.student_recap.went_well : '',
@@ -1158,6 +1197,7 @@ function practiceStoryScreens() {
             <li><i class="fas fa-check"></i> ${st.turns} message${st.turns === 1 ? '' : 's'} sent${done ? '' : ` (a full lesson is ${PRACTICE_LESSON_TURNS})`}</li>
             <li><i class="fas fa-check"></i> ${st.clean} with no corrections</li>
             ${st.hits ? `<li><i class="fas fa-bullseye"></i> ${st.hits} focus-area use${st.hits === 1 ? '' : 's'} done right</li>` : ''}
+            ${typeof aiXpNow === 'function' && aiXpNow().today ? `<li><i class="fas fa-star"></i> +${aiXpNow().today} XP today</li>` : ''}
             ${st.mission && st.mission.kind === 'skill' && st.mission.complete ? `<li><i class="fas fa-flag-checkered"></i> Daily mission complete</li>` : ''}
             ${streak && streak.current ? `<li><i class="fas fa-fire"></i> ${streak.current}-day streak${streak.doneToday ? '' : ` &mdash; ${streak.goal - streak.todayM} more message${streak.goal - streak.todayM === 1 ? '' : 's'} today to count it`}</li>` : ''}
         </ul>`);
@@ -1810,7 +1850,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
-        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, PRACTICE_STREAK_MILESTONES,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, practiceXpAdd, practiceXpInfo, practiceLevelInfo, practiceXpForLevel, PRACTICE_XP, PRACTICE_XP_MIN_WORDS, PRACTICE_STREAK_MILESTONES,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
