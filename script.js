@@ -2876,6 +2876,7 @@ function leaveAiChat() {
     aiLessonLog = [];
     aiPending = null;
     aiXpLessonGiven = false;
+    if (typeof practiceStoryStop === 'function') practiceStoryStop();
     document.getElementById('aiCelebrate')?.remove();
     aiCloseSheet();
     aiUpdateProgress();
@@ -2947,6 +2948,8 @@ function aiRenderFeedback(entry) {
     const okLabel = hit ? `<i class="fas fa-bullseye"></i> ${escapeHtml(practiceClip(entry.hits.map(h => h.area).join(' · '), 70))} &mdash; used correctly`
         : entry.perfect ? '<i class="fas fa-fire"></i> Perfect response' : '<i class="fas fa-check"></i> No corrections';
     bubble.innerHTML = `<p>${tag}${body}</p><div class="ai-fb ${ok ? 'is-ok' : 'has-fix'}${hit ? ' is-hit' : ''}${entry.perfect && !hit ? ' is-perfect' : ''}">${ok ? okLabel : '<i class="fas fa-pen"></i> See the fix'}</div>`;
+    bubble.classList.toggle('has-sticker', !!(ok && (entry.perfect || hit)));
+    if (ok && (entry.perfect || hit)) bubble.insertAdjacentHTML('afterbegin', '<span class="ai-sticker" aria-hidden="true"><i class="fas fa-fire"></i></span>');
     bubble.setAttribute('role', 'button');
     bubble.tabIndex = 0;
     bubble.onclick = () => aiOpenFeedback(entry);
@@ -3364,7 +3367,7 @@ function aiRefreshStreak(bump) {
     const btn = document.getElementById('aiStreakBtn');
     const info = aiStreakNow();
     if (btn) {
-        btn.querySelector('span').textContent = String(info.current);
+        const sn = btn.querySelector('.ai-streak-n'); if (sn) sn.textContent = String(info.current);
         const xpn = btn.querySelector('.ai-streak-xpn');
         if (xpn) xpn.textContent = String(aiXpNow().total);
         btn.classList.toggle('is-lit', info.doneToday);
@@ -3434,11 +3437,12 @@ function aiPathCardHtml() {
     const info = aiPathNow();
     if (!info.total) return '';
     const line = info.complete ? 'Path complete' : info.current ? `Unit ${info.cur + 1} of ${info.total}: <b>${escapeHtml(practiceClip(info.current.title, 60))}</b>` : `${info.done} of ${info.total} units done`;
-    return `<div class="ai-pr-path">
-        <div class="ai-pr-goal-top"><span>Your path</span><b>${info.pct}%</b></div>
-        <p class="ai-pr-mission-text">${line}</p>
-        <div class="ai-pr-bar"><div style="width:${info.pct}%"></div></div>
-        <button type="button" class="ai-wk-link" data-path><i class="fas fa-route"></i> See my path</button>
+    return `<div class="ai-gcard ai-gcard-amber">
+        <small>YOUR PATH</small>
+        <h4>${info.pct}% of the way</h4>
+        <div class="ai-gbar"><div style="width:${info.pct}%"></div></div>
+        <p>${line}</p>
+        <button type="button" class="ai-gbtn" data-path>See my path</button>
     </div>`;
 }
 function aiOpenPath() {
@@ -3492,10 +3496,12 @@ function aiFreezeLineHtml(i) {
 function aiMissionCardHtml() {
     const m = aiMissionNow();
     if (m.kind !== 'skill') return '';
-    return `<div class="ai-pr-mission${m.complete ? ' is-complete' : ''}">
-        <div class="ai-pr-goal-top"><span>Today's mission</span><b>${m.done} / ${m.goal}</b></div>
-        <p class="ai-pr-mission-text">${m.complete ? 'Complete: ' : 'Use '}<b>${escapeHtml(m.area)}</b>${m.complete ? '' : ' correctly in your messages.'}</p>
-        <div class="ai-pr-bar"><div style="width:${Math.round(100 * m.done / m.goal)}%"></div></div>
+    return `<div class="ai-gcard ai-gcard-violet${m.complete ? ' is-done' : ''}">
+        <small>TODAY</small>
+        <h4>${m.complete ? 'Mission complete!' : "Today's mission"}</h4>
+        <div class="ai-gbarrow"><div class="ai-gbar"><div style="width:${Math.round(100 * m.done / m.goal)}%"></div></div><span>${m.done}/${m.goal}</span></div>
+        <p>${m.complete ? 'You used' : 'Use'} <b>${escapeHtml(m.area)}</b> correctly${m.complete ? ' three times. Well done!' : ` ${m.goal} times in your messages.`}</p>
+        ${m.complete ? '' : '<button type="button" class="ai-gbtn" data-mission-go>Do it now</button>'}
     </div>`;
 }
 // Every focus area on the student's plan with how close they are to mastering it.
@@ -3510,6 +3516,31 @@ function aiSkillsHtml() {
             <div class="ai-pr-skill-top"><span>${k.mastered ? '<i class="fas fa-check"></i> ' : ''}${escapeHtml(practiceClip(f.area, 70))}</span><small>${label(k)}</small></div>
             <div class="ai-pr-bar"><div style="width:${Math.round(k.frac * 100)}%"></div></div>
         </div>`).join('')}<p class="ai-mw-note">A clean use is a message your tutor found completely correct that used the focus area. Up to 2 count per day, so mastering one takes at least 3 days.</p></div>`;
+}
+
+// Last four weeks of XP as bars (this week in blue), like Loora's weekly chart.
+function aiWeeklyXpHtml() {
+    const prog = aiProgressLoad(), start = practiceWeekStart(practiceDayKey());
+    const mon = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short' }).toUpperCase() + ' ' + d; };
+    const weeks = [-3, -2, -1, 0].map(n => {
+        const ws = practiceDayShift(start, 7 * n);
+        let v = 0; for (let i = 0; i < 7; i++) v += (prog.xpd && +prog.xpd[practiceDayShift(ws, i)]) || 0;
+        return { v, cur: n === 0, label: `${mon(ws)}–${practiceDayShift(ws, 6).split('-')[2].replace(/^0/, '')}` };
+    });
+    if (!weeks.some(w => w.v)) return '';
+    const max = Math.max(1, ...weeks.map(w => w.v));
+    return `<div class="ai-wxp"><h5>Weekly XP</h5><div class="ai-wxp-bars">${weeks.map(w => `<div class="ai-wxp-col"><div class="ai-wxp-bar${w.cur ? ' is-cur' : ''}" style="height:${Math.round(10 + 80 * w.v / max)}px">${w.v ? `<b>+${w.v}</b>` : ''}</div><small>${w.label}</small></div>`).join('')}</div></div>`;
+}
+// A "Did you know" card made from the student's own numbers (never invented comparisons).
+function aiInsightHtml() {
+    const prog = aiProgressLoad(), t = practiceDayKey(), i = aiStreakNow();
+    const r = practiceWeekRecap(prog, { sessions: practiceCtx.sessions, focus: practiceCtx.focus, words: aiWordsLoad(), weekStart: practiceWeekStart(t), todayKey: t });
+    let text;
+    if (r.prev.words > 0 && r.words > r.prev.words) text = `You wrote <b>${Math.round(100 * (r.words / r.prev.words - 1))}% more words</b> this week than last week.`;
+    else if (r.words > 0) text = `You have written <b>${r.words} words</b> in Spanish this week.`;
+    else if (i.best > 1) text = `Your best streak so far is <b>${i.best} days</b>. Can you beat it?`;
+    else text = `Five minutes a day beats an hour once a week. <b>${PRACTICE_DAY_GOAL} messages</b> keeps your streak alive.`;
+    return `<div class="ai-insight"><div><small>DID YOU KNOW</small><p>${text}</p></div><i class="fas fa-lightbulb" aria-hidden="true"></i></div>`;
 }
 
 function aiOpenProgress() {
@@ -3536,6 +3567,8 @@ function aiOpenProgress() {
             <p>${i.doneToday ? 'Today\'s goal is done — nice work.' : `Send ${left} more message${left === 1 ? '' : 's'} today to ${i.current ? 'keep your streak going' : 'start a streak'}.`}</p>
         </div>
         ${aiSkillsHtml()}
+        ${aiWeeklyXpHtml()}
+        ${aiInsightHtml()}
         <button type="button" class="ai-wk-link" data-weekrecap><i class="fas fa-calendar-week"></i> Last week's recap</button>
         <div class="ai-pr-grid">
             <div><b>${i.best}</b><span>best streak</span></div>
@@ -3546,6 +3579,11 @@ function aiOpenProgress() {
         </div>
         <p class="ai-mw-note">Saved on this device.</p>`;
     sheet.querySelector('[data-path]')?.addEventListener('click', aiOpenPath);
+    sheet.querySelector('[data-mission-go]')?.addEventListener('click', () => {
+        const m = aiMissionNow();
+        aiCloseSheet();
+        if (m.kind === 'skill' && currentAiMode) submitAiMessage(`Let's practise this: ${m.area}.`, { help: true });
+    });
     sheet.querySelector('[data-weekrecap]').addEventListener('click', () => aiOpenWeekRecap(practiceDayShift(practiceWeekStart(practiceDayKey()), -7)));
 }
 
@@ -3769,7 +3807,7 @@ function ensureAiExtras() {
         const st = document.createElement('button');
         st.id = 'aiStreakBtn'; st.type = 'button'; st.className = 'ai-streak';
         st.setAttribute('aria-label', 'My progress and daily streak');
-        st.innerHTML = '<i class="fas fa-fire ai-streak-flame"></i><span>0</span><b class="ai-streak-sep" aria-hidden="true"></b><i class="fas fa-star ai-streak-star"></i><span class="ai-streak-xpn">0</span>';
+        st.innerHTML = '<span class="ai-chip-flame"><i class="fas fa-fire ai-streak-flame"></i><span class="ai-streak-n">0</span></span><span class="ai-chip-xp"><i class="fas fa-star ai-streak-star"></i><span class="ai-streak-xpn">0</span></span>';
         st.addEventListener('click', aiOpenProgress);
         actions.insertBefore(st, actions.firstChild);
         aiRefreshStreak();

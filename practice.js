@@ -129,14 +129,15 @@ function practiceMarkWords(original, fixes) {
 function practiceLessonStats(log) {
     const turns = (log || []).filter(e => e && !e.help && e.text);
     const seen = new Set();
-    let words = 0, longest = 0, clean = 0;
+    let words = 0, longest = 0, clean = 0, perfect = 0, best = '';
     turns.forEach(e => {
+        if (e.perfect) { perfect++; if (e.text.length > best.length) best = e.text; }
         const ws = e.text.split(/\s+/).map(practiceWordKey).filter(Boolean);
         words += ws.length; longest = Math.max(longest, ws.length);
         ws.forEach(w => seen.add(w));
         if (!(e.fixes && e.fixes.length)) clean++;
     });
-    return { turns: turns.length, clean, words, unique: seen.size, longest, accuracy: turns.length ? Math.round(100 * clean / turns.length) : 0 };
+    return { turns: turns.length, clean, words, unique: seen.size, longest, perfect, best, accuracy: turns.length ? Math.round(100 * clean / turns.length) : 0 };
 }
 
 // ---- daily streak + progress (kept on the student's device; no setup screen, the goal is fixed) ----
@@ -162,6 +163,7 @@ function practiceProgressNormalize(prog) {
     if (p.mission && typeof p.mission === 'object' && p.mission.day && p.mission.key) out.mission = { day: String(p.mission.day), key: String(p.mission.key) };
     if (+p.cel > 0) out.cel = +p.cel;   // highest streak milestone already celebrated
     if (+p.xp > 0) out.xp = Math.round(+p.xp);   // total experience points
+    if (+p.hs > 0) out.hs = Math.round(+p.hs);   // best end-of-lesson score (accuracy %)
     if (p.xpd && typeof p.xpd === 'object') out.xpd = p.xpd;   // XP earned per day (recent days only)
     if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
     return out;
@@ -256,6 +258,8 @@ function practiceMergeState(local, remote) {
     if (wk) progress.wk = wk;
     const xp = Math.max(lp.xp || 0, rp.xp || 0);
     if (xp) progress.xp = xp;
+    const hs = Math.max(lp.hs || 0, rp.hs || 0);
+    if (hs) progress.hs = hs;
     const xpd = {};
     [lp.xpd, rp.xpd].forEach(d => Object.keys(d || {}).forEach(k => { xpd[k] = Math.max(xpd[k] || 0, +d[k] || 0); }));
     Object.keys(xpd).sort().slice(0, Math.max(0, Object.keys(xpd).length - PRACTICE_XP_DAYS_KEPT)).forEach(k => delete xpd[k]);
@@ -1247,6 +1251,7 @@ async function practiceGenerateReport(session) {
 }
 
 function practiceShowRecapShell(html) {
+    practiceStoryStop();
     document.getElementById('aiChatView').classList.add('hidden');
     document.getElementById('aiRecapView').classList.remove('hidden');
     document.getElementById('aiRecapBody').innerHTML = html;
@@ -1264,51 +1269,79 @@ function practiceRingSvg(pct) {
     </svg>`;
 }
 
+// Each screen = { theme, html }. Themes are full-bleed gradients (see "story" CSS): pale, violet, coral, teal, navy.
 function practiceStoryScreens() {
     const st = practiceStory.stats, rep = practiceStory.report;
     const done = st.turns >= PRACTICE_LESSON_TURNS;
     const streak = typeof aiStreakNow === 'function' ? aiStreakNow() : null;
+    const xpToday = typeof aiXpNow === 'function' ? aiXpNow().today : 0;
     const screens = [];
-    screens.push(`<div class="ai-story-ring">${practiceRingSvg(st.accuracy)}<div class="ai-ring-num">${st.accuracy}<span>%</span></div></div>
-        <h4 class="ai-story-title">${done ? 'Lesson complete' : 'Nice work today'}</h4>
-        <p class="ai-story-sub">of your messages had no corrections</p>
-        <ul class="ai-story-list">
-            <li><i class="fas fa-check"></i> ${st.turns} message${st.turns === 1 ? '' : 's'} sent${done ? '' : ` (a full lesson is ${PRACTICE_LESSON_TURNS})`}</li>
-            <li><i class="fas fa-check"></i> ${st.clean} with no corrections</li>
-            ${st.hits ? `<li><i class="fas fa-bullseye"></i> ${st.hits} focus-area use${st.hits === 1 ? '' : 's'} done right</li>` : ''}
-            ${typeof aiXpNow === 'function' && aiXpNow().today ? `<li><i class="fas fa-star"></i> +${aiXpNow().today} XP today</li>` : ''}
-            ${st.mission && st.mission.kind === 'skill' && st.mission.complete ? `<li><i class="fas fa-flag-checkered"></i> Daily mission complete</li>` : ''}
-            ${streak && streak.current ? `<li><i class="fas fa-fire"></i> ${streak.current}-day streak${streak.doneToday ? '' : ` &mdash; ${streak.goal - streak.todayM} more message${streak.goal - streak.todayM === 1 ? '' : 's'} today to count it`}</li>` : ''}
-        </ul>`);
-    screens.push(`<p class="ai-story-kicker">You wrote</p>
-        <div class="ai-story-big">${st.words}</div>
-        <p class="ai-story-sub">words in Spanish</p>
-        <ul class="ai-story-list">
-            <li><i class="fas fa-check"></i> ${st.unique} different word${st.unique === 1 ? '' : 's'}</li>
-            <li><i class="fas fa-check"></i> Longest message: ${st.longest} word${st.longest === 1 ? '' : 's'}</li>
-        </ul>`);
+    // 1. score
+    const checks = [`${done ? 'Lesson complete' : `${st.turns} message${st.turns === 1 ? '' : 's'} sent`}`, `${st.clean} with no corrections`];
+    if (st.perfect) checks.push(`${st.perfect} perfect response${st.perfect === 1 ? '' : 's'}`);
+    if (st.hits) checks.push(`${st.hits} focus-area use${st.hits === 1 ? '' : 's'} done right`);
+    if (st.mission && st.mission.kind === 'skill' && st.mission.complete) checks.push('Daily mission complete');
+    screens.push({ theme: 'pale', html: `<div class="ai-story-ring">${practiceRingSvg(st.accuracy)}<div class="ai-ring-num">${st.accuracy}<span>%</span><small>${st.highScore ? 'NEW HIGH SCORE' : 'NO CORRECTIONS'}</small></div></div>
+        <ul class="ai-story-checks">${checks.map(c => `<li><span>${practiceEsc(c)}</span><i class="fas fa-check"></i></li>`).join('')}</ul>
+        <div class="ai-story-rewards"><span class="ai-rw ai-rw-xp"><i class="fas fa-star"></i> +${xpToday} XP</span><span class="ai-rw-sep"></span><span class="ai-rw ai-rw-flame"><i class="fas fa-fire"></i> ${streak ? streak.current : 0}${streak && !streak.doneToday ? ` <small>(${streak.goal - streak.todayM} to go)</small>` : ''}</span></div>` });
+    // 2. words
+    screens.push({ theme: 'violet', html: `<div class="ai-story-letters" aria-hidden="true">${['Ñ', 'A', '¿', 'B', 'Ó', 'C', '¡'].map((l, i) => `<span style="--i:${i}">${l}</span>`).join('')}</div>
+        <p class="ai-story-kicker">YOU WROTE</p><div class="ai-story-big">${st.words}</div><p class="ai-story-word">words</p>
+        <p class="ai-story-note">${st.unique} different word${st.unique === 1 ? '' : 's'} · longest message ${st.longest} word${st.longest === 1 ? '' : 's'}</p>` });
+    // 3. perfect response sticker (only when there was one)
+    if (st.perfect && st.best) screens.push({ theme: 'coral', html: `<div class="ai-story-stars" aria-hidden="true"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+        <div class="ai-sticker-big"><span>PERFECT</span><span>RESPONSE</span><i class="fas fa-fire"></i></div>
+        <blockquote class="ai-story-quote"><i class="fas fa-quote-left"></i>${practiceEsc(practiceClip(st.best, 140))}</blockquote>
+        <p class="ai-story-note">${st.perfect} message${st.perfect === 1 ? '' : 's'} with no mistakes at all</p>` });
+    // 4. recap
     const rc = rep && rep.student_recap;
     const blocks = [];
     if (rc && rc.went_well) blocks.push(`<div class="ai-recap-block"><h5>Went well</h5><p>${practiceEsc(rc.went_well)}</p></div>`);
     if (rc && rc.work_on) blocks.push(`<div class="ai-recap-block"><h5>Work on</h5><p>${practiceEsc(rc.work_on)}</p></div>`);
     if (rc && rc.tip) blocks.push(`<div class="ai-recap-block"><h5>Tip</h5><p>${practiceEsc(rc.tip)}</p></div>`);
-    if (rep === undefined) screens.push(`<h4 class="ai-story-title">Your recap</h4><div class="ai-recap-loading"><span class="typing-indicator"><span></span><span></span><span></span></span><p>Wrapping up your session…</p></div>`);
-    else screens.push(`<h4 class="ai-story-title">Your recap</h4>${blocks.length ? blocks.join('') : '<p class="ai-recap-plain">Your session was saved — nice work. Aaron will go over how it went with you in your next lesson.</p>'}`);
+    screens.push({ theme: 'teal', html: rep === undefined
+        ? `<h4 class="ai-story-title">Your recap</h4><div class="ai-recap-loading"><span class="typing-indicator"><span></span><span></span><span></span></span><p>Wrapping up your session…</p></div>`
+        : `<h4 class="ai-story-title">Your recap</h4>${blocks.length ? blocks.join('') : '<p class="ai-recap-plain">Your session was saved. Nice work! Aaron will go over how it went with you in your next lesson.</p>'}` });
+    // 5. come back tomorrow (live countdown to midnight)
+    const next = (streak ? streak.current : 0) + (streak && streak.doneToday ? 1 : 0);
+    screens.push({ theme: 'navy', html: `<div class="ai-story-moon" aria-hidden="true"><i class="fas fa-moon"></i></div>
+        <div class="ai-countdown" id="aiCountdown">${practiceCountdownText()}</div>
+        <p class="ai-story-kicker">UNTIL TOMORROW'S PRACTICE</p>
+        <p class="ai-story-note">${next >= 2 ? `Come back tomorrow to make it a <b>${next}-day streak</b> 🔥` : 'Come back tomorrow and start a streak 🔥'}</p>` });
     return screens;
+}
+
+// "11:50:31" until the student's local midnight (when the next streak day starts).
+function practiceCountdownText(now) {
+    const d = now || new Date();
+    const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0);
+    const sec = Math.max(0, Math.floor((end - d) / 1000));
+    const p = n => String(n).padStart(2, '0');
+    return `${p(Math.floor(sec / 3600))}:${p(Math.floor(sec % 3600 / 60))}:${p(sec % 60)}`;
+}
+let practiceCountdownTimer = null;
+function practiceStoryStop() {
+    clearInterval(practiceCountdownTimer); practiceCountdownTimer = null;
+    const view = document.getElementById('aiRecapView');
+    if (view) { view.classList.remove('is-story'); view.removeAttribute('data-theme'); }
 }
 
 function practiceStoryRender() {
     const sc = practiceStoryScreens();
     const i = Math.min(practiceStory.step, sc.length - 1);
     const last = i === sc.length - 1;
-    document.getElementById('aiRecapBody').innerHTML = `<div class="ai-story">
+    const view = document.getElementById('aiRecapView');
+    view.classList.add('is-story'); view.dataset.theme = sc[i].theme;
+    document.getElementById('aiRecapBody').innerHTML = `<div class="ai-story" data-theme="${sc[i].theme}">
         <div class="ai-story-dots" aria-hidden="true">${sc.map((_, k) => `<span class="${k <= i ? 'is-on' : ''}"></span>`).join('')}</div>
-        <div class="ai-story-screen">${sc[i]}</div>
+        <div class="ai-story-screen">${sc[i].html}</div>
         ${last ? `<button type="button" class="ai-story-btn" onclick="practiceStartAnother()"><i class="fas fa-rotate-right"></i> Practice again</button>`
                : `<button type="button" class="ai-story-btn" onclick="practiceStoryNext()">Next</button>`}
     </div>`;
     const ring = document.querySelector('#aiRecapBody .ai-ring-fill');
     if (ring) requestAnimationFrame(() => requestAnimationFrame(() => { ring.style.strokeDashoffset = ring.dataset.target; }));
+    clearInterval(practiceCountdownTimer); practiceCountdownTimer = null;
+    if (document.getElementById('aiCountdown')) practiceCountdownTimer = setInterval(() => { const el = document.getElementById('aiCountdown'); if (el) el.textContent = practiceCountdownText(); else practiceStoryStop(); }, 1000);
 }
 
 function practiceStoryNext() {
@@ -1325,7 +1358,7 @@ function practiceStoryStart(stats, reportPromise) {
     const story = practiceStory;
     reportPromise.then(report => {
         story.report = report || null;
-        if (practiceStory === story && story.step >= 2) practiceStoryRender();
+        if (practiceStory === story && story.step >= practiceStoryScreens().findIndex(x => x.theme === 'teal')) practiceStoryRender();   // the recap screen is waiting for this text
     });
 }
 
@@ -1360,6 +1393,11 @@ async function practiceFinishSession() {
     }
     const stats = practiceLessonStats(typeof aiLessonLog !== 'undefined' ? aiLessonLog : []);
     stats.hits = s.turns.reduce((n, t) => n + (Array.isArray(t.hits) ? t.hits.length : 0), 0);
+    if (typeof aiProgressLoad === 'function' && stats.turns >= 3) {   // "new high score" (needs a few messages to mean something)
+        const prog = aiProgressLoad();
+        stats.highScore = stats.accuracy > (prog.hs || 0);
+        if (stats.highScore) aiProgressSave({ ...prog, hs: stats.accuracy });
+    }
     stats.mission = typeof aiMissionNow === 'function' ? aiMissionNow() : null;
     const reportPromise = practiceGenerateReport(s).then(report => {
         practiceMarkEnded(s, report);
@@ -1998,7 +2036,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         practiceWordSplit, practiceParseWordCard, PRACTICE_WORD_SYSTEM,
         practiceSplitFixes, practiceSameText, practiceWordDiff, practiceMarkWords, practiceFixIsFullSentence, practiceLessonStats,
-        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, practiceXpAdd, practiceXpInfo, practiceLevelInfo, practiceXpForLevel, PRACTICE_XP, PRACTICE_XP_MIN_WORDS, practiceNudgeList, practiceNudgeText, practiceWhatsAppNumber, practiceWhatsAppUrl, PRACTICE_STREAK_MILESTONES,
+        practiceDayKey, practiceDayShift, practiceProgressAdd, practiceStreakInfo, practiceMilestoneFor, practiceWeekStart, practiceWeekDue, practiceWeekRecap, practicePathParse, practicePathFormat, practicePathAdvance, practicePathInfo, practiceXpAdd, practiceXpInfo, practiceLevelInfo, practiceXpForLevel, PRACTICE_XP, PRACTICE_XP_MIN_WORDS, practiceNudgeList, practiceNudgeText, practiceCountdownText, practiceWhatsAppNumber, practiceWhatsAppUrl, PRACTICE_STREAK_MILESTONES,
         practiceOpeningBrief, practiceRecentSessionsNote, PRACTICE_OPENING_ANGLES, practiceMergeState,
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,

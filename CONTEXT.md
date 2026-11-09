@@ -268,6 +268,15 @@ account older than a day); anyone who practised today is left out. Streaks/XP li
 (`practiceWhatsAppNumber`: leading + or 00, 8-15 digits). "Open in WhatsApp" / "Not today" store a timestamp in the admin browser's localStorage `practiceNudged` and the student moves
 to "Messaged in the last day" for 20 h. No server writes, no new SQL.
 
+### Loora visual pass (2026-11-09, from the two Loora screen recordings: Drive `Reference_Footage/Loora/Loora_1.MP4` + `Loora_2.MP4`)
+Contact-sheet recipe: a Swift AVAssetImageGenerator script tiles one frame per N seconds, 4 per JPG (see memory `project-loora-clone`); read the sheets with the image reader.
+What was copied (flows and layout, not Loora's art/name/mascot): 
+- **Header**: two pastel chips (peach flame + cream star/XP) instead of one pill.
+- **Perfect response**: a flame sticker on the corner of the student's bubble (`.ai-sticker`) + the gold "+N XP" pill (Loora: flame sticker + star count).
+- **End-of-lesson story** (`practiceStoryScreens` in practice.js): five full-bleed gradient screens, each its own colour (pale score ring with checklist + XP/streak rewards row; violet "YOU WROTE N words" with big letters; coral "PERFECT RESPONSE" sticker + the student's best perfect sentence in italics (only if there was one); teal recap; navy "until tomorrow's practice" live countdown to local midnight), a segmented progress bar, white chunky Next button. Theme is `data-theme` on `#aiRecapView`; `practiceStoryStop()` clears the countdown/class. "NEW HIGH SCORE" uses `progress.hs` (best accuracy %, merged by max, only counted with >= 3 messages).
+- **My progress**: Loora-style gradient "Today" cards (violet mission card with a white "Do it now" pill that sends a practice request for the mission area; amber path card), a 4-week **Weekly XP** bar chart (this week in blue, from `progress.xpd`), and a lavender **Did you know** card built from the student's own numbers (never invented comparisons).
+- Not copied: onboarding wizard (Aaron: no first-time setup), leagues, gems, estimated-vocabulary and pronunciation screens (no data / Aaron skipped pronunciation scoring), tutor bubble colour (chat stays calm).
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word
