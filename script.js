@@ -2790,6 +2790,8 @@ async function startAiMode(mode, context) {
     const startToken = ++aiStartSeq;
     currentAiMode = mode;
     currentAiContext = context || null;
+    aiDockChoice = 'voice';   // hold-to-talk first, every time
+    aiApplyDockMode();
     aiConversationHistory = [];
     aiLessonLog = [];
     aiXpLessonGiven = false;
@@ -3186,6 +3188,8 @@ function aiApplyHits(hits) {
     practiceRenderChips();
     aiRefreshMission();
     const after = aiMissionNow();
+    const missionDone = before.kind === 'skill' && !before.complete && after.complete;
+    if (mastered.length || missionDone) aiFx('mission', 'big');
     mastered.forEach(h => aiNote('mastered', `<i class="fas fa-graduation-cap"></i><div><b>Skill mastered</b><span>${escapeHtml(h.area)}</span></div>`));
     if (before.kind === 'skill' && !before.complete && after.complete) aiAwardXp(PRACTICE_XP.mission);
     if (before.kind === 'skill' && !before.complete && after.complete) aiNote('mission', `<i class="fas fa-flag-checkered"></i><div><b>Mission complete</b><span>${escapeHtml(after.area)} &mdash; ${after.goal} out of ${after.goal}</span></div>`);
@@ -3240,6 +3244,59 @@ function aiDayName(key) {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' });
 }
+// ---- sound effects + vibration (synthesised in the browser with Web Audio: no audio files, no cost, nothing to download) ----
+// Short, quiet chimes for the moments that matter (a message sent, a perfect response, XP, level up, mission, mastery, streak) and a gentle
+// low note when a message had a correction (never a harsh buzzer). Off switches live in the voice settings (⚙). Never plays while the
+// microphone is open (it would be recorded) or while the app is in the background. Vibration uses navigator.vibrate (Android Chrome);
+// iPhone Safari has no vibration API, so there it is sound only. Phones on silent stay silent (iOS mutes Web Audio on the ringer switch).
+const aiSfx = { ctx: null, on: true, haptics: true };
+try { aiSfx.on = localStorage.getItem('aiSfx') !== '0'; aiSfx.haptics = localStorage.getItem('aiHaptics') !== '0'; } catch (e) {}
+function aiSfxBlocked() {
+    return document.hidden || (typeof convo !== 'undefined' && convo.on) || (typeof note !== 'undefined' && (note.state === 'recording' || note.state === 'starting'));
+}
+function aiSfxContext() {
+    if (!aiSfx.ctx) { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; try { aiSfx.ctx = new AC(); } catch (e) { return null; } }
+    if (aiSfx.ctx.state === 'suspended') aiSfx.ctx.resume().catch(() => {});
+    return aiSfx.ctx;
+}
+// One soft note: a sine with a quiet octave on top for a bell-like sparkle, with a quick attack and an exponential fade.
+function aiTone(ctx, t, freq, dur, gain, bell) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.connect(ctx.destination);
+    [[1, 'sine', 1], ...(bell ? [[2, 'sine', 0.32], [3, 'triangle', 0.1]] : [])].forEach(([mult, type, amt]) => {
+        const o = ctx.createOscillator(), og = ctx.createGain();
+        o.type = type; o.frequency.setValueAtTime(freq * mult, t); og.gain.value = amt;
+        o.connect(og); og.connect(g); o.start(t); o.stop(t + dur + 0.05);
+    });
+}
+const AI_SFX = {   // [seconds after start, Hz, length, loudness, bell?]
+    send:    [[0, 520, 0.07, 0.05, false], [0.035, 390, 0.08, 0.04, false]],
+    tick:    [[0, 1250, 0.035, 0.045, false]],
+    perfect: [[0, 1046.5, 0.32, 0.12, true], [0.1, 1568, 0.42, 0.12, true]],
+    soft:    [[0, 392, 0.14, 0.07, false], [0.12, 330, 0.2, 0.065, false]],
+    goal:    [[0, 1046.5, 0.25, 0.12, true], [0.1, 1318.5, 0.25, 0.12, true], [0.2, 1568, 0.45, 0.13, true]],
+    level:   [[0, 523.3, 0.22, 0.12, true], [0.09, 659.3, 0.22, 0.12, true], [0.18, 784, 0.22, 0.12, true], [0.27, 1046.5, 0.7, 0.14, true]],
+    mission: [[0, 784, 0.2, 0.12, true], [0.08, 987.8, 0.2, 0.12, true], [0.16, 1174.7, 0.2, 0.12, true], [0.24, 1568, 0.7, 0.14, true], [0.34, 2093, 0.5, 0.06, true]],
+    streak:  [[0, 523.3, 0.2, 0.12, true], [0.09, 784, 0.2, 0.12, true], [0.18, 1046.5, 0.2, 0.12, true], [0.27, 1318.5, 0.25, 0.13, true], [0.36, 1568, 0.3, 0.13, true], [0.46, 2093, 0.9, 0.14, true]]
+};
+function aiPlaySfx(name) {
+    if (!aiSfx.on || aiSfxBlocked()) return;
+    const seq = AI_SFX[name];
+    const ctx = seq && aiSfxContext();
+    if (!ctx) return;
+    try { const t0 = ctx.currentTime + 0.02; seq.forEach(([dt, f, d, g, b]) => aiTone(ctx, t0 + dt, f, d, g, b)); } catch (e) {}
+}
+const AI_HAPTIC = { tap: [8], soft: [12], success: [14, 50, 24], big: [20, 60, 20, 60, 45] };
+function aiHaptic(kind) {
+    if (!aiSfx.haptics || aiSfxBlocked() || !navigator.vibrate) return;
+    try { navigator.vibrate(AI_HAPTIC[kind] || AI_HAPTIC.tap); } catch (e) {}
+}
+// Sound + buzz together for a moment of the lesson.
+function aiFx(sound, haptic) { aiPlaySfx(sound); if (haptic) aiHaptic(haptic); }
+
 // ---- XP + levels (rules in practice.js: PRACTICE_XP) ----
 let aiXpTurn = 0;            // XP earned during the turn in progress; shown once, as a gold pill on the student's message
 let aiXpLessonGiven = false; // the "lesson complete" bonus is paid once per chat
@@ -3260,6 +3317,7 @@ function aiFlushXp(entry, levelBefore) {
     const fb = entry && entry.el && entry.el.querySelector('.ai-fb');
     if (fb) { fb.querySelector('.ai-xp')?.remove(); fb.insertAdjacentHTML('beforeend', `<span class="ai-xp"><i class="fas fa-star"></i> +${n} XP</span>`); }
     const now = aiXpNow();
+    if (now.level > levelBefore) aiFx('level', 'big');
     if (now.level > levelBefore) aiNote('level', `<i class="fas fa-bolt"></i><div><b>Level ${now.level}!</b><span>${now.total} XP so far. ${now.toNext} to level ${now.level + 1}.</span></div>`);
 }
 function aiLevelCardHtml() {
@@ -3321,6 +3379,7 @@ function aiShowPending() {
     aiPending = null;
     if (!pend || !pend.current) return;
     aiAwardXp(PRACTICE_XP.goal);
+    aiFx(pend.milestone ? 'streak' : 'goal', pend.milestone ? 'big' : 'success');
     if (pend.milestone) {
         aiProgressSave({ ...aiProgressLoad(), cel: pend.milestone });
         aiSyncSoon();
@@ -3484,6 +3543,7 @@ function aiPathNotice() {
     const fresh = done.filter(t => !seen.includes(t));
     if (!fresh.length) return;
     const next = info.current ? `Next: ${escapeHtml(practiceClip(info.current.title, 60))}` : 'You have finished your whole path.';
+    aiFx('mission', 'big');
     aiNote('mastered', `<i class="fas fa-flag-checkered"></i><div><b>Unit complete</b><span>${escapeHtml(practiceClip(fresh[fresh.length - 1], 70))}${fresh.length > 1 ? ` and ${fresh.length - 1} more` : ''}. ${next}</span></div>`);
 }
 function aiFreezeLineHtml(i) {
@@ -3705,7 +3765,7 @@ async function submitAiMessage(message, opts) {
         const userEl = appendAiMessage('user', (opts.voice ? '<i class="fas fa-microphone ai-voice-tag" title="Voice note"></i>' : '') + escapeHtml(message));
         entry = { el: userEl, text: message, voice: !!opts.voice, help: !!opts.help, fixes: [], graded: false };
         aiLessonLog.push(entry);
-        if (!entry.help) aiRecordProgress(message);
+        if (!entry.help) { aiRecordProgress(message); aiFx('send', 'tap'); }
         if (!entry.help) userEl.querySelector('.ai-bubble').insertAdjacentHTML('beforeend', '<div class="ai-fb is-pending"><i class="fas fa-circle-notch fa-spin"></i></div>');
         aiUpdateProgress();
         if (!opts.help) { aiMessageInput.value = ''; aiAutosize(); }
@@ -3747,6 +3807,8 @@ async function submitAiMessage(message, opts) {
                 }
                 if (!aiXpLessonGiven && aiLessonLog.filter(e => !e.help).length >= PRACTICE_LESSON_TURNS) { aiXpLessonGiven = true; aiAwardXp(PRACTICE_XP.lesson); }
                 aiRenderFeedback(entry);
+                if (entry.fixes.length) aiFx('soft', 'soft');                 // a correction: one gentle low note, never a buzzer
+                else if (entry.perfect || hits.length) aiFx('perfect', 'success');
             }
         }
         if (!failed) practiceRecordTurn('assistant', marked.text, hits.length ? { hits: hits.map(h => h.key) } : undefined);
@@ -3831,6 +3893,8 @@ function ensureAiExtras() {
                 <div class="ai-seg" id="aiPaceSeg" role="group" aria-label="Reading pace">
                     <button type="button" data-pace="normal">Normal</button><button type="button" data-pace="slow">Slow</button>
                 </div></div>
+            <label class="ai-pop-row ai-pop-check"><span>Sound effects</span><input type="checkbox" id="aiSfxOn"></label>
+            ${navigator.vibrate ? '<label class="ai-pop-row ai-pop-check"><span>Vibration</span><input type="checkbox" id="aiHapticsOn"></label>' : ''}
             <label class="ai-pop-row ai-pop-check"><span>Hands-free conversation <em>(beta)</em></span><input type="checkbox" id="aiHandsFree"></label>
             <div class="ai-pop-row"><span>Microphone problems?</span><button type="button" id="aiDiagBtn" class="ai-pop-link">Copy diagnostics</button></div>
             <pre id="aiDiagBox" class="ai-diag hidden"></pre>`;
@@ -3841,6 +3905,10 @@ function ensureAiExtras() {
         const sel = menu.querySelector('#ttsVoiceSelect');
         if (sel) { sel.addEventListener('change', () => chooseTtsVoice(sel.value)); fillTtsVoiceSelect(); }
         setSlowTTS(ttsSlow);
+        const sfxBox = menu.querySelector('#aiSfxOn');
+        if (sfxBox) { sfxBox.checked = aiSfx.on; sfxBox.addEventListener('change', () => { aiSfx.on = sfxBox.checked; try { localStorage.setItem('aiSfx', aiSfx.on ? '1' : '0'); } catch (e) {} aiPlaySfx('perfect'); }); }
+        const hapBox = menu.querySelector('#aiHapticsOn');
+        if (hapBox) { hapBox.checked = aiSfx.haptics; hapBox.addEventListener('change', () => { aiSfx.haptics = hapBox.checked; try { localStorage.setItem('aiHaptics', aiSfx.haptics ? '1' : '0'); } catch (e) {} aiHaptic('success'); }); }
         const hf = menu.querySelector('#aiHandsFree');
         if (hf) { hf.checked = noteHandsFree(); hf.addEventListener('change', () => { try { localStorage.setItem('aiHandsFree', hf.checked ? '1' : '0'); } catch (e) {} if (!hf.checked && convo.on) convoStop(); }); }
         menu.querySelector('#aiVoicePick').addEventListener('click', aiOpenVoices);
@@ -4036,10 +4104,13 @@ function aiDockSync() {
     }
 }
 
-// Voice dock (default) or the text box; remembered per device. Browsers that cannot record always get the text box.
+// Hold-to-talk is ALWAYS how the tutor opens; typing is the secondary option. Picking the keyboard lasts only until the chat is left or
+// restarted (it is no longer remembered on the device: one tap on the keyboard used to keep a student in typing mode forever).
+// Browsers that cannot record always get the text box.
+let aiDockChoice = 'voice';
+try { localStorage.removeItem('aiDockMode'); } catch (e) {}   // forget the old saved preference
 function aiDockMode() {
-    if (!convoSupported()) return 'text';
-    try { return localStorage.getItem('aiDockMode') === 'text' ? 'text' : 'voice'; } catch (e) { return 'voice'; }
+    return convoSupported() ? aiDockChoice : 'text';
 }
 function aiApplyDockMode() {
     const view = document.getElementById('aiChatView');
@@ -4049,7 +4120,7 @@ function aiApplyDockMode() {
     }
 }
 function aiSetDockMode(mode, focusInput) {
-    try { localStorage.setItem('aiDockMode', mode); } catch (e) {}
+    aiDockChoice = mode === 'text' ? 'text' : 'voice';
     aiClosePopovers();
     if (convo.on) convoStop();
     aiApplyDockMode();

@@ -277,6 +277,13 @@ What was copied (flows and layout, not Loora's art/name/mascot):
 - **My progress**: Loora-style gradient "Today" cards (violet mission card with a white "Do it now" pill that sends a practice request for the mission area; amber path card), a 4-week **Weekly XP** bar chart (this week in blue, from `progress.xpd`), and a lavender **Did you know** card built from the student's own numbers (never invented comparisons).
 - Not copied: onboarding wizard (Aaron: no first-time setup), leagues, gems, estimated-vocabulary and pronunciation screens (no data / Aaron skipped pronunciation scoring), tutor bubble colour (chat stays calm).
 
+### Sounds + vibration, and voice-first dock (2026-11-09)
+- **Sound effects** are synthesised with Web Audio (no files, no cost): `aiSfx` / `AI_SFX` / `aiPlaySfx` in script.js. Quiet chimes: `send` (tiny pop), `perfect` (two-note ding, perfect response or a clean focus-area use), `soft` (one gentle low note when a message had a correction, never a buzzer),
+  `goal`, `level`, `mission` (mission complete, skill mastered, unit complete, new high score), `streak` (milestone fanfare), `tick` (story Next). Hooks: `submitAiMessage`, `aiFlushXp`, `aiApplyHits`, `aiShowPending`, `aiPathNotice`, `practiceStorySound` (practice.js, once per story screen).
+  Never plays while the mic is open (`convo.on`, `note.state` recording/starting) or the page is hidden; iPhone's silent switch mutes it. Switches in the voice settings (⚙): "Sound effects" (localStorage `aiSfx`) and "Vibration" (`aiHaptics`, only shown where `navigator.vibrate` exists).
+- **Vibration** = `navigator.vibrate` (Android Chrome). iPhone Safari has no vibration API, so on iPhone it is sound only (the hidden-`<input switch>` haptic trick was deliberately not used: unverifiable here and it needs a user gesture).
+- **Voice-first dock:** hold-to-talk is the default EVERY time the tutor opens. The keyboard choice is no longer saved on the device (`aiDockChoice`, in memory; old `aiDockMode` key is deleted); `startAiMode` resets it to voice. Browsers that cannot record still get the text box.
+
 ### Lesson-style chat (Stage 1 of the Loora-inspired rebuild, 2026-10-29)
 Reference: two screen recordings of the Loora app (see Aaron's Drive "Reference_Footage/Loora"); we copy its flow and
 interactions, not its branding, art or wording. Stages: 1 = lesson chat + grammar sheet + end screens (this), 2 = tap-a-word

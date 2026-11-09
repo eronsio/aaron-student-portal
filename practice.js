@@ -1332,6 +1332,7 @@ function practiceStoryRender() {
     const last = i === sc.length - 1;
     const view = document.getElementById('aiRecapView');
     view.classList.add('is-story'); view.dataset.theme = sc[i].theme;
+    practiceStorySound(i, sc[i].theme);
     document.getElementById('aiRecapBody').innerHTML = `<div class="ai-story" data-theme="${sc[i].theme}">
         <div class="ai-story-dots" aria-hidden="true">${sc.map((_, k) => `<span class="${k <= i ? 'is-on' : ''}"></span>`).join('')}</div>
         <div class="ai-story-screen">${sc[i].html}</div>
@@ -1348,6 +1349,15 @@ function practiceStoryNext() {
     if (!practiceStory) return;
     practiceStory.step++;
     practiceStoryRender();
+}
+// One sound per screen the first time it appears (not when the recap text arrives and the same screen is redrawn).
+function practiceStorySound(i, theme) {
+    if (typeof aiPlaySfx !== 'function' || practiceStory.soundStep === i) return;
+    practiceStory.soundStep = i;
+    const st = practiceStory.stats;
+    if (theme === 'pale') aiFx(st.highScore ? 'mission' : 'perfect', st.highScore ? 'big' : 'success');
+    else if (theme === 'coral') aiFx('perfect', 'success');
+    else aiPlaySfx('tick');
 }
 
 // The recap text arrives after the first screens are already showing (it takes a few seconds to write).
