@@ -1387,6 +1387,18 @@ footer p {
     width: 100%; height: 100%;
 }
 
+/* Under a Google Drive video: tucked up against the player instead of floating 24px below it */
+.lesson-video-fallback {
+    margin: -16px 0 24px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.lesson-video-fallback a {
+    color: inherit;
+    text-decoration: underline;
+}
+
 .lesson-text-content {
     font-size: 14px;
     line-height: 1.7;

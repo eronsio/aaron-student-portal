@@ -5459,13 +5459,18 @@ async function openLesson(courseId, lessonId) {
     html += `<h3 class="lesson-view-title">${lesson.title}</h3>`;
 
     if (lesson.videoUrl) {
-        const embedUrl = youtubeToEmbed(lesson.videoUrl);
+        const embedUrl = videoToEmbed(lesson.videoUrl);
         if (embedUrl) {
             html += `<div class="lesson-video-wrapper">
                 <iframe src="${embedUrl}" frameborder="0" allowfullscreen
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture">
                 </iframe>
             </div>`;
+            // A Drive video has nothing but Drive's own player behind it, so always give the student a way out to the plain Drive page.
+            const driveId = driveFileId(lesson.videoUrl);
+            if (driveId) {
+                html += `<p class="lesson-video-fallback"><a href="https://drive.google.com/file/d/${driveId}/view" target="_blank" rel="noopener">Trouble playing the video? Open it in a new tab</a></p>`;
+            }
         }
     }
 
@@ -5524,9 +5529,9 @@ function renderEditableLesson(courseId, lessonId, lesson) {
             <div class="editable-field-label">Lesson title</div>
             <h3 class="lesson-view-title" id="ilTitle" contenteditable="true" style="border-bottom:2px dashed #c7d2fe;outline:none;padding-bottom:4px;">${lesson.title}</h3>
 
-            <div class="editable-field-label">YouTube URL <span style="font-weight:400;opacity:.7;">(optional)</span></div>
-            <input id="ilVideo" type="url" class="editable-inline-input" value="${escapeAttr(lesson.videoUrl||'')}" placeholder="https://www.youtube.com/watch?v=..." oninput="updateInlineVideo(this.value)">
-            <div id="ilVideoPreview" style="margin-bottom:20px;">${lesson.videoUrl ? `<div class="lesson-video-wrapper"><iframe src="${youtubeToEmbed(lesson.videoUrl)}" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>` : ''}</div>
+            <div class="editable-field-label">Video link (YouTube or Google Drive) <span style="font-weight:400;opacity:.7;">(optional)</span></div>
+            <input id="ilVideo" type="url" class="editable-inline-input" value="${escapeAttr(lesson.videoUrl||'')}" placeholder="YouTube or Google Drive link" oninput="updateInlineVideo(this.value)">
+            <div id="ilVideoPreview" style="margin-bottom:20px;">${lesson.videoUrl ? `<div class="lesson-video-wrapper"><iframe src="${videoToEmbed(lesson.videoUrl)}" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>` : ''}</div>
 
             <div class="editable-field-label">Lesson notes</div>
             <div id="ilQuillContainer" style="border:1px dashed #c7d2fe;border-radius:var(--radius-md);overflow:hidden;margin-bottom:20px;min-height:160px;"></div>
@@ -5584,7 +5589,7 @@ function renderEditableLesson(courseId, lessonId, lesson) {
 }
 
 function updateInlineVideo(url) {
-    const embed = youtubeToEmbed(url);
+    const embed = videoToEmbed(url);
     document.getElementById('ilVideoPreview').innerHTML = embed
         ? `<div class="lesson-video-wrapper"><iframe src="${embed}" frameborder="0" allowfullscreen></iframe></div>` : '';
 }
@@ -5649,6 +5654,26 @@ function youtubeToEmbed(url) {
         if (!videoId) return null;
         return `https://www.youtube.com/embed/${videoId}`;
     } catch { return null; }
+}
+
+// A lesson's video can be a YouTube link or a Google Drive file shared as "anyone with the link"
+// (drive.google.com/file/d/<id>/view or /preview, or the older /open?id=<id> form).
+function driveFileId(url) {
+    try {
+        const u = new URL(url);
+        if (u.hostname !== 'drive.google.com') return null;
+        const m = u.pathname.match(/^\/file\/d\/([A-Za-z0-9_-]+)/);
+        if (m) return m[1];
+        const id = u.pathname === '/open' ? u.searchParams.get('id') : null;
+        return id && /^[A-Za-z0-9_-]+$/.test(id) ? id : null;
+    } catch { return null; }
+}
+
+// The iframe address for a lesson's videoUrl (YouTube or Drive), or null when it is neither.
+function videoToEmbed(url) {
+    const driveId = driveFileId(url);
+    if (driveId) return `https://drive.google.com/file/d/${driveId}/preview`;
+    return youtubeToEmbed(url);
 }
 
 const _quizData = {};   // quiz id -> { lessonId, questions }, so checkAnswer can show each question's explanation
@@ -6067,13 +6092,13 @@ function renderVisualEditorLesson(courseId, lessonId) {
 
             <!-- Video -->
             <div class="visual-edit-block">
-                <div class="visual-edit-label">YouTube video URL <span style="font-weight:400;">(optional)</span></div>
+                <div class="visual-edit-label">Video link (YouTube or Google Drive) <span style="font-weight:400;">(optional)</span></div>
                 <input id="veVideoUrl" type="url" value="${escapeAttr(lesson.videoUrl || '')}"
-                    placeholder="https://www.youtube.com/watch?v=..."
+                    placeholder="YouTube or Google Drive link"
                     oninput="updateVideoPreview(this.value)"
                     style="font-size:13px;padding:8px 12px;border:1px dashed #c7d2fe;border-radius:var(--radius-sm);background:var(--bg-secondary);width:100%;margin-bottom:10px;">
                 <div id="veVideoPreview">
-                    ${lesson.videoUrl ? `<div class="lesson-video-wrapper"><iframe src="${youtubeToEmbed(lesson.videoUrl)}" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>` : ''}
+                    ${lesson.videoUrl ? `<div class="lesson-video-wrapper"><iframe src="${videoToEmbed(lesson.videoUrl)}" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>` : ''}
                 </div>
             </div>
 
@@ -6148,7 +6173,7 @@ function renderVisualEditorLesson(courseId, lessonId) {
 }
 
 function updateVideoPreview(url) {
-    const embed = youtubeToEmbed(url);
+    const embed = videoToEmbed(url);
     document.getElementById('veVideoPreview').innerHTML = embed
         ? `<div class="lesson-video-wrapper"><iframe src="${embed}" frameborder="0" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>`
         : '';

@@ -374,6 +374,7 @@
         'Not quite — the right answer is': 'Casi: la respuesta correcta es',
         'Completed!': '¡Completada!',
         'Mark as Complete': 'Marcar como completada',
+        'Trouble playing the video? Open it in a new tab': '¿Problemas para reproducir el video? Ábrelo en una pestaña nueva',
         'UNTIL TOMORROW\'S PRACTICE': 'HASTA LA PRÁCTICA DE MAÑANA',
         'Perfect response': 'Respuesta perfecta',
         'NO CORRECTIONS': 'SIN CORRECCIONES',
