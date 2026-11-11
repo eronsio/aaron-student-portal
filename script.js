@@ -3665,6 +3665,20 @@ function aiRefreshStreak(bump) {
 const aiSync = { off: false, uid: '', pulled: false, timer: null };
 function aiSyncOk() { return !aiSync.off && _accessToken && currentUser && currentUser.id && !currentUser.isAdmin && !currentUser.isPreview; }
 function aiSyncLocal() { return { words: aiWordsLoad(), del: aiWordsDelLoad(), progress: aiProgressLoad() }; }
+// Interface language (i18n.js) follows the student across devices: the choice is saved in their progress as ui:{l,t} and the newest choice wins.
+function aiUiSave(l, t) {
+    if (!aiSyncOk()) return;
+    const prog = aiProgressLoad();
+    if (prog.ui && prog.ui.t >= t) return;
+    aiProgressSave({ ...prog, ui: { l, t } });
+    aiSyncSoon();
+}
+document.addEventListener('uilangchange', e => { if (e.detail && e.detail.user) aiUiSave(e.detail.lang, e.detail.at || Date.now()); });
+// After a pull: a newer choice from another device changes this device's language.
+function aiUiAdopt(ui) {
+    if (!ui || !window.i18n || ui.l === window.i18n.get()) return;
+    window.i18n.set(ui.l, { at: ui.t });
+}
 function aiSyncApply(state) {
     try {
         localStorage.setItem(aiWordsKey(), JSON.stringify(state.words));
@@ -3684,9 +3698,14 @@ async function aiSyncPull() {
         if (!r.ok) { if (r.status === 404 || r.status === 400 || r.status === 406) aiSync.off = true; else aiSync.pulled = false; return; }
         const row = (await r.json())[0];
         const remote = row ? { words: (row.words && row.words.list) || [], del: (row.words && row.words.del) || {}, progress: row.progress } : null;
-        const merged = practiceMergeState(aiSyncLocal(), remote);
+        const local = aiSyncLocal();
+        // A choice made on this device (e.g. on the sign-in screen) that is newer than what is saved takes part in the merge.
+        const localAt = window.i18n ? window.i18n.choiceTime() : 0;
+        if (localAt && (!local.progress.ui || local.progress.ui.t < localAt)) local.progress = { ...local.progress, ui: { l: window.i18n.get(), t: localAt } };
+        const merged = practiceMergeState(local, remote);
         aiSyncApply(merged);
-        if (!remote || JSON.stringify(merged.words.map(aiWordId).sort()) !== JSON.stringify(remote.words.map(aiWordId).sort()) || (merged.progress.m !== (remote.progress && remote.progress.m)) || JSON.stringify(merged.progress.skills || {}) !== JSON.stringify((remote.progress && remote.progress.skills) || {}) || JSON.stringify(merged.progress.mission || null) !== JSON.stringify((remote.progress && remote.progress.mission) || null)) aiSyncSoon();
+        aiUiAdopt(merged.progress.ui);
+        if (!remote || JSON.stringify(merged.words.map(aiWordId).sort()) !== JSON.stringify(remote.words.map(aiWordId).sort()) || (merged.progress.m !== (remote.progress && remote.progress.m)) || JSON.stringify(merged.progress.skills || {}) !== JSON.stringify((remote.progress && remote.progress.skills) || {}) || JSON.stringify(merged.progress.mission || null) !== JSON.stringify((remote.progress && remote.progress.mission) || null) || JSON.stringify(merged.progress.ui || null) !== JSON.stringify((remote.progress && remote.progress.ui) || null)) aiSyncSoon();
     } catch (e) { aiSync.pulled = false; }
 }
 function aiSyncSoon() {

@@ -600,7 +600,7 @@
     }
     document.addEventListener('click', e => {
         const b = e.target.closest && e.target.closest('.lang-pill button');
-        if (b) { e.preventDefault(); e.stopPropagation(); set(b.dataset.lang); }
+        if (b) { e.preventDefault(); e.stopPropagation(); set(b.dataset.lang, { user: true }); }
     }, true);
 
     // The phone menu drawer copies its labels from the tab buttons when it is built, so it is rebuilt from English text before translating
@@ -609,23 +609,31 @@
         try { if (document.getElementById('navDrawer') && typeof window.navRender === 'function') window.navRender(); } catch (e) {}
     }
 
-    function set(next) {
+    // opts.user: the student picked it just now (remember WHEN, so the newest choice wins across devices; script.js saves it to the student's synced progress).
+    // opts.at: a choice that came from another device (keeps that device's time).
+    function set(next, opts) {
+        opts = opts || {};
         next = next === 'es' ? 'es' : 'en';
         lang = next;
-        try { localStorage.setItem(KEY, next); } catch (e) {}
+        try {
+            localStorage.setItem(KEY, next);
+            if (opts.user) localStorage.setItem(KEY + 'T', String(Date.now()));
+            else if (opts.at) localStorage.setItem(KEY + 'T', String(opts.at));
+        } catch (e) {}
         document.documentElement.lang = next;
         busy = true;
         try {
             if (next === 'es') { rebuildNav(); walk(document.body); } else { restore(); rebuildNav(); }
         } finally { if (observer) observer.takeRecords(); busy = false; }
         ensureToggles(); refreshPills();
-        try { document.dispatchEvent(new CustomEvent('uilangchange', { detail: { lang: next } })); } catch (e) {}
+        try { document.dispatchEvent(new CustomEvent('uilangchange', { detail: { lang: next, user: !!opts.user, at: choiceTime() } })); } catch (e) {}
     }
 
     // For the app's own code: translate one string on demand (returns it unchanged in English or when unknown).
     function t(text) { return lang === 'es' ? translate(text) : text; }
 
-    window.i18n = { set, get: () => lang, t, ES, PATTERNS, lookup, nodes };
+    function choiceTime() { try { return +localStorage.getItem(KEY + 'T') || 0; } catch (e) { return 0; } }
+    window.i18n = { set, get: () => lang, t, ES, PATTERNS, lookup, nodes, choiceTime };
 
     function init() {
         startObserver();

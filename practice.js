@@ -199,6 +199,7 @@ function practiceProgressNormalize(prog) {
     if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
     const sty = practiceStyleNormalize(p.sty);
     if (sty) out.sty = sty;   // tutor style chosen by an adult student (see practiceStyleBlock)
+    if (p.ui && typeof p.ui === 'object' && (p.ui.l === 'es' || p.ui.l === 'en') && +p.ui.t > 0) out.ui = { l: p.ui.l, t: Math.round(+p.ui.t) };   // interface language choice (i18n.js), newest wins
     return out;
 }
 // Adds one message of `words` words to `dayKey`; returns a new object (old days beyond the cap are dropped).
@@ -295,6 +296,8 @@ function practiceMergeState(local, remote) {
     if (hs) progress.hs = hs;
     const sty = [lp.sty, rp.sty].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // newest choice wins
     if (sty) progress.sty = sty;
+    const ui = [lp.ui, rp.ui].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // interface language: newest choice wins
+    if (ui) progress.ui = ui;
     const xpd = {};
     [lp.xpd, rp.xpd].forEach(d => Object.keys(d || {}).forEach(k => { xpd[k] = Math.max(xpd[k] || 0, +d[k] || 0); }));
     Object.keys(xpd).sort().slice(0, Math.max(0, Object.keys(xpd).length - PRACTICE_XP_DAYS_KEPT)).forEach(k => delete xpd[k]);
