@@ -199,6 +199,7 @@ function practiceProgressNormalize(prog) {
     if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
     const sty = practiceStyleNormalize(p.sty);
     if (sty) out.sty = sty;   // tutor style chosen by an adult student (see practiceStyleBlock)
+    if (+p.app > 0) out.app = Math.round(+p.app);   // time the installed home-screen app was first opened (stops the install nudge on every device)
     if (p.ui && typeof p.ui === 'object' && (p.ui.l === 'es' || p.ui.l === 'en') && +p.ui.t > 0) out.ui = { l: p.ui.l, t: Math.round(+p.ui.t) };   // interface language choice (i18n.js), newest wins
     return out;
 }
@@ -296,6 +297,8 @@ function practiceMergeState(local, remote) {
     if (hs) progress.hs = hs;
     const sty = [lp.sty, rp.sty].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // newest choice wins
     if (sty) progress.sty = sty;
+    const app = Math.max(lp.app || 0, rp.app || 0);
+    if (app) progress.app = app;
     const ui = [lp.ui, rp.ui].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // interface language: newest choice wins
     if (ui) progress.ui = ui;
     const xpd = {};

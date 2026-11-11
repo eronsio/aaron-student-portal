@@ -4292,3 +4292,24 @@ body.on-login .lang-pill-login { display: inline-flex; }
 .lang-pill-header { margin-right: 10px; }
 .lang-pill-nav { display: flex; width: fit-content; margin: 0 0 10px 12px; }
 @media (max-width: 767px) { .lang-pill-header { display: none; } }
+
+/* Add-to-Home-Screen nudge: banner buttons + step-by-step guide (script.js installOpenGuide) */
+.install-tip { flex-wrap: wrap; }
+.install-tip-btns { flex: none; display: flex; gap: 8px; }
+.install-tip button.install-tip-yes { background: #1f2937; border-color: #1f2937; color: #fff; font-weight: 600; }
+.install-tip button.install-tip-no { background: transparent; border-color: transparent; color: var(--text-secondary); }
+@media (max-width: 520px) { .install-tip-btns { width: 100%; } .install-tip-btns button { flex: 1; } }
+.install-guide { position: fixed; inset: 0; z-index: 10070; display: flex; align-items: flex-end; justify-content: center; background: rgba(15, 23, 42, 0.5); padding: 0; }
+.install-card { position: relative; width: 100%; max-width: 460px; max-height: 92vh; overflow-y: auto; background: #fff; border-radius: 20px 20px 0 0; padding: 26px 22px calc(22px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; }
+@media (min-width: 600px) { .install-guide { align-items: center; padding: 20px; } .install-card { border-radius: 20px; } }
+.install-x { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #f1f3f6; color: #4b5563; cursor: pointer; font-size: 15px; }
+.install-icon { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; background: #1a1a1a; color: #fff; font-size: 24px; margin-bottom: 12px; }
+.install-card h3 { margin: 0 0 6px; font-size: 19px; line-height: 1.25; color: #111827; }
+.install-card > p { margin: 0 0 14px; font-size: 14px; line-height: 1.45; color: #4b5563; }
+.install-steps { list-style: none; counter-reset: s; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.install-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 14.5px; line-height: 1.45; color: #1f2937; }
+.install-steps li > i { flex: none; width: 34px; height: 34px; border-radius: 10px; background: #eef2f7; color: #374151; display: grid; place-items: center; font-size: 15px; }
+.install-actions { display: flex; flex-direction: column; gap: 8px; }
+.install-primary { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: #1f2937; color: #fff; font: inherit; font-weight: 650; font-size: 15px; cursor: pointer; margin-bottom: 14px; }
+.install-actions .install-primary { margin-bottom: 0; }
+.install-later { padding: 10px; border: 0; background: transparent; color: #6b7280; font: inherit; font-size: 14px; cursor: pointer; }

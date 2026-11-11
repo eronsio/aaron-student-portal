@@ -1727,26 +1727,116 @@ function showLoginModal() {
 // ============================================================
 // MAIN APP
 // ============================================================
-// iPhone/iPad students get a one-time hint on how to put the portal on their home screen
-// (iOS has no install prompt of its own). Not shown to the admin, inside the installed app, or after "Got it".
-function maybeShowInstallTip() {
-    if (!currentUser || currentUser.isAdmin || document.getElementById('installTip')) return;
+// ---- "Add to Home Screen" nudge (rewritten 2026-11-11) ----
+// Shown ONLY to a student on a phone/tablet who has not put the portal on their home screen: not inside the installed app, not on a computer,
+// not to the admin, and never again once the installed app has been opened on ANY of the student's devices (progress.app is synced).
+// A banner on the main page and a card at the end-of-goal moment in the chat both open the same step-by-step guide (iPhone/iPad or Android).
+// "Not now" snoozes it for 3 days; after 3 snoozes it stops; "I added it" stops it for good on this device.
+const INSTALL_SNOOZE_DAYS = 3, INSTALL_MAX_SNOOZES = 3;
+let installPromptEvent = null;   // Android/Chrome: lets the guide offer a one-tap Install button
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPromptEvent = e; });
+window.addEventListener('appinstalled', () => { installStateSave({ done: true }); document.getElementById('installTip')?.remove(); });
+function installPlatform() {
     const ua = navigator.userAgent || '';
     const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const installed = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    let dismissed = false;
-    try { dismissed = localStorage.getItem('installTipDismissed') === '1'; } catch (e) {}
-    if (!ios || installed || dismissed) return;
+    const android = /Android/.test(ua);
+    const inApp = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|Snapchat|TikTok|GSA\/|WhatsApp/.test(ua);
+    const otherIos = ios && /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+    return { kind: ios ? 'ios' : android ? 'android' : null, inApp, otherIos };
+}
+function installIsStandalone() { return navigator.standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches); }
+function installStateLoad() { try { return Object.assign({ n: 0, until: 0, done: false }, JSON.parse(localStorage.getItem('installNudge') || '{}')); } catch (e) { return { n: 0, until: 0, done: false }; } }
+function installStateSave(patch) { try { localStorage.setItem('installNudge', JSON.stringify(Object.assign(installStateLoad(), patch))); } catch (e) {} }
+function installEligible(ignoreSnooze) {
+    if (!currentUser || currentUser.isAdmin || currentUser.isPreview) return false;
+    if (!installPlatform().kind || installIsStandalone()) return false;
+    let prog = null; try { prog = aiProgressLoad(); } catch (e) {}
+    if (prog && prog.app) return false;   // the installed app has been opened on one of their devices
+    const st = installStateLoad();
+    if (st.done) return false;
+    return ignoreSnooze || (st.n < INSTALL_MAX_SNOOZES && Date.now() >= st.until);
+}
+// Running as the installed app: remember it (synced to the student's other devices) so no browser ever nudges them again.
+function installNoteInstalled() {
+    if (!currentUser || currentUser.isAdmin || currentUser.isPreview || !installIsStandalone()) return;
+    installStateSave({ done: true });
+    try {
+        if (typeof aiSyncOk === 'function' && aiSyncOk()) {
+            const prog = aiProgressLoad();
+            if (!prog.app) { aiProgressSave({ ...prog, app: Date.now() }); aiSyncSoon(); }
+        }
+    } catch (e) {}
+}
+function installSnooze() { const st = installStateLoad(); installStateSave({ n: st.n + 1, until: Date.now() + INSTALL_SNOOZE_DAYS * 86400000 }); }
+const installT = html => (window.i18n && window.i18n.t) ? window.i18n.t(html) : html;   // whole-sentence Spanish lookup (see i18n.js)
+const INSTALL_DONE_STEP = '<li><i class="fas fa-graduation-cap"></i><span>Open the new icon on your Home Screen and sign in once. From then on it opens like an app.</span></li>';
+function installGuideSteps() {
+    const p = installPlatform();
+    let steps;
+    if (p.kind === 'ios') {
+        steps = [];
+        if (p.inApp) steps.push('<li><i class="fas fa-compass"></i><span>This page is open inside another app. Tap <b>⋯</b> or the share icon and choose <b>Open in Safari</b> first.</span></li>');
+        else if (p.otherIos) steps.push('<li><i class="fas fa-compass"></i><span>This works best in <b>Safari</b>. If you do not see the option below, open this page in Safari.</span></li>');
+        steps.push('<li><i class="fas fa-arrow-up-from-bracket"></i><span>Tap the <b>Share</b> button (the square with an arrow) at the bottom of the screen.</span></li>',
+            '<li><i class="fas fa-square-plus"></i><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>',
+            '<li><i class="fas fa-check"></i><span>Tap <b>Add</b> in the top corner.</span></li>', INSTALL_DONE_STEP);
+    } else {
+        steps = ['<li><i class="fas fa-ellipsis-vertical"></i><span>Tap the <b>⋮</b> menu in the top corner of your browser.</span></li>',
+            '<li><i class="fas fa-square-plus"></i><span>Tap <b>Install app</b> or <b>Add to Home screen</b>.</span></li>',
+            '<li><i class="fas fa-check"></i><span>Tap <b>Install</b>.</span></li>', INSTALL_DONE_STEP];
+    }
+    return steps.map(installT).join('');
+}
+function installOpenGuide() {
+    document.getElementById('installGuide')?.remove();
+    const el = document.createElement('div');
+    el.id = 'installGuide'; el.className = 'install-guide';
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+    const oneTap = installPromptEvent ? '<button type="button" class="install-primary" data-install-now><i class="fas fa-download"></i> Install now</button>' : '';
+    el.innerHTML = `<div class="install-card">
+        <button type="button" class="install-x" data-install-close aria-label="Close"><i class="fas fa-xmark"></i></button>
+        <div class="install-icon"><i class="fas fa-mobile-screen-button"></i></div>
+        <h3>Add the portal to your Home Screen</h3>
+        <p>It opens in one tap like an app, and it lets you turn on practice reminders.</p>
+        ${oneTap}
+        <ol class="install-steps">${installGuideSteps()}</ol>
+        <div class="install-actions"><button type="button" class="install-primary" data-install-done>I added it</button><button type="button" class="install-later" data-install-close>Close</button></div>
+    </div>`;
+    document.body.appendChild(el);
+    const close = () => el.remove();
+    el.addEventListener('click', e => { if (e.target === el) close(); });
+    el.querySelectorAll('[data-install-close]').forEach(b => b.addEventListener('click', close));
+    el.querySelector('[data-install-done]').addEventListener('click', () => { installStateSave({ done: true }); document.getElementById('installTip')?.remove(); close(); });
+    const now = el.querySelector('[data-install-now]');
+    if (now) now.addEventListener('click', async () => {
+        try { installPromptEvent.prompt(); await installPromptEvent.userChoice; } catch (e) {}
+        installPromptEvent = null; close();
+    });
+}
+function maybeShowInstallTip() {
+    if (document.getElementById('installTip') || !installEligible()) return;
     const tip = document.createElement('div');
     tip.id = 'installTip';
     tip.className = 'install-tip';
-    tip.innerHTML = '<i class="fas fa-mobile-alt"></i><span>Keep this portal on your home screen: tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</span><button type="button">Got it</button>';
-    tip.querySelector('button').addEventListener('click', () => {
-        tip.remove();
-        try { localStorage.setItem('installTipDismissed', '1'); } catch (e) {}
-    });
+    tip.innerHTML = '<i class="fas fa-mobile-alt"></i><span>Put the portal on your Home Screen: it opens like an app and lets you turn on practice reminders.</span><div class="install-tip-btns"><button type="button" class="install-tip-yes">Show me how</button><button type="button" class="install-tip-no">Not now</button></div>';
+    tip.querySelector('.install-tip-yes').addEventListener('click', () => installOpenGuide());
+    tip.querySelector('.install-tip-no').addEventListener('click', () => { tip.remove(); installSnooze(); });
     const main = document.querySelector('#mainApp main');
     if (main) main.prepend(tip);
+}
+// In the practice chat, right after the daily goal: the same nudge as a card (after the reminders offer has had its turn).
+function aiInstallCard() {
+    if (!installEligible() || document.getElementById('aiInstallCard')) return;
+    const box = document.getElementById('aiChatMessages');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.id = 'aiInstallCard'; el.className = 'ai-milestone ai-milestone-push'; el.setAttribute('role', 'status');
+    el.innerHTML = `<i class="fas fa-mobile-screen-button"></i><div><b>Keep it on your Home Screen</b><span>It opens in one tap like an app, and you can turn on practice reminders.</span>
+        <span class="ai-push-actions"><button type="button" class="ai-gbtn" data-ic-yes>Show me how</button><button type="button" class="ai-push-no" data-ic-no>Not now</button></span></div>`;
+    box.appendChild(el);
+    aiScrollToEnd(box);
+    el.querySelector('[data-ic-yes]').addEventListener('click', () => installOpenGuide());
+    el.querySelector('[data-ic-no]').addEventListener('click', () => { el.remove(); installSnooze(); });
 }
 
 async function showMainApp() {
@@ -1785,7 +1875,7 @@ async function showMainApp() {
     populateResources();
     populatePersonalFolder();
     updateCommunityDescription();
-    maybeShowInstallTip();
+    setTimeout(() => { installNoteInstalled(); maybeShowInstallTip(); }, 2500);   // after the first sync pull, so a student who installed on another device is not nudged
 
     showTab('courses');
     // Don't leave the page blank while the course list loads.
@@ -3599,6 +3689,7 @@ function aiShowPending() {
     aiAwardXp(PRACTICE_XP.goal);
     aiFx(pend.milestone ? 'streak' : 'goal', pend.milestone ? 'big' : 'success');
     setTimeout(aiPushOffer, 2500);
+    setTimeout(aiInstallCard, 4500);
     if (pend.milestone) {
         aiProgressSave({ ...aiProgressLoad(), cel: pend.milestone });
         aiSyncSoon();
@@ -3705,6 +3796,7 @@ async function aiSyncPull() {
         const merged = practiceMergeState(local, remote);
         aiSyncApply(merged);
         aiUiAdopt(merged.progress.ui);
+        if (merged.progress.app) document.getElementById('installTip')?.remove();
         if (!remote || JSON.stringify(merged.words.map(aiWordId).sort()) !== JSON.stringify(remote.words.map(aiWordId).sort()) || (merged.progress.m !== (remote.progress && remote.progress.m)) || JSON.stringify(merged.progress.skills || {}) !== JSON.stringify((remote.progress && remote.progress.skills) || {}) || JSON.stringify(merged.progress.mission || null) !== JSON.stringify((remote.progress && remote.progress.mission) || null) || JSON.stringify(merged.progress.ui || null) !== JSON.stringify((remote.progress && remote.progress.ui) || null)) aiSyncSoon();
     } catch (e) { aiSync.pulled = false; }
 }

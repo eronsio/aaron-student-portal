@@ -93,6 +93,29 @@
         'Advanced': 'Avanzado',
         'Connect with fellow Spanish students — practice, ask questions, share tips!': 'Conéctate con otros estudiantes de español: practica, haz preguntas y comparte consejos.',
 
+        // add to home screen nudge + guide
+        'Put the portal on your Home Screen: it opens like an app and lets you turn on practice reminders.': 'Pon el portal en tu pantalla de inicio: se abre como una app y te permite activar los recordatorios de práctica.',
+        'Show me how': 'Muéstrame cómo',
+        'Keep it on your Home Screen': 'Ténlo en tu pantalla de inicio',
+        'It opens in one tap like an app, and you can turn on practice reminders.': 'Se abre con un toque, como una app, y puedes activar los recordatorios de práctica.',
+        'Add the portal to your Home Screen': 'Añade el portal a tu pantalla de inicio',
+        'It opens in one tap like an app, and it lets you turn on practice reminders.': 'Se abre con un toque, como una app, y te permite activar los recordatorios de práctica.',
+        'Install now': 'Instalar ahora',
+        'I added it': 'Ya lo añadí',
+        'Share': 'Compartir',
+        'Open the new icon on your Home Screen and sign in once. From then on it opens like an app.': 'Abre el nuevo icono en tu pantalla de inicio e inicia sesión una vez. Desde entonces se abre como una app.',
+
+        // guide steps (whole HTML strings, looked up by i18n.t() when the guide is built)
+        '<li><i class="fas fa-compass"></i><span>This page is open inside another app. Tap <b>⋯</b> or the share icon and choose <b>Open in Safari</b> first.</span></li>': '<li><i class="fas fa-compass"></i><span>Esta página está abierta dentro de otra app. Toca <b>⋯</b> o el icono de compartir y elige <b>Abrir en Safari</b> primero.</span></li>',
+        '<li><i class="fas fa-compass"></i><span>This works best in <b>Safari</b>. If you do not see the option below, open this page in Safari.</span></li>': '<li><i class="fas fa-compass"></i><span>Esto funciona mejor en <b>Safari</b>. Si no ves la opción de abajo, abre esta página en Safari.</span></li>',
+        '<li><i class="fas fa-arrow-up-from-bracket"></i><span>Tap the <b>Share</b> button (the square with an arrow) at the bottom of the screen.</span></li>': '<li><i class="fas fa-arrow-up-from-bracket"></i><span>Toca el botón <b>Compartir</b> (el cuadrado con una flecha) en la parte inferior de la pantalla.</span></li>',
+        '<li><i class="fas fa-square-plus"></i><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>': '<li><i class="fas fa-square-plus"></i><span>Desplázate hacia abajo y toca <b>Añadir a pantalla de inicio</b>.</span></li>',
+        '<li><i class="fas fa-check"></i><span>Tap <b>Add</b> in the top corner.</span></li>': '<li><i class="fas fa-check"></i><span>Toca <b>Añadir</b> en la esquina superior.</span></li>',
+        '<li><i class="fas fa-graduation-cap"></i><span>Open the new icon on your Home Screen and sign in once. From then on it opens like an app.</span></li>': '<li><i class="fas fa-graduation-cap"></i><span>Abre el nuevo icono en tu pantalla de inicio e inicia sesión una vez. Desde entonces se abre como una app.</span></li>',
+        '<li><i class="fas fa-ellipsis-vertical"></i><span>Tap the <b>⋮</b> menu in the top corner of your browser.</span></li>': '<li><i class="fas fa-ellipsis-vertical"></i><span>Toca el menú <b>⋮</b> en la esquina superior de tu navegador.</span></li>',
+        '<li><i class="fas fa-square-plus"></i><span>Tap <b>Install app</b> or <b>Add to Home screen</b>.</span></li>': '<li><i class="fas fa-square-plus"></i><span>Toca <b>Instalar app</b> o <b>Añadir a pantalla de inicio</b>.</span></li>',
+        '<li><i class="fas fa-check"></i><span>Tap <b>Install</b>.</span></li>': '<li><i class="fas fa-check"></i><span>Toca <b>Instalar</b>.</span></li>',
+
         // header and navigation
         'Spanish student': 'Estudiante de español',
         'Music student': 'Estudiante de música',
