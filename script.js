@@ -1777,8 +1777,8 @@ function installGuideSteps() {
         steps = [];
         if (p.inApp) steps.push('<li><i class="fas fa-compass"></i><span>This page is open inside another app. Tap <b>⋯</b> or the share icon and choose <b>Open in Safari</b> first.</span></li>');
         else if (p.otherIos) steps.push('<li><i class="fas fa-compass"></i><span>This works best in <b>Safari</b>. If you do not see the option below, open this page in Safari.</span></li>');
-        steps.push('<li><i class="fas fa-arrow-up-from-bracket"></i><span>Tap the <b>Share</b> button (the square with an arrow) at the bottom of the screen.</span></li>',
-            '<li><i class="fas fa-square-plus"></i><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>',
+        steps.push('<li><i class="fas fa-arrow-up-from-bracket"></i><span>Tap the <b>Share</b> button (the square with an arrow). On newer iPhones it is inside the <b>≡</b> menu at the bottom of Safari.</span></li>',
+            '<li><i class="fas fa-square-plus"></i><span>Tap <b>View More</b> if you see it, then tap <b>Add to Home Screen</b>.</span></li>',
             '<li><i class="fas fa-check"></i><span>Tap <b>Add</b> in the top corner.</span></li>', INSTALL_DONE_STEP);
     } else {
         steps = ['<li><i class="fas fa-ellipsis-vertical"></i><span>Tap the <b>⋮</b> menu in the top corner of your browser.</span></li>',
