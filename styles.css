@@ -4282,3 +4282,13 @@ body.on-ai-tab #ai-companion #aiRecapView.is-story:not(.hidden) { display: flex;
 /* Tutor style (adults only) in the ⚙ menu */
 #ai-companion #aiStyleRow .ai-seg { margin: 2px 0 8px; }
 #ai-companion .ai-style-persona { width: 100%; box-sizing: border-box; resize: vertical; padding: 8px 10px; border: 1px solid var(--ai-line-soft, #e3e6ec); border-radius: 10px; font: inherit; font-size: 13px; line-height: 1.4; color: var(--ai-ink); background: #fff; }
+
+/* Language switch (EN | ES), see i18n.js */
+.lang-pill { display: inline-flex; gap: 2px; padding: 2px; background: rgba(120, 128, 145, 0.16); border-radius: 999px; font-size: 12px; line-height: 1; vertical-align: middle; }
+.lang-pill button { border: 0; background: transparent; padding: 6px 10px; border-radius: 999px; font: inherit; font-weight: 650; letter-spacing: 0.02em; color: inherit; cursor: pointer; }
+.lang-pill button[aria-pressed="true"] { background: #fff; color: #1f2937; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.18); }
+.lang-pill-login { display: none; position: fixed; top: 12px; right: 12px; z-index: 10060; background: #e8ebf1; color: #374151; }
+body.on-login .lang-pill-login { display: inline-flex; }
+.lang-pill-header { margin-right: 10px; }
+.lang-pill-nav { display: flex; width: fit-content; margin: 0 0 10px 12px; }
+@media (max-width: 767px) { .lang-pill-header { display: none; } }

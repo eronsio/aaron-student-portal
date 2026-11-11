@@ -371,6 +371,13 @@ practice, 3 = real pronunciation scoring (needs a scoring service), 4 = onboardi
 - Client: adult students (or the admin) get a "Tutor style" block in the chat's gear menu: Friendly (default) / Direct / Unfiltered plus a free-text instruction box (400 chars). Stored in the student's progress as `sty: {s, p, t}` (newest `t` wins when merging devices; a timestamped Friendly entry is a deliberate reset). `buildAISystemPrompt` appends `practiceStyleBlock(sty)` only when `practiceAdultAllowed()`.
 - "No limits" is not literal: the model itself and the fixed list above still apply. Swearing, insults, rude role-play, arguing and blunt sarcasm are allowed on request for adults, without moralising.
 
+### Spanish interface (added 2026-11-11)
+- `i18n.js` (loaded before script.js) translates what the student SEES into Spanish; the app's own code stays English. It matches each piece of text against a dictionary (`ES`, exact text -> Spanish) and number patterns (`PATTERNS`, e.g. "3 lessons", "Level 4!", month/weekday names), and a MutationObserver translates anything drawn later. Switching back to English restores the original text exactly (`restore()`); unknown text is simply left in English.
+- Switch: an EN | ES pill on the sign-in screen, in the desktop header, and in the phone menu drawer. The choice is saved per device in localStorage `uiLang` (so the iPhone home-screen app and Safari each need it set once). `window.i18n` exposes `set`, `get`, `t(text)`.
+- NOT translated on purpose: the lesson text (`.lesson-text-content`, `.lesson-view-title`), the chat messages themselves, anything typed, course/section/module titles and quiz questions (Aaron's own content), the tutor's end-of-session report text, and every admin screen (`[id^="admin"]`, `[class*="admin-"]`). The quiz buttons/feedback labels around the lesson ARE translated.
+- Adding a string: put the exact English text and its Spanish in `ES`; for text with numbers add a `PATTERNS` entry. Split text (`Use <b>X</b> correctly`) is translated per text node, so each fragment needs its own entry that reads well in order.
+- The drawer copies its labels from the tab buttons when built, so `set()` calls `navRender()` before translating and after restoring.
+
 ## Home-screen app (PWA, no App Store)
 - `manifest.webmanifest` + `icons/` (192, 512, maskable 512, `apple-touch-icon` 180 — a white graduation cap on #1a1a1a; regenerate by redrawing, they are plain PNGs) and the iOS meta tags in `index.html`'s `<head>`.
   iPhone students open the site in Safari → Share → Add to Home Screen; it then opens full-screen with its own icon (name "Aaron Learning").
