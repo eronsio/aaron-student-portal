@@ -1839,6 +1839,21 @@ function aiInstallCard() {
     el.querySelector('[data-ic-no]').addEventListener('click', () => { el.remove(); installSnooze(); });
 }
 
+// A music student is only shown tabs that hold something. The music Resources tab is still a "Coming Soon" placeholder, and "Your Space" is
+// the folder of notes Aaron keeps for students he teaches one-to-one, so for anyone else it would say "being set up" forever. Both stay hidden
+// for a music student until there is something to show (a folder or a weekly note makes "Your Space" appear). The admin always sees every
+// tab, Spanish students are untouched, and the phone menu is built from the visible tab buttons, so it follows automatically.
+function applyStudentTabs() {
+    const musicStudent = currentUser.type === 'music' && !currentUser.isAdmin;
+    const hasSpace = !!driveLinkFor(currentUser.driveFolder) || !!currentUser.thisWeek;
+    const show = (tab, on) => {
+        const b = document.querySelector(`#tabNav .tab-btn[data-tab="${tab}"]`);
+        if (b) b.style.display = on ? '' : 'none';
+    };
+    show('resources', !musicStudent);
+    show('your-space', !musicStudent || hasSpace);
+}
+
 async function showMainApp() {
     bootSplashHide();
     loginModal.classList.add('hidden');
@@ -1866,6 +1881,7 @@ async function showMainApp() {
     // The admin gets the tool too (as a preview: sign in once, pick a student to practise as, nothing is saved).
     if (currentUser.isAdmin && activePortal() === 'spanish') aiCompanionTab.style.display = '';
     document.getElementById('coursesTab').style.display = '';
+    applyStudentTabs();
 
     // Show admin toolbar if admin
     const adminBar = document.getElementById('adminFloatingBar');
