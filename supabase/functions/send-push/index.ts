@@ -102,13 +102,19 @@ const TEXT = {
   ],
 };
 
-// u = { id, name, tz, remindHour, days, sessions: [ISO...], log: [{ kind, sent_at }] }  ->  null, or { kind, title, body, url, tag }
+// u = { id, name, tz, remindHour, days, sessions: [ISO...], log: [{ kind, sent_at }], override: { message, url, until: "YYYY-MM-DD" } | null }  ->  null, or { kind, title, body, url, tag }
 function planPush(u, now) {
   const L = localParts(now, u.tz || "UTC");
   const today = L.key;
   if (L.hour >= QUIET_FROM || L.hour < QUIET_UNTIL) return null;                       // quiet hours
   const log = u.log || [];
   if (log.some((l) => localParts(new Date(l.sent_at), u.tz || "UTC").key === today)) return null;   // at most one a day (local day)
+
+  // Manual override set by the teacher: the same message once a day at the reminder hour until the (local) date is over, then normal pushes resume by themselves.
+  if (u.override && u.override.message && today <= u.override.until) {
+    if (L.hour < (u.remindHour == null ? 18 : u.remindHour)) return null;
+    return { kind: "custom", title: "Aaron Learning", body: u.override.message, url: u.override.url || "/?open=practice", tag: "practice-custom" };
+  }
 
   const days = u.days || {};
   const sessionDays = new Set((u.sessions || []).map((s) => localParts(new Date(s), u.tz || "UTC").key));
@@ -203,15 +209,17 @@ async function tick(cfg: any, now: Date, dry: boolean) {
   const ids = [...new Set(subs.map((s: any) => s.user_id))].join(",");
   const since40 = new Date(now.getTime() - 40 * 86400000).toISOString();
   const since30 = new Date(now.getTime() - 30 * 86400000).toISOString();
-  const [profiles, states, sessions, log] = await Promise.all([
+  const [profiles, states, sessions, log, overrides] = await Promise.all([
     rest(`profiles?id=in.(${ids})&select=id,name`),
     rest(`student_app_state?user_id=in.(${ids})&select=user_id,progress`),
     rest(`practice_sessions?user_id=in.(${ids})&started_at=gte.${since40}&select=user_id,started_at,student_turns&limit=3000`),
     rest(`push_log?user_id=in.(${ids})&sent_at=gte.${since30}&select=user_id,kind,sent_at&order=sent_at.desc&limit=3000`),
+    rest(`push_override?user_id=in.(${ids})&select=user_id,message,open_url,until_date`).catch(() => []),   // table missing (SQL not run yet) = no overrides
   ]);
   const by = (rows: any[], f: (r: any) => string) => { const m: Record<string, any[]> = {}; (rows || []).forEach((r) => { (m[f(r)] = m[f(r)] || []).push(r); }); return m; };
   const subsBy = by(subs, (s) => s.user_id), sessBy = by(sessions, (s) => s.user_id), logBy = by(log, (l) => l.user_id);
   const nameBy: Record<string, string> = {}; (profiles || []).forEach((p: any) => { nameBy[p.id] = p.name; });
+  const ovBy: Record<string, any> = {}; (overrides || []).forEach((o: any) => { ovBy[o.user_id] = { message: o.message, url: o.open_url, until: o.until_date }; });
   const progBy: Record<string, any> = {}; (states || []).forEach((s: any) => { progBy[s.user_id] = s.progress || {}; });
 
   const plans: any[] = [];
@@ -223,6 +231,7 @@ async function tick(cfg: any, now: Date, dry: boolean) {
       days: (progBy[uid] || {}).days || {},
       sessions: (sessBy[uid] || []).filter((s) => (s.student_turns || 0) >= 2).map((s) => s.started_at),
       log: logBy[uid] || [],
+      override: ovBy[uid] || null,
     }, now);
     if (!plan) continue;
     plans.push({ user_id: uid, kind: plan.kind, body: plan.body });
