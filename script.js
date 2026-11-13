@@ -2870,7 +2870,7 @@ async function callAnthropicAPI(messages, systemPrompt) {
         const r = await fetch(AI_COMPANION_FUNCTION_URL, {
             method: 'POST',
             headers: aiTutorHeaders(),
-            body: JSON.stringify({ messages: messages.slice(-20), systemPrompt }),
+            body: JSON.stringify({ messages: messages.slice(-30), systemPrompt }),   // older turns are covered by the tutor's memory of facts and of what it already asked (practice.js)
             signal: controller.signal
         });
         if (r.status === 401 && currentUser?.isAdmin && !aiAuthRetried && typeof practiceAdminRestore === 'function' && await practiceAdminRestore(true)) {
@@ -3557,6 +3557,35 @@ async function aiPushOffer() {
         if (res === 'on') { aiFx('goal', 'success'); pushRefreshSettings(); }
     });
 }
+// ---- what the tutor remembers about the student (personal facts it was told; see practice.js practiceFactsAdd) ----
+function aiRememberFacts(texts) {
+    if (!practiceActive()) return;   // nothing is saved while the teacher previews a student
+    const prog = aiProgressLoad();
+    const r = practiceFactsAdd(prog.facts, texts, Date.now());
+    if (!r.added.length) return;
+    aiProgressSave({ ...prog, facts: r.list });
+    aiSyncSoon();
+}
+function aiOpenMemory() {
+    aiClosePopovers();
+    const sheet = aiSheetShell('What your tutor remembers', false);
+    if (!sheet) return;
+    const body = sheet.querySelector('.ai-sheet-body');
+    const draw = () => {
+        const facts = practiceFactsLive(aiProgressLoad().facts).reverse();
+        body.innerHTML = `<p class="ai-mem-note">Things you told your tutor about yourself, so it does not ask again. Remove anything that is wrong.</p>`
+            + (facts.length ? `<ul class="ai-mem-list">${facts.map((f, i) => `<li><span>${escapeHtml(f.t)}</span><button type="button" class="ai-mem-x" data-i="${i}" aria-label="Remove"><i class="fas fa-xmark"></i></button></li>`).join('')}</ul>`
+                : `<p class="ai-wk-empty">Nothing yet. When you tell your tutor about yourself, it will remember.</p>`);
+        body.querySelectorAll('.ai-mem-x').forEach(b => b.addEventListener('click', () => {
+            const f = facts[+b.dataset.i];
+            if (!f) return;
+            const prog = aiProgressLoad();
+            aiProgressSave({ ...prog, facts: practiceFactsRemove(prog.facts, f.t, Date.now()) });
+            aiSyncSoon(); draw();
+        }));
+    };
+    draw();
+}
 // ---- tutor style (adults only): the "Tutor style" block in the ⚙ settings menu ----
 // Shown only when the teacher marked the student as an adult (practiceAdultAllowed). The choice is saved in the student's progress and sent
 // to the tutor by buildAISystemPrompt; the ai-companion function enforces the same adult flag on the server.
@@ -4128,7 +4157,9 @@ async function submitAiMessage(message, opts) {
 
         failed = response.startsWith('⚠️');
         // The hidden {{ok:key}} marks stay in the model's own history (so it keeps using them) but never reach the screen, the voice or the saved chat.
-        const marked = failed ? { text: response, keys: [] } : practiceStripHits(response);
+        const marked = failed ? { text: response, keys: [], facts: [], notes: [] } : practiceStripHits(response);
+        if (marked.facts && marked.facts.length) aiRememberFacts(marked.facts);
+        if (marked.notes && marked.notes.length && practiceSession) practiceSession.notes = practiceNotesAdd(practiceSession.notes, marked.notes);   // short-term: this conversation only
         aiConversationHistory.push({ role: 'assistant', content: response });
         saveConversationTurn('assistant', marked.text);
         reply = marked.text;
@@ -4241,6 +4272,7 @@ function ensureAiExtras() {
                 </div></div>
             <label class="ai-pop-row ai-pop-check"><span>Sound effects</span><input type="checkbox" id="aiSfxOn"></label>
             ${navigator.vibrate ? '<label class="ai-pop-row ai-pop-check"><span>Vibration</span><input type="checkbox" id="aiHapticsOn"></label>' : ''}
+            <div class="ai-pop-row"><button type="button" id="aiMemBtn" class="ai-pop-link">What your tutor remembers</button></div>
             <label class="ai-pop-row ai-pop-check"><span>Hands-free conversation <em>(beta)</em></span><input type="checkbox" id="aiHandsFree"></label>
             <div class="ai-pop-row"><span>Microphone problems?</span><button type="button" id="aiDiagBtn" class="ai-pop-link">Copy diagnostics</button></div>
             <pre id="aiDiagBox" class="ai-diag hidden"></pre>`;
@@ -4253,6 +4285,7 @@ function ensureAiExtras() {
         setSlowTTS(ttsSlow);
         pushBuildSettings(menu);
         aiStyleBuild(menu);
+        menu.querySelector('#aiMemBtn')?.addEventListener('click', aiOpenMemory);
         const sfxBox = menu.querySelector('#aiSfxOn');
         if (sfxBox) { sfxBox.checked = aiSfx.on; sfxBox.addEventListener('change', () => { aiSfx.on = sfxBox.checked; try { localStorage.setItem('aiSfx', aiSfx.on ? '1' : '0'); } catch (e) {} aiPlaySfx('perfect'); }); }
         const hapBox = menu.querySelector('#aiHapticsOn');

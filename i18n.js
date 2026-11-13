@@ -116,6 +116,12 @@
         '<li><i class="fas fa-square-plus"></i><span>Tap <b>Install app</b> or <b>Add to Home screen</b>.</span></li>': '<li><i class="fas fa-square-plus"></i><span>Toca <b>Instalar app</b> o <b>Añadir a pantalla de inicio</b>.</span></li>',
         '<li><i class="fas fa-check"></i><span>Tap <b>Install</b>.</span></li>': '<li><i class="fas fa-check"></i><span>Toca <b>Instalar</b>.</span></li>',
 
+        // tutor memory
+        'What your tutor remembers': 'Lo que recuerda tu tutor',
+        'Things you told your tutor about yourself, so it does not ask again. Remove anything that is wrong.': 'Cosas que le contaste a tu tutor sobre ti, para que no vuelva a preguntarlas. Quita lo que no sea correcto.',
+        'Nothing yet. When you tell your tutor about yourself, it will remember.': 'Todavía nada. Cuando le cuentes a tu tutor cosas sobre ti, las recordará.',
+        'Remove': 'Quitar',
+
         // header and navigation
         'Spanish student': 'Estudiante de español',
         'Music student': 'Estudiante de música',

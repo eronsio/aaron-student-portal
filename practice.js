@@ -156,6 +156,89 @@ function practiceDayShift(key, delta) {
 // prog = { days: { 'YYYY-MM-DD': { m: messages, w: words } }, m: total messages, w: total words,
 //          skills: { focusKey: { d: { 'YYYY-MM-DD': clean uses }, m: day it was mastered } }, mission: { day, key }, cel: highest streak milestone celebrated, wk: Monday of the last recap shown,
 //          xp: total XP, xpd: { 'YYYY-MM-DD': XP that day } }
+// ---- what the tutor knows about the student (personal facts) and what it has already asked ----
+// The tutor adds a hidden {{fact: ...}} to a reply when the student states a new, stable personal fact (see PRACTICE_FACTS_RULE). Those are kept in the
+// student's synced progress (progress.facts: [{t: text, at: ms, x?: true}], x = removed; removals are kept so they do not come back from another
+// device) and written into every later prompt, so the tutor stops asking things it was already told. The student can see and remove them.
+const PRACTICE_FACTS_MAX = 40, PRACTICE_FACT_LEN = 100, PRACTICE_FACTS_BUDGET = 900, PRACTICE_ASKED_BUDGET = 700;
+function practiceFactClean(t) { return String(t == null ? '' : t).replace(/[{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, PRACTICE_FACT_LEN); }
+function practiceFactKey(t) { return practiceFactClean(t).toLowerCase().replace(/[^a-z0-9\u00e0-\u00ff ]/g, '').replace(/\b(her|his|their|she|he|they|the|a|an|is|are|has|have|lives|live)\b/g, '').replace(/\s+/g, ' ').trim(); }
+function practiceFactsNormalize(arr) {
+    const byKey = new Map();
+    (Array.isArray(arr) ? arr : []).forEach(f => {
+        if (!f || typeof f !== 'object') return;
+        const t = practiceFactClean(f.t), at = Math.round(+f.at || 0), k = practiceFactKey(t);
+        if (!t || !k || at <= 0) return;
+        const cur = byKey.get(k);
+        if (!cur || at > cur.at || (at === cur.at && f.x)) byKey.set(k, f.x ? { t, at, x: true } : { t, at });
+    });
+    const all = [...byKey.values()].sort((a, b) => a.at - b.at);
+    const live = all.filter(f => !f.x).slice(-PRACTICE_FACTS_MAX), gone = all.filter(f => f.x).slice(-PRACTICE_FACTS_MAX);
+    return [...live, ...gone].sort((a, b) => a.at - b.at);
+}
+function practiceFactsLive(arr) { return practiceFactsNormalize(arr).filter(f => !f.x); }
+// Adds new facts (strings); returns { list, added }. A fact whose key matches (or contains / is contained in) a live one is skipped.
+function practiceFactsAdd(list, texts, nowMs) {
+    let cur = practiceFactsNormalize(list);
+    const added = [];
+    (texts || []).forEach((raw, i) => {
+        const t = practiceFactClean(raw), k = practiceFactKey(t);
+        if (!t || !k) return;
+        const dup = cur.some(f => { if (f.x) return false; const fk = practiceFactKey(f.t); return fk === k || (k.length > 12 && fk.length > 12 && (fk.includes(k) || k.includes(fk))); });
+        if (dup) return;
+        cur = practiceFactsNormalize(cur.concat([{ t, at: (nowMs || Date.now()) + i }]));
+        added.push(t);
+    });
+    return { list: cur, added };
+}
+function practiceFactsRemove(list, text, nowMs) {
+    return practiceFactsNormalize(practiceFactsNormalize(list).concat([{ t: text, at: nowMs || Date.now(), x: true }]));
+}
+function practiceMergeFacts(a, b) { return practiceFactsNormalize([].concat(a || [], b || [])); }
+// The prompt block: newest facts first until the budget is used, shown oldest to newest.
+function practiceFactsBlock(list, name) {
+    const live = practiceFactsLive(list).reverse();
+    const out = []; let used = 0;
+    for (const f of live) { if (used + f.t.length + 3 > PRACTICE_FACTS_BUDGET) break; out.push(f.t); used += f.t.length + 3; }
+    if (!out.length) return '';
+    return `\n\nLO QUE YA SABES DE ${String(name || 'el estudiante').toUpperCase()} (úsalo con naturalidad; NO se lo vuelvas a preguntar):\n- ${out.reverse().join('\n- ')}`;
+}
+// Questions the tutor asked: from this session's whole history and from recent sessions' transcripts (arrays of {role, content}).
+function practiceQuestionsFrom(turns) {
+    const out = [];
+    (turns || []).forEach(t => {
+        if (!t || t.role !== 'assistant' || typeof t.content !== 'string') return;
+        const text = t.content.replace(/\{\{[^}]*\}\}?/g, ' ');
+        (text.match(/\u00bf[^?\u00bf]{3,200}\?/g) || []).forEach(q => out.push(q.replace(/\s+/g, ' ').trim()));
+    });
+    return out;
+}
+function practiceAskedList(history, pastTranscripts) {
+    const key = q => q.toLowerCase().replace(/[^a-z0-9\u00e0-\u00ff ]/g, '').replace(/\s+/g, ' ').trim();
+    const seen = new Set(), now = [], past = [];
+    practiceQuestionsFrom(history).reverse().forEach(q => { const k = key(q); if (!seen.has(k)) { seen.add(k); now.push(q); } });
+    (pastTranscripts || []).forEach(tr => practiceQuestionsFrom(tr).reverse().forEach(q => { const k = key(q); if (!seen.has(k)) { seen.add(k); past.push(q); } }));
+    const pick = []; let used = 0;
+    for (const q of now.slice(0, 14).concat(past.slice(0, 8))) { const c = practiceClip(q, 90); if (used + c.length + 3 > PRACTICE_ASKED_BUDGET) break; pick.push(c); used += c.length + 3; }
+    return pick;
+}
+function practiceAskedBlock(history, pastTranscripts) {
+    const list = practiceAskedList(history, pastTranscripts);
+    return list.length ? `\n\nPREGUNTAS QUE YA HICISTE (en esta sesión y en las últimas; NO las repitas ni las reformules; pasa a un tema nuevo o profundiza en lo que cuenta):\n- ${list.join('\n- ')}` : '';
+}
+const PRACTICE_FACTS_RULE = `MEMORIA: (1) Si en su último mensaje el estudiante cuenta un dato personal estable que NO está en «LO QUE YA SABES» (familia, dónde viven sus padres, trabajo, estudios, aficiones, mascotas, planes, país de origen, idiomas), añade AL FINAL de tu respuesta la marca oculta {{fact: dato corto en inglés, en tercera persona, máx. 90 caracteres}}, por ejemplo {{fact: Her parents live in another country}}. Máximo 2 marcas por mensaje; nunca la menciones ni la expliques. (2) Usa con naturalidad lo que ya sabes y NO lo vuelvas a preguntar. (3) Nunca repitas ni reformules una pregunta que ya hiciste: avanza a un tema nuevo. (4) Si dice algo pasajero de este momento (que no tiene sed, que ya comió, que está cansado/a, que no quiere hablar de un tema), añade además la marca oculta {{note: dato corto en inglés}} (solo vale para esta conversación). Antes de cada pregunta comprueba que no repite ni contradice «LO QUE DIJO EN ESTA CONVERSACIÓN»: si dijo que no tiene sed, no le preguntes después qué agua o bebida prefiere.`;
+const PRACTICE_NOTES_MAX = 20, PRACTICE_NOTES_BUDGET = 600;
+function practiceNotesAdd(list, texts) {
+    const cur = (list || []).slice();
+    (texts || []).forEach(raw => { const t = practiceFactClean(raw), k = practiceFactKey(t); if (t && k && !cur.some(x => practiceFactKey(x) === k)) cur.push(t); });
+    return cur.slice(-PRACTICE_NOTES_MAX);
+}
+function practiceNotesBlock(list) {
+    const out = []; let used = 0;
+    for (const t of (list || []).slice().reverse()) { if (used + t.length + 3 > PRACTICE_NOTES_BUDGET) break; out.push(t); used += t.length + 3; }
+    return out.length ? `\n\nLO QUE DIJO EN ESTA CONVERSACIÓN (no lo contradigas ni lo vuelvas a preguntar):\n- ${out.reverse().join('\n- ')}` : '';
+}
+
 // ---- tutor style (adult students only) ----
 // An adult student can ask for a blunter tutor, or for swearing and rude role-play. The setting is {s: 'friendly'|'direct'|'unfiltered', p: own instructions, t: time}.
 // It only ever reaches the prompt when the teacher has marked the student as an adult (profile.adult), and the ai-companion function
@@ -199,6 +282,8 @@ function practiceProgressNormalize(prog) {
     if (typeof p.wk === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.wk)) out.wk = p.wk;   // Monday of the last week whose recap was shown
     const sty = practiceStyleNormalize(p.sty);
     if (sty) out.sty = sty;   // tutor style chosen by an adult student (see practiceStyleBlock)
+    const facts = practiceFactsNormalize(p.facts);
+    if (facts.length) out.facts = facts;   // personal facts the tutor was told (see practiceFactsAdd)
     if (+p.app > 0) out.app = Math.round(+p.app);   // time the installed home-screen app was first opened (stops the install nudge on every device)
     if (p.ui && typeof p.ui === 'object' && (p.ui.l === 'es' || p.ui.l === 'en') && +p.ui.t > 0) out.ui = { l: p.ui.l, t: Math.round(+p.ui.t) };   // interface language choice (i18n.js), newest wins
     return out;
@@ -297,6 +382,8 @@ function practiceMergeState(local, remote) {
     if (hs) progress.hs = hs;
     const sty = [lp.sty, rp.sty].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // newest choice wins
     if (sty) progress.sty = sty;
+    const mergedFacts = practiceMergeFacts(lp.facts, rp.facts);
+    if (mergedFacts.length) progress.facts = mergedFacts;
     const app = Math.max(lp.app || 0, rp.app || 0);
     if (app) progress.app = app;
     const ui = [lp.ui, rp.ui].filter(Boolean).sort((a, b) => b.t - a.t)[0];   // interface language: newest choice wins
@@ -417,15 +504,17 @@ function practiceSessionPlan(focus, sessions, prog, dayKey, now) {
 // The tutor ends a reply with {{ok:key}} (or {{ok:key1,key2}}) when the student's message used a focus area correctly.
 // Returns the reply without the marks and the keys they named. A mark cut off by the length limit is dropped too.
 function practiceStripHits(text) {
-    const keys = [];
+    const keys = [], facts = [], notes = [];
     const clean = String(text == null ? '' : text)
         .replace(/\{\{\s*ok\s*:\s*([^}]{0,200})\}\}/gi, (m, inner) => {
             inner.split(/[,;]/).map(k => k.trim()).filter(Boolean).forEach(k => { if (!keys.includes(k)) keys.push(k); });
             return ' ';
         })
+        .replace(/\{\{\s*note\s*:\s*([^}]{0,200})\}\}/gi, (m, inner) => { const f = practiceFactClean(inner); if (f && !notes.includes(f) && notes.length < 3) notes.push(f); return ' '; })
+        .replace(/\{\{\s*fact\s*:\s*([^}]{0,200})\}\}/gi, (m, inner) => { const f = practiceFactClean(inner); if (f && !facts.includes(f) && facts.length < 3) facts.push(f); return ' '; })
         .replace(/\{\{[^}]*$/, '')
         .replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').trim();
-    return { text: clean, keys };
+    return { text: clean, keys, facts, notes };
 }
 
 // ---- learning path: the units of a student's course, in order (table student_path, written by the teacher) ----
@@ -1100,16 +1189,18 @@ async function practiceLoadContext(force) {
     const uid = currentUser.id;
     if (!force && practiceCtx.loadedFor === uid && Date.now() - practiceCtx.loadedAt < 60000) return practiceCtx;
     const seq = ++practiceLoadSeq;
-    const [focus, prof, sessions, path] = await Promise.all([
+    const [focus, prof, sessions, path, recent] = await Promise.all([
         practiceRest(`student_focus?user_id=eq.${uid}&select=*&order=priority.desc,created_at.asc`),
         practiceRest(`student_practice_profile?user_id=eq.${uid}&select=*`),
         practiceRest(`practice_sessions?user_id=eq.${uid}&select=id,started_at,ended_at,student_turns,targets,report&order=started_at.desc&limit=40`),
-        practiceRest(`student_path?user_id=eq.${uid}&select=*&order=position.asc`)
+        practiceRest(`student_path?user_id=eq.${uid}&select=*&order=position.asc`),
+        practiceRest(`practice_sessions?user_id=eq.${uid}&select=id,transcript&order=started_at.desc&limit=3`)   // the last sessions' words: what the tutor already asked
     ]);
     // Two loads can overlap (e.g. leaving a session and re-opening the tab). Responses can
     // arrive out of order, so a slower, older load must never overwrite a newer one.
     if (seq === practiceLoadSeq) {
-        practiceCtx = { loadedFor: uid, loadedAt: Date.now(), focus: focus || [], profile: (prof && prof[0]) || null, sessions: sessions || [], path: path || [] };
+        practiceCtx = { loadedFor: uid, loadedAt: Date.now(), focus: focus || [], profile: (prof && prof[0]) || null, sessions: sessions || [], path: path || [],
+            pastTranscripts: (Array.isArray(recent) ? recent : []).map(r => (r && Array.isArray(r.transcript)) ? r.transcript : []) };
     }
     return practiceCtx;
 }
@@ -1170,6 +1261,11 @@ function buildAISystemPrompt(mode, context, insight, opts) {
         : '';
 
     const styleBlock = (practiceAdultAllowed() && typeof aiProgressLoad === 'function') ? practiceStyleBlock(aiProgressLoad().sty) : '';
+    // What the tutor was told before, and what it already asked: so it does not ask again (this session or earlier ones).
+    const knownFacts = (typeof aiProgressLoad === 'function' && practiceActive()) ? aiProgressLoad().facts : [];
+    const memoryBlock = '\n\n' + PRACTICE_FACTS_RULE + practiceFactsBlock(knownFacts, name)
+        + practiceNotesBlock(practiceSession && practiceSession.notes)
+        + practiceAskedBlock(typeof aiConversationHistory !== 'undefined' ? aiConversationHistory : [], practiceCtx.pastTranscripts);
 
     return `Eres un compañero de práctica de español para ${name}, estudiante de Aaron.
 
@@ -1178,7 +1274,7 @@ ${plan ? '\n' + plan + '\n' : ''}${lately}${legacyWeaknesses}
 
 ${PRACTICE_BASE_RULES(levelLine)}
 
-${PRACTICE_ACTIVITIES_RULE}${/\(clave: /.test(plan) ? '\n\n' + PRACTICE_HITS_RULE : ''}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}${styleBlock}`;
+${PRACTICE_ACTIVITIES_RULE}${/\(clave: /.test(plan) ? '\n\n' + PRACTICE_HITS_RULE : ''}${opts && opts.voice ? '\n\n' + PRACTICE_VOICE_RULE : ''}${memoryBlock}${styleBlock}`;
 }
 
 function practiceMarkVoice() { practiceVoiceFlag = true; }
@@ -2107,6 +2203,7 @@ if (typeof module !== 'undefined' && module.exports) {
         practiceClip, practiceDisplayName, practiceFormatReply, practiceLastSessionNote, practiceSlug, practiceParseExamples, practiceExamplesToText, practiceLastPracticed,
         practicePickTargets, practiceBuildPlanBlock, practiceSkillInfo, practiceSkillsAdd, practiceMergeSkills, practiceMissionInfo, practiceSessionPlan, practiceStripHits, practiceProgressNormalize, PRACTICE_HITS_RULE, practiceBuildReportPrompt, practiceNormalizeReport,
         practiceParseReport, practiceVerdictHistory, practiceTranscriptForPrompt, PRACTICE_BASE_RULES,
-        practiceStyleNormalize, practiceStyleBlock, PRACTICE_STYLES
+        practiceStyleNormalize, practiceStyleBlock, PRACTICE_STYLES,
+        practiceFactClean, practiceFactKey, practiceFactsNormalize, practiceFactsLive, practiceFactsAdd, practiceFactsRemove, practiceMergeFacts, practiceFactsBlock, practiceQuestionsFrom, practiceAskedList, practiceAskedBlock, PRACTICE_FACTS_RULE, practiceNotesAdd, practiceNotesBlock
     };
 }

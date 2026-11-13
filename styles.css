@@ -4325,3 +4325,10 @@ body.on-login .lang-pill-login { display: inline-flex; }
 .install-primary { width: 100%; padding: 12px 14px; border: 0; border-radius: 12px; background: #1f2937; color: #fff; font: inherit; font-weight: 650; font-size: 15px; cursor: pointer; margin-bottom: 14px; }
 .install-actions .install-primary { margin-bottom: 0; }
 .install-later { padding: 10px; border: 0; background: transparent; color: #6b7280; font: inherit; font-size: 14px; cursor: pointer; }
+
+/* What your tutor remembers (⚙ menu -> sheet) */
+.ai-mem-note { margin: 0 0 12px; font-size: 13.5px; line-height: 1.45; color: var(--ai-muted, #6b7280); }
+.ai-mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ai-mem-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--ai-line-soft, #e8ebf0); border-radius: 12px; background: #fff; font-size: 14.5px; line-height: 1.35; color: var(--ai-ink, #1f2937); }
+.ai-mem-list li span { flex: 1; }
+.ai-mem-x { flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f1f3f6; color: #6b7280; cursor: pointer; font-size: 13px; }

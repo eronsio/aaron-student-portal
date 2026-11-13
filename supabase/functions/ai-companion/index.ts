@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
   }
   const limits = isReport
     ? { perMessage: 16000, system: 12000, maxTokens: 3500, models: MODELS }
-    : { perMessage: 4000, system: 8000, maxTokens: 300, models: MODELS };
+    : { perMessage: 4000, system: 12000, maxTokens: 300, models: MODELS };   // 12000 (was 8000): the tutor's prompt now also carries what it remembers about the student and what it already asked
 
   // Age safety block (chat turns only; the report is analysis of the transcript). Admins can test either mode with x-test-adult.
   let adult = await isConfirmedAdult(jwt, user.id);
