@@ -1773,6 +1773,10 @@ const INSTALL_DONE_STEP = '<li><i class="fas fa-graduation-cap"></i><span>Open t
 function installGuideSteps() {
     const p = installPlatform();
     let steps;
+    if (!p.kind) {
+        steps = ['<li><i class="fas fa-mobile-screen-button"></i><span>Open this same link on your phone: in <b>Safari</b> on an iPhone, in <b>Chrome</b> on Android. The steps to add it appear there.</span></li>'];
+        return steps.map(installT).join('');
+    }
     if (p.kind === 'ios') {
         steps = [];
         if (p.inApp) steps.push('<li><i class="fas fa-compass"></i><span>This page is open inside another app. Tap <b>⋯</b> or the share icon and choose <b>Open in Safari</b> first.</span></li>');
@@ -3676,6 +3680,16 @@ function pushBuildSettings(menu) {
     });
     pushRefreshSettings();
 }
+// Shareable install link: aaron-learning.com/?install=1 opens the Home Screen guide straight away (even before signing in). Android Chrome gets the one-tap
+// "Install now" button, iPhone gets the exact Safari steps (Apple has no way to install without the student tapping Share). The ?install=1 is removed from the
+// address at once, so the shortcut iOS saves points at the plain portal address, not at the install link.
+try {
+    if (new URLSearchParams(location.search).get('install') === '1') {
+        const wantEs = new URLSearchParams(location.search).get('lang') === 'es';   // aaron-learning.com/?install=1&lang=es : the guide in Spanish
+        history.replaceState(null, '', location.pathname);
+        document.addEventListener('DOMContentLoaded', () => setTimeout(() => { if (wantEs && window.i18n && window.i18n.set) window.i18n.set('es'); if (!installIsStandalone()) setTimeout(installOpenGuide, wantEs ? 300 : 0); }, 600));
+    }
+} catch (e) {}
 // A tap on a reminder opens the portal with ?open=practice: go straight to the practice tab once signed in.
 let pushOpenPractice = false;
 try { const q = new URLSearchParams(location.search); if (q.get('open') === 'practice') { pushOpenPractice = true; history.replaceState(null, '', location.pathname); } } catch (e) {}

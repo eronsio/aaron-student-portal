@@ -424,3 +424,6 @@ Problem reported by students (Amanda): the tutor re-asks things she already told
 - Changes to courses via admin panel are saved to Supabase automatically
 - Changes to resources are saved to localStorage (per-browser) — use the Resources Editor in admin to update, then the changes need to be pushed to Supabase or baked into `sharedResources` in JS for all users to see them
 - To add a new student type: add a branch in `showMainApp()`, `populateResources()`, and `sharedResources`
+
+### Install link (2026-11-16)
+`https://aaron-learning.com/?install=1` (Spanish guide: `...?install=1&lang=es`) opens the Home Screen guide straight away, before sign-in (handler just above `pushMaybeOpenPractice` in script.js; reuses `installOpenGuide`). The param is removed from the address immediately so iOS saves the plain portal address. Android Chrome: the guide's "Install now" button is a real one-tap install when Chrome has offered `beforeinstallprompt`; iPhone: Apple allows no automatic install, the student must tap Share -> Add to Home Screen (guide shows the exact steps; in-app browsers/Chrome iOS are told to use Safari); a computer shows "open this link on your phone". Standalone (already installed) does nothing. Tested only in the silent local copy (iOS-style steps, desktop message, Spanish); not on a real phone.
