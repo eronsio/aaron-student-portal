@@ -3644,7 +3644,7 @@ body.on-ai-tab .floating-book-btn { display: none; }
     header .user-info { margin-left: auto; flex: none; }
 
     .nav-hamburger {
-        display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin-left: -10px; padding: 0; cursor: pointer;
+        display: grid; place-items: center; flex: none; width: 44px; height: 44px; margin-right: -6px; padding: 0; cursor: pointer;
         border: 0; border-radius: 50%; background: transparent; color: var(--text-primary); font-size: 19px;
         -webkit-tap-highlight-color: transparent; touch-action: manipulation;
     }
@@ -3658,9 +3658,9 @@ body.on-ai-tab .floating-book-btn { display: none; }
     .nav-scrim[hidden], .nav-drawer[hidden] { display: none; }
     .nav-scrim.is-open { opacity: 1; }
     .nav-drawer {
-        display: flex; flex-direction: column; position: fixed; z-index: 10041; top: 0; bottom: 0; left: 0;
+        display: flex; flex-direction: column; position: fixed; z-index: 10041; top: 0; bottom: 0; right: 0;
         width: min(86vw, 320px); background: #fff; color: #1f2937; box-shadow: 0 0 40px rgba(15, 23, 42, 0.28);
-        transform: translateX(-102%); transition: transform .26s cubic-bezier(.2, .8, .2, 1);
+        transform: translateX(102%); transition: transform .26s cubic-bezier(.2, .8, .2, 1);
         padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); overflow-y: auto; overscroll-behavior: contain;
     }
     .nav-drawer.is-open { transform: none; }
@@ -3696,7 +3696,7 @@ body.on-ai-tab .floating-book-btn { display: none; }
     body.on-ai-tab .install-tip { display: none; }
     body.on-ai-tab #ai-companion .ai-shell { border-radius: 0; }
     body.on-ai-tab #ai-companion { --ai-gutter: 0px; }
-    #ai-companion .nav-hamburger-ai { margin: 0 2px 0 -6px; width: 40px; height: 40px; }
+    #ai-companion .nav-hamburger-ai { margin: 0 2px 0 -2px; width: 40px; height: 40px; }
     #ai-companion .ai-header { padding: 6px 8px 4px 8px; gap: 4px; }
     #ai-companion .ai-header-main { flex: 1 1 auto; min-width: 0; }
     #ai-companion .nav-hamburger-recap { margin: 6px 0 0 -4px; }
@@ -4371,3 +4371,7 @@ body.on-login .lang-pill-login { display: inline-flex; }
     #ai-companion .ai-home-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; margin: 0 2px 0 0; padding: 0; border: 0; border-radius: 50%; background: none; color: #334155; cursor: pointer; }
     #ai-companion .ai-home-btn:active { background: rgba(15, 23, 42, 0.07); }
 }
+
+/* the account button shows the student's initial in a soft circle (phones) */
+.nav-avatar-btn { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #e7ecf3; color: #334155; font-size: 14px; font-weight: 650; line-height: 1; }
+.nav-hamburger:active .nav-avatar-btn { background: #d9e1ec; }

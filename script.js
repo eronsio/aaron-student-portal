@@ -1872,6 +1872,7 @@ async function showMainApp() {
     document.title = portalTitle.textContent;
     document.getElementById('portalIcon').classList.toggle('hidden', isMusic);
     document.getElementById('portalLogoImg').classList.toggle('hidden', !isMusic);
+    navRefreshAvatars();
     renderAdminHub();
     renderAdminPortalSwitch();
     renderAdminStudentSwitch();
@@ -7689,7 +7690,7 @@ function navEnsure() {
     scrim.id = 'navScrim'; scrim.className = 'nav-scrim'; scrim.hidden = true;
     const drawer = document.createElement('aside');
     drawer.id = 'navDrawer'; drawer.className = 'nav-drawer'; drawer.hidden = true;
-    drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'Menu');
+    drawer.setAttribute('role', 'dialog'); drawer.setAttribute('aria-modal', 'true'); drawer.setAttribute('aria-label', 'Account');
     document.body.append(scrim, drawer);
     scrim.addEventListener('click', () => navClose());
     drawer.addEventListener('click', (e) => {
@@ -7707,12 +7708,12 @@ function navEnsure() {
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
-    // swipe left to close
+    // swipe right to close (the drawer opens from the right)
     drawer.addEventListener('touchstart', (e) => { const t = e.touches[0]; navSwipe = { x: t.clientX, y: t.clientY }; }, { passive: true });
     drawer.addEventListener('touchmove', (e) => {
         if (!navSwipe) return;
         const t = e.touches[0];
-        if (navSwipe.x - t.clientX > 60 && Math.abs(t.clientY - navSwipe.y) < 40) { navSwipe = null; navClose(); }
+        if (t.clientX - navSwipe.x > 60 && Math.abs(t.clientY - navSwipe.y) < 40) { navSwipe = null; navClose(); }
     }, { passive: true });
     drawer.addEventListener('touchend', () => { navSwipe = null; }, { passive: true });
 }
@@ -7738,8 +7739,8 @@ function navRender() {
         </div>
         <div class="nav-user"><span class="nav-avatar" aria-hidden="true">${escapeHtml((name.trim()[0] || '?').toUpperCase())}</span>
             <span class="nav-user-txt"><b>${escapeHtml(name || 'Welcome')}</b><small>${escapeHtml(role)}</small></span></div>
-        <nav class="nav-list" aria-label="Sections">${items}</nav>
         <div class="nav-foot">${book}<button type="button" class="nav-item nav-logout" data-nav-logout><span class="nav-ico"><i class="fas fa-arrow-right-from-bracket"></i></span><span class="nav-txt">Log out</span></button></div>`;
+    if (window.i18n && window.i18n.ensureToggles) window.i18n.ensureToggles();   // the EN | ES switch in the menu (the drawer is rebuilt every time it opens)
 }
 
 function navSetExpanded(on) {
@@ -7784,19 +7785,23 @@ function navGo(tab) {
     window.scrollTo(0, 0);
 }
 
-// A ☰ button: one in the page header, one in the practice header, one on the practice end screens.
+// The account button (the student's initial): one in the page header, one in the practice header, one on the practice end screens. It opens the account
+// menu (language, book a lesson, log out). Navigation itself is the Home screen, the "‹ Home" button and the tab row on wide screens.
+function navInitial() { const n = (currentUser && currentUser.name || '').trim(); return n ? n[0].toUpperCase() : ''; }
+function navPaintAvatar(b) { const i = navInitial(); b.innerHTML = i ? `<span class="nav-avatar-btn">${escapeHtml(i)}</span>` : '<span class="nav-avatar-btn"><i class="fas fa-user"></i></span>'; }
+function navRefreshAvatars() { document.querySelectorAll('.nav-hamburger').forEach(navPaintAvatar); }
 function navHamburger(extraClass) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'nav-hamburger' + (extraClass ? ' ' + extraClass : '');
-    b.setAttribute('aria-label', 'Open menu'); b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false');
-    b.innerHTML = '<i class="fas fa-bars"></i>';
+    b.setAttribute('aria-label', 'Account menu'); b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false');
+    navPaintAvatar(b);
     b.addEventListener('click', () => navOpen(b));
     return b;
 }
 
 function navInit() {
     const top = document.querySelector('#mainApp .header-top');
-    if (top && !top.querySelector('.nav-hamburger')) top.prepend(navHamburger('nav-hamburger-header'));
+    if (top && !top.querySelector('.nav-hamburger')) top.append(navHamburger('nav-hamburger-header'));
     const recap = document.getElementById('aiRecapView');
     if (recap && !recap.querySelector('.nav-hamburger')) recap.prepend(navHamburger('nav-hamburger-recap'));
 }

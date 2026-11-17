@@ -687,7 +687,7 @@
     function t(text) { return lang === 'es' ? translate(text) : text; }
 
     function choiceTime() { try { return +localStorage.getItem(KEY + 'T') || 0; } catch (e) { return 0; } }
-    window.i18n = { set, get: () => lang, t, ES, PATTERNS, lookup, nodes, choiceTime };
+    window.i18n = { set, get: () => lang, t, ES, PATTERNS, lookup, nodes, choiceTime, ensureToggles };
 
     function init() {
         startObserver();
