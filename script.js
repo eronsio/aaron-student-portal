@@ -1897,8 +1897,8 @@ async function showMainApp() {
     updateCommunityDescription();
     setTimeout(() => { installNoteInstalled(); maybeShowInstallTip(); }, 2500);   // after the first sync pull, so a student who installed on another device is not nudged
 
-    // Students land on Home (tiles to every part of their space); the admin keeps landing on the course editor.
-    showTab(currentUser.isAdmin && !currentUser.isPreview ? 'courses' : 'home');
+    // Everyone lands on Home (tiles to every part of their space); the admin reaches the course editor from the My courses tile.
+    showTab('home');
     // Don't leave the page blank while the course list loads.
     const loadingGrid = document.getElementById('courseGrid');
     if (loadingGrid && !loadingGrid.children.length) {
@@ -2342,6 +2342,7 @@ function showTab(tabName) {
     if (tabName !== 'ai-companion' && typeof convo !== 'undefined' && convo.on) convoStop();
     syncAiChatClass();
     if (tabName === 'home') homeRender();
+    document.body.classList.toggle('not-home', tabName !== 'home');   // drives the phone "‹ Home" button
 
     if (tabName === 'community') {
         setTimeout(() => messageInput.focus(), 100);
@@ -2417,6 +2418,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (nav) new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (currentUser) homeRender(); }, 150); }).observe(nav, { attributes: true, attributeFilter: ['style'], subtree: true });
     const title = document.querySelector('#mainApp .header-top h1');
     if (title) title.addEventListener('click', () => { if (currentUser) homeGo('home'); });
+    const back = document.getElementById('homeBack');
+    if (back) back.addEventListener('click', () => { if (currentUser) homeGo('home'); });
 });
 
 // ============================================================
@@ -4310,6 +4313,15 @@ function ensureAiExtras() {
     // Menu button at the left of the practice header (phones; the page header with its own ☰ is hidden while practising).
     const headerRow = document.querySelector('#aiChatView .ai-header');
     if (headerRow && !headerRow.querySelector('.nav-hamburger')) headerRow.prepend(navHamburger('nav-hamburger-ai'));
+    // ... and a Home button next to it, so one tap always leads back to the start screen.
+    if (headerRow && !headerRow.querySelector('.ai-home-btn')) {
+        const hb = document.createElement('button');
+        hb.type = 'button'; hb.className = 'ai-home-btn'; hb.setAttribute('aria-label', 'Home');
+        hb.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></svg>';
+        hb.addEventListener('click', () => homeGo('home'));
+        const ham = headerRow.querySelector('.nav-hamburger');
+        if (ham) ham.after(hb); else headerRow.prepend(hb);
+    }
 
     // Lesson progress bar under the header.
     const head = document.querySelector('#aiChatView .ai-header');

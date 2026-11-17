@@ -4361,3 +4361,13 @@ body.on-login .lang-pill-login { display: inline-flex; }
 .home-tile-title { font-size: 16px; font-weight: 650; line-height: 1.25; letter-spacing: -0.01em; color: #111827; }
 @media (max-width: 380px) { .home-grid { gap: 10px; } .home-tile { padding: 15px; min-height: 132px; } .home-tile-ico { width: 46px; height: 46px; border-radius: 14px; } .home-hello h2 { font-size: 27px; } }
 #mainApp .header-top h1 { cursor: pointer; }
+
+/* ---- "‹ Home" on phones: shown on every screen except Home itself and the practice chat (which has its own Home icon in its header) ---- */
+.home-back, .ai-home-btn { display: none; }
+@media (max-width: 640px) {
+    body.not-home:not(.on-ai-tab) .home-back { display: inline-flex; align-items: center; gap: 2px; margin: 0 0 8px -6px; padding: 8px 12px 8px 6px; border: 0; border-radius: 999px; background: none; color: #475569; font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .home-back:active { background: rgba(15, 23, 42, 0.07); }
+    .home-back:focus-visible, .ai-home-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 0; }
+    #ai-companion .ai-home-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; margin: 0 2px 0 0; padding: 0; border: 0; border-radius: 50%; background: none; color: #334155; cursor: pointer; }
+    #ai-companion .ai-home-btn:active { background: rgba(15, 23, 42, 0.07); }
+}
