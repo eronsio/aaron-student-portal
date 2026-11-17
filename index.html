@@ -186,6 +186,9 @@
         <main class="container">
             <!-- Tab Navigation (shared by both portals) -->
             <div class="tab-nav" id="tabNav">
+                <button class="tab-btn" data-tab="home" id="homeTab">
+                    <i class="fas fa-house"></i> Home
+                </button>
                 <button class="tab-btn" data-tab="courses" id="coursesTab" style="display:none;">
                     <i class="fas fa-book-open"></i> Courses
                 </button>
@@ -193,7 +196,7 @@
                     <i class="fas fa-play-circle"></i> Resources
                 </button>
                 <button class="tab-btn" data-tab="your-space">
-                    <i class="fas fa-folder"></i> Your Space
+                    <i class="fas fa-folder"></i> Class notes &amp; homework
                 </button>
                 <button class="tab-btn" data-tab="ai-companion" id="aiCompanionTab" style="display:none;">
                     <i class="fas fa-robot"></i> Speaking & Writing Practice
@@ -204,6 +207,11 @@
             </div>
 
             <div class="tab-content">
+                <!-- Home: the screen students land on (tiles to each part of their space; built by homeRender in script.js) -->
+                <div id="home" class="tab-pane">
+                    <div id="homeContent" class="home"></div>
+                </div>
+
                 <!-- Resources Tab (shared content, differs by type) -->
                 <div id="resources" class="tab-pane active">
                     <div id="resourcesContent">
@@ -211,11 +219,11 @@
                     </div>
                 </div>
 
-                <!-- Your Space Tab (personal Google Drive folder) -->
+                <!-- Class notes & homework tab (personal Google Drive folder; the tab id stays "your-space") -->
                 <div id="your-space" class="tab-pane">
                     <div class="folder-section">
-                        <h3><i class="fas fa-folder-open"></i> Your Student Folder</h3>
-                        <p class="section-description">Access your personal learning materials, notes, and documents</p>
+                        <h3><i class="fas fa-folder-open"></i> Class notes &amp; homework</h3>
+                        <p class="section-description">Your lesson notes, homework and documents from Aaron</p>
                         <div id="personalFolder" class="personal-folder">
                             <!-- Populated dynamically based on logged-in student -->
                         </div>

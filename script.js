@@ -1897,7 +1897,8 @@ async function showMainApp() {
     updateCommunityDescription();
     setTimeout(() => { installNoteInstalled(); maybeShowInstallTip(); }, 2500);   // after the first sync pull, so a student who installed on another device is not nudged
 
-    showTab('courses');
+    // Students land on Home (tiles to every part of their space); the admin keeps landing on the course editor.
+    showTab(currentUser.isAdmin && !currentUser.isPreview ? 'courses' : 'home');
     // Don't leave the page blank while the course list loads.
     const loadingGrid = document.getElementById('courseGrid');
     if (loadingGrid && !loadingGrid.children.length) {
@@ -1908,6 +1909,7 @@ async function showMainApp() {
     // NOT at DOMContentLoaded time, when currentUser is still null for every user.
     await initCourses();
     renderCourseList();
+    homeRender();   // the course tile now knows how many courses there are
 }
 
 // ============================================================
@@ -2339,11 +2341,83 @@ function showTab(tabName) {
     }
     if (tabName !== 'ai-companion' && typeof convo !== 'undefined' && convo.on) convoStop();
     syncAiChatClass();
+    if (tabName === 'home') homeRender();
 
     if (tabName === 'community') {
         setTimeout(() => messageInput.focus(), 100);
     }
 }
+
+// ============================================================
+// HOME — the screen a student lands on (2026-11-17)
+// ============================================================
+// One plain tile per part of the student's space that is actually switched on for them (the tiles are read from the visible tab buttons, so the music portal, a
+// student without practice, or one without a folder simply gets fewer tiles) and one "next up" card. A dot on the notes tile says Aaron left a note this week. Everything opens the
+// existing tab; nothing here stores data. The header title also brings the student back here from anywhere.
+function homeTabOn(tab) {
+    const b = document.querySelector(`#tabNav .tab-btn[data-tab="${tab}"]`);
+    return !!b && b.style.display !== 'none';
+}
+function homeGo(tab, courseId) {
+    const btn = document.querySelector(`#tabNav .tab-btn[data-tab="${tab}"]`);
+    if (btn) btn.click(); else showTab(tab);
+    if (courseId) openCourse(courseId);
+    window.scrollTo(0, 0);
+}
+function homeRender() {
+    const el = document.getElementById('homeContent');
+    if (!el || !currentUser) return;
+    const first = String(currentUser.name || '').trim().split(/\s+/)[0] || '';
+    let courses = [];
+    try { courses = (getCourses() || []).filter(c => c && c.id); } catch (e) {}
+    const lastCourse = courses.find(c => { const l = getLastLesson(c.id); return l && (c.lessons || []).some(x => x.id === l); });
+    const practiceOn = homeTabOn('ai-companion');
+    let st = null;
+    if (practiceOn) { try { st = aiStreakNow(); } catch (e) {} }
+    const week = String(currentUser.thisWeek || '').trim();
+    // Plain tiles: an icon and a name. The only extra is a small dot on "Class notes & homework" when Aaron has left a note for the week.
+    // Inline line icons (one consistent set, no font to wait for), each in its own soft tint.
+    const svg = d => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+    const ICONS = {
+        'ai-companion': svg('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8.5 11.5h7"/><path d="M8.5 15h4"/>'),
+        courses: svg('<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>'),
+        'your-space': svg('<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>'),
+        resources: svg('<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>')
+    };
+    const chevron = '<svg class="home-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+    const tile = (tab, title, dot, courseId) => `<button type="button" class="home-tile home-tile-${escapeAttr(tab)}" data-home-tab="${escapeAttr(tab)}"${courseId ? ` data-home-course="${escapeAttr(courseId)}"` : ''}>
+            <span class="home-tile-ico">${ICONS[tab] || ''}${dot ? '<span class="home-dot" title="New note from Aaron"></span>' : ''}</span>${chevron}<span class="home-tile-title">${escapeHtml(title)}</span></button>`;
+    const tiles = [];
+    if (practiceOn) tiles.push(tile('ai-companion', 'My practice'));
+    if (homeTabOn('courses')) tiles.push(tile('courses', 'My courses', false, courses.length === 1 ? courses[0].id : ''));
+    if (homeTabOn('your-space')) tiles.push(tile('your-space', 'Class notes & homework', !!week));
+    if (homeTabOn('resources')) tiles.push(tile('resources', 'Resources'));
+
+    // The one thing to do next
+    let next = '';
+    if (practiceOn && st && !st.doneToday) {
+        next = `<div class="home-next"><div class="home-next-txt"><b>Practice with your tutor</b><span>${st.todayM} of ${st.goal} messages today</span></div><button type="button" class="home-next-btn" data-home-tab="ai-companion">Start</button></div>`;
+    } else if (lastCourse) {
+        next = `<div class="home-next"><div class="home-next-txt"><b>Continue your course</b><span>${escapeHtml(lastCourse.title || '')}</span></div><button type="button" class="home-next-btn" data-home-tab="courses" data-home-course="${escapeAttr(lastCourse.id)}">Continue</button></div>`;
+    }
+    el.innerHTML = `<div class="home-hello"><h2><span>Hola,</span> <span class="home-name"></span></h2></div>${next}<div class="home-grid">${tiles.join('')}</div>`;
+    const nm = el.querySelector('.home-name'); if (nm) nm.textContent = first || 'there';
+    if (!el.dataset.bound) {
+        el.dataset.bound = '1';
+        el.addEventListener('click', (e) => {
+            const t = e.target.closest('[data-home-tab]');
+            if (t) homeGo(t.dataset.homeTab, t.dataset.homeCourse || '');
+        });
+    }
+}
+document.addEventListener('DOMContentLoaded', () => {
+    // The tiles follow the tab buttons: when practice (or any tab) is switched on after sign-in, rebuild the screen.
+    const nav = document.getElementById('tabNav');
+    let t = null;
+    if (nav) new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (currentUser) homeRender(); }, 150); }).observe(nav, { attributes: true, attributeFilter: ['style'], subtree: true });
+    const title = document.querySelector('#mainApp .header-top h1');
+    if (title) title.addEventListener('click', () => { if (currentUser) homeGo('home'); });
+});
 
 // ============================================================
 // CHAT

@@ -4332,3 +4332,32 @@ body.on-login .lang-pill-login { display: inline-flex; }
 .ai-mem-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--ai-line-soft, #e8ebf0); border-radius: 12px; background: #fff; font-size: 14.5px; line-height: 1.35; color: var(--ai-ink, #1f2937); }
 .ai-mem-list li span { flex: 1; }
 .ai-mem-x { flex: none; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f1f3f6; color: #6b7280; cursor: pointer; font-size: 13px; }
+
+
+/* ---- Home: the screen a student lands on (2026-11-17). Calm and uncluttered on purpose: a greeting, one next step, four plain tiles with their own soft tint. ---- */
+.home { max-width: 560px; margin: 0 auto; padding: 18px 0 36px; }
+.home-hello { margin: 0 0 22px; }
+.home-hello h2 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 700; letter-spacing: -0.02em; color: #111827; }
+.home-next { display: flex; align-items: center; gap: 14px; margin: 0 0 24px; padding: 14px 14px 14px 20px; background: #f1f4f8; border: 1px solid #e4e9f0; border-radius: 20px; }
+.home-next-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.home-next-txt b { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; color: #111827; }
+.home-next-txt span { font-size: 14px; color: #6b7280; overflow-wrap: anywhere; }
+.home-next-btn { flex: none; padding: 11px 22px; border: 0; border-radius: 999px; background: #1f2937; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; transition: background .15s, transform .1s; }
+.home-next-btn:hover { background: #111827; }
+.home-next-btn:active { transform: scale(.97); }
+.home-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.home-tile { --tint: #eef2f7; --ink: #475569; position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; min-height: 150px; padding: 18px; text-align: left; background: #fff; border: 1px solid #e9ecf1; border-radius: 22px; cursor: pointer; font-family: inherit; box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 6px 16px -8px rgba(16, 24, 40, .08); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.home-tile:hover { transform: translateY(-2px); border-color: #dde2ea; box-shadow: 0 2px 4px rgba(16, 24, 40, .05), 0 12px 24px -10px rgba(16, 24, 40, .14); }
+.home-tile:active { transform: scale(.98); }
+.home-tile:focus-visible, .home-next-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.home-tile-ai-companion { --tint: #e9ecf8; --ink: #4a5896; }
+.home-tile-courses { --tint: #e2f0ee; --ink: #3b7a72; }
+.home-tile-your-space { --tint: #f6ecdc; --ink: #9a6a2c; }
+.home-tile-resources { --tint: #f3e6ea; --ink: #96566b; }
+.home-tile-ico { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 16px; background: var(--tint); color: var(--ink); }
+.home-chev { position: absolute; top: 20px; right: 16px; color: #c3c9d3; transition: transform .15s, color .15s; }
+.home-tile:hover .home-chev { color: #9aa3b2; transform: translateX(2px); }
+.home-dot { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: #c9873a; border: 2.5px solid #fff; box-sizing: content-box; }
+.home-tile-title { font-size: 16px; font-weight: 650; line-height: 1.25; letter-spacing: -0.01em; color: #111827; }
+@media (max-width: 380px) { .home-grid { gap: 10px; } .home-tile { padding: 15px; min-height: 132px; } .home-tile-ico { width: 46px; height: 46px; border-radius: 14px; } .home-hello h2 { font-size: 27px; } }
+#mainApp .header-top h1 { cursor: pointer; }
