@@ -1843,19 +1843,19 @@ function aiInstallCard() {
     el.querySelector('[data-ic-no]').addEventListener('click', () => { el.remove(); installSnooze(); });
 }
 
-// A music student is only shown tabs that hold something. The music Resources tab is still a "Coming Soon" placeholder, and "Your Space" is
-// the folder of notes Aaron keeps for students he teaches one-to-one, so for anyone else it would say "being set up" forever. Both stay hidden
-// for a music student until there is something to show (a folder or a weekly note makes "Your Space" appear). The admin always sees every
-// tab, Spanish students are untouched, and the phone menu is built from the visible tab buttons, so it follows automatically.
+// Which tabs are shown. The music portal (a music student, or the admin looking at it) has no Resources tab yet, because it was only a
+// "Coming Soon" placeholder, and it has a Community tab with the posts moved over from Skool. "Class notes & homework" is there for
+// everyone: Aaron's students see their folder, anyone else sees what lessons with him include and a way to book (populatePersonalFolder).
+// The Spanish portal is unchanged. The phone menu and the Home tiles are built from the visible tab buttons, so they follow automatically.
 function applyStudentTabs() {
-    const musicStudent = currentUser.type === 'music' && !currentUser.isAdmin;
-    const hasSpace = !!driveLinkFor(currentUser.driveFolder) || !!currentUser.thisWeek;
+    const music = activePortal() === 'music';
     const show = (tab, on) => {
         const b = document.querySelector(`#tabNav .tab-btn[data-tab="${tab}"]`);
         if (b) b.style.display = on ? '' : 'none';
     };
-    show('resources', !musicStudent);
-    show('your-space', !musicStudent || hasSpace);
+    show('resources', !music);
+    show('your-space', true);
+    show('community', music);
 }
 
 async function showMainApp() {
@@ -1896,6 +1896,7 @@ async function showMainApp() {
     populateResources();
     populatePersonalFolder();
     updateCommunityDescription();
+    populateCommunity();
     setTimeout(() => { installNoteInstalled(); maybeShowInstallTip(); }, 2500);   // after the first sync pull, so a student who installed on another device is not nudged
 
     // Everyone lands on Home (tiles to every part of their space); the admin reaches the course editor from the My courses tile.
@@ -2258,6 +2259,20 @@ function populatePersonalFolder() {
     ` : '';
 
     if (!driveLinkFor(currentUser.driveFolder)) {
+        // Music portal: someone with no folder and no weekly note is not (yet) one of Aaron's students, so show what lessons with him include and a way to book.
+        if (activePortal() === 'music' && !currentUser.thisWeek) {
+            container.innerHTML = `
+                <div class="folder-card cta-card">
+                    <i class="fas fa-clipboard-list"></i>
+                    <h4>Class notes &amp; homework come with lessons</h4>
+                    <p>When we work together one-to-one, this is where you'll find the notes from every class, homework built around your goals, and your own private folder with everything we cover.</p>
+                    <button class="access-btn cta-btn" onclick="window.open('https://calendly.com/aaronsiebertsio/lesson', '_blank')">
+                        <i class="fas fa-calendar-plus"></i> Book your first lesson to begin
+                    </button>
+                </div>
+            `;
+            return;
+        }
         if (currentUser.isNewSignup) {
             container.innerHTML = thisWeekHtml + `
                 <div class="folder-card cta-card">
@@ -2298,9 +2313,67 @@ function populatePersonalFolder() {
 // ============================================================
 function updateCommunityDescription() {
     const desc = document.getElementById('communityDescription');
+    if (!desc) return;
     desc.textContent = currentUser.type === 'music'
         ? 'Connect with fellow music students'
         : 'Connect with fellow Spanish students — practice, ask questions, share tips!';
+}
+
+// The music portal's Community tab is a read-only feed of the posts moved over from the Skool group. (The old chat box here only ever showed
+// what you typed on your own screen: nothing was saved or sent, so it stays hidden.) The posts are one small file in the public media bucket
+// (music/community/posts.json, written by the admin), so they can be changed without a release.
+const COMMUNITY_POSTS_URL = `${SUPABASE_URL}/storage/v1/object/public/course-media/music/community/posts.json`;
+let _communityLoaded = false;
+
+function communityDate(iso) {
+    const d = new Date(String(iso || '') + 'T12:00:00');
+    return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+// Escape first, then turn plain web addresses into links and new lines into line breaks.
+function communityBody(text) {
+    return escapeHtml(String(text || ''))
+        .replace(/(https?:\/\/[^\s<]+)/g, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`)
+        .replace(/\n/g, '<br>');
+}
+function renderCommunityPost(p) {
+    const embed = p.video ? youtubeToEmbed(p.video) : null;
+    const img = p.image ? (/^https?:\/\//.test(p.image) ? p.image : `${SUPABASE_URL}/storage/v1/object/public/course-media/${p.image}`) : '';
+    const author = String(p.author || 'Aaron Siebert');
+    return `<article class="community-post">
+        <header class="community-post-head">
+            <span class="community-avatar" aria-hidden="true">${escapeHtml(author.trim().charAt(0).toUpperCase())}</span>
+            <div><b>${escapeHtml(author)}</b><span class="community-date">${escapeHtml(communityDate(p.date))}</span></div>
+        </header>
+        ${p.title ? `<h4 class="community-post-title">${escapeHtml(p.title)}</h4>` : ''}
+        <div class="community-post-body">${communityBody(p.text)}</div>
+        ${embed ? `<div class="lesson-video-wrapper"><iframe src="${embed}" frameborder="0" allowfullscreen loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe></div>` : ''}
+        ${img ? `<img class="community-post-img" src="${escapeAttr(img)}" alt="" loading="lazy">` : ''}
+    </article>`;
+}
+async function populateCommunity() {
+    if (activePortal() !== 'music') return;
+    const sec = document.querySelector('#community .community-section');
+    if (!sec) return;
+    const chat = sec.querySelector('.chat-container');
+    if (chat) chat.style.display = 'none';
+    const h = sec.querySelector('h3');
+    if (h) h.innerHTML = '<i class="fas fa-comments"></i> Community';
+    const desc = document.getElementById('communityDescription');
+    if (desc) desc.textContent = 'News and posts from Aaron';
+    let feed = document.getElementById('communityFeed');
+    if (!feed) { feed = document.createElement('div'); feed.id = 'communityFeed'; feed.className = 'community-feed'; sec.appendChild(feed); }
+    if (_communityLoaded) return;
+    feed.innerHTML = '<div class="grid-loading"><i class="fas fa-circle-notch fa-spin"></i> Loading…</div>';
+    try {
+        const r = await fetch(COMMUNITY_POSTS_URL, { cache: 'no-cache' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const posts = ((await r.json()).posts || []).filter(p => p && (p.text || p.title))
+            .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+        feed.innerHTML = posts.length ? posts.map(renderCommunityPost).join('') : '<p class="community-empty">No posts yet.</p>';
+        _communityLoaded = true;
+    } catch (e) {
+        feed.innerHTML = '<p class="community-empty">The posts could not be loaded right now. Please try again in a moment.</p>';
+    }
 }
 
 // ============================================================
@@ -2384,7 +2457,8 @@ function homeRender() {
         'ai-companion': svg('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8.5 11.5h7"/><path d="M8.5 15h4"/>'),
         courses: svg('<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>'),
         'your-space': svg('<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>'),
-        resources: svg('<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>')
+        resources: svg('<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>'),
+        community: svg('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>')
     };
     const chevron = '<svg class="home-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
     const tile = (tab, title, dot, courseId) => `<button type="button" class="home-tile home-tile-${escapeAttr(tab)}" data-home-tab="${escapeAttr(tab)}"${courseId ? ` data-home-course="${escapeAttr(courseId)}"` : ''}>
@@ -2392,6 +2466,7 @@ function homeRender() {
     const tiles = [];
     if (practiceOn) tiles.push(tile('ai-companion', 'My practice'));
     if (homeTabOn('courses')) tiles.push(tile('courses', 'My courses', false, courses.length === 1 ? courses[0].id : ''));
+    if (homeTabOn('community')) tiles.push(tile('community', 'Community'));
     if (homeTabOn('your-space')) tiles.push(tile('your-space', 'Class notes & homework', !!week));
     if (homeTabOn('resources')) tiles.push(tile('resources', 'Resources'));
 

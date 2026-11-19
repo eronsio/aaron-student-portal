@@ -1399,6 +1399,20 @@ footer p {
     text-decoration: underline;
 }
 
+/* Community (music portal): the posts moved over from Skool */
+.community-feed { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.community-post { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 18px 20px; }
+.community-post-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.community-avatar { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 650; flex-shrink: 0; }
+.community-post-head b { display: block; font-size: 14px; color: var(--text-primary); }
+.community-date { display: block; font-size: 12px; color: var(--text-secondary); }
+.community-post-title { font-size: 16px; font-weight: 650; margin: 0 0 6px; color: var(--text-primary); }
+.community-post-body { font-size: 14px; line-height: 1.65; color: var(--text-primary); margin-bottom: 12px; overflow-wrap: anywhere; }
+.community-post-body a { color: var(--accent-color); }
+.community-post .lesson-video-wrapper { margin-bottom: 4px; }
+.community-post-img { display: block; max-width: 100%; max-height: 560px; margin: 0 auto; border-radius: var(--radius-md); }
+.community-empty { color: var(--text-secondary); font-size: 14px; padding: 12px 0; }
+
 .lesson-text-content {
     font-size: 14px;
     line-height: 1.7;
@@ -4354,6 +4368,7 @@ body.on-login .lang-pill-login { display: inline-flex; }
 .home-tile-courses { --tint: #e2f0ee; --ink: #3b7a72; }
 .home-tile-your-space { --tint: #f6ecdc; --ink: #9a6a2c; }
 .home-tile-resources { --tint: #f3e6ea; --ink: #96566b; }
+.home-tile-community { --tint: #e4ecf5; --ink: #43628a; }
 .home-tile-ico { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 16px; background: var(--tint); color: var(--ink); }
 .home-chev { position: absolute; top: 20px; right: 16px; color: #c3c9d3; transition: transform .15s, color .15s; }
 .home-tile:hover .home-chev { color: #9aa3b2; transform: translateX(2px); }
